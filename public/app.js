@@ -1,7 +1,8 @@
 // public/app.js (FINAL - Đã chuyển đổi hoàn toàn sang Fetch API)
 
 const API_BASE_URL = 'https://us-central1-quan-ly-vat-tu-backend.cloudfunctions.net/app/api'; 
-
+//const auth = firebase.auth();
+//const provider = new firebase.auth.GoogleAuthProvider();
 // DỮ LIỆU NGƯỜI DÙNG (CẦN ĐƯỢC CẬP NHẬT SAU XÁC THỰC FIREBASE AUTH)
 let userEmail = 'truongphuccit@gmail.com'; 
 let technicianName = 'Trương Đình Phúc';
@@ -15,20 +16,131 @@ var ticketRanges = [];
 var excelData = [];
 var currentPage = 1;
 var pageSize = 10;
-
+var pendingReturnNotes = [];
 
 // =======================================================
 // UTILS CHUNG & API CALL WRAPPER
 // =======================================================
+function signInWithGoogle() {
+    // SỬ DỤNG signInWithPopup THAY VÌ signInWithRedirect
+    auth.signInWithPopup(provider)
+        .then((result) => {
+            // Đăng nhập thành công.
+            // onAuthStateChanged sẽ tự động xử lý user.
+            console.log("Đăng nhập popup thành công.");
+        })
+        .catch((error) => {
+            // Xử lý lỗi (ví dụ: user đóng popup)
+            console.error("Lỗi signInWithPopup:", error.message);
+            // Hiển thị lỗi cho người dùng biết
+            if (error.code !== 'auth/popup-closed-by-user') {
+                showError('infoErrorMessage', 'Lỗi đăng nhập: ' + error.message);
+            }
+        });
+}
 
+// Hàm gọi API riêng cho Auth (vì Auth không cần token)
+async function callAuthApi(endpoint, data) {
+    // Logic fetch tương tự callApi nhưng không cần header Auth ban đầu
+    const headers = { 'Content-Type': 'application/json' };
+    const response = await fetch(API_BASE_URL + endpoint, { method: 'POST', headers, body: JSON.stringify(data), });
+    const result = await response.json();
+    if (!response.ok || result.error) throw new Error(result.error || 'Lỗi server.');
+    return result.data;
+}
+
+// --- HÀM XỬ LÝ AUTH THÀNH CÔNG (MỚI) ---
+// File: app.js
+
+// File: app.js
+
+function handleAuthSuccess(user) {
+    // Ẩn nút đăng nhập và hiển thị nút Đăng xuất
+    const authButton = document.getElementById('authButton');
+    const signOutButton = document.getElementById('signOutButton');
+    const mainPage = document.getElementById('mainPage');
+    const infoErrorMessage = document.getElementById('infoErrorMessage');
+
+    // *** <<< BƯỚC 1: FIX MỚI - ẨN SPINNER NGAY LẬP TỨC >>> ***
+    // Ẩn spinner ngay khi biết đã đăng nhập, không cần chờ API
+    const infoSpinner = document.getElementById('infoSpinner');
+    if (infoSpinner) {
+        infoSpinner.style.display = 'none';
+    }
+    
+    if (authButton) authButton.style.display = 'none';
+    if (signOutButton) signOutButton.style.display = 'inline-block';
+    if (mainPage) mainPage.style.display = 'block'; 
+    
+    if (infoErrorMessage) infoErrorMessage.style.display = 'none'; 
+    
+    userEmail = user.email;
+    technicianName = user.displayName;
+    document.getElementById('userEmail').innerText = userEmail;
+    document.getElementById('technicianName').innerText = technicianName;
+
+    // *** BƯỚC 2: GỌI API (VẪN CÓ THỂ BỊ TREO, NHƯNG UI ĐÃ CHẠY) ***
+    callAuthApi('/auth/verifyAndRegister', { email: userEmail, name: technicianName })
+        .then(res => {
+            isManager = res.isManager;
+            
+            if (isManager && document.getElementById('managerPageButton')) {
+                document.getElementById('managerPageButton').style.display = 'inline-block';
+            }
+            
+            loadBorrowHistoryForLast5Days(); 
+            loadSelfDashboard();
+            
+            toggleForm(); 
+            if (isManager) {
+                loadTechnicians();
+                initItemSearch(); 
+            }
+        })
+        .catch(err => {
+            showError('infoErrorMessage', 'Lỗi kiểm tra vai trò: ' + err.message);
+            loadSelfDashboard(); 
+            toggleForm(); 
+        });
+        
+    // *** BƯỚC 3: XÓA KHỐI .finally() Ở ĐÂY ***
+    // (Vì chúng ta đã chuyển logic ẩn spinner lên trên)
+}
 function showSuccess(id,msg){ var e=document.getElementById(id); e.innerText=msg; e.style.display='block'; setTimeout(function(){e.style.display='none';},5000); }
 function showError(id,msg){ var e=document.getElementById(id); e.innerText=msg; e.style.display='block'; setTimeout(function(){e.style.display='none';},5000); }
 
+async function getFirebaseIdToken() {
+    const user = auth.currentUser;
+    if (user) {
+        return user.getIdToken();
+    }
+    // Nếu không có người dùng, ta không thể lấy token.
+    return null; 
+}
+
+async function getFirebaseIdToken() {
+    const user = auth.currentUser;
+    if (user) {
+        return user.getIdToken();
+    }
+    // Nếu không có người dùng, ta không thể lấy token.
+    return null; 
+}
+
+// --- HÀM GỌI API (ĐÃ SỬA) ---
 async function callApi(endpoint, data = {}, method = 'POST') {
-    // TODO: THÊM ID TOKEN SAU KHI TRIỂN KHAI FIREBASE AUTH
+    const idToken = await getFirebaseIdToken(); // Lấy token
+    
+    // Nếu API không phải là Auth/Register và người dùng chưa có token, chặn yêu cầu
+    if (!idToken && !endpoint.startsWith('/auth/')) { 
+        showError('infoErrorMessage', 'Vui lòng đăng nhập để tiếp tục.');
+        throw new Error("User not authenticated.");
+    }
+    
     const headers = {
         'Content-Type': 'application/json',
-        // 'Authorization': 'Bearer ' + await getFirebaseIdToken(), 
+        // GỬI TOKEN LÊN GCF
+        'Authorization': idToken ? 'Bearer ' + idToken : '', 
     };
 
     const response = await fetch(API_BASE_URL + endpoint, {
@@ -39,6 +151,11 @@ async function callApi(endpoint, data = {}, method = 'POST') {
 
     const result = await response.json();
     if (!response.ok || result.error) {
+        // Xử lý lỗi 401 nếu token hết hạn/không hợp lệ
+        if (response.status === 401) {
+            alert("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+            // TODO: Triển khai logic đăng xuất/đăng nhập lại ở đây
+        }
         throw new Error(result.error || 'Lỗi server không xác định.');
     }
     return result.data; 
@@ -49,47 +166,87 @@ async function callApi(endpoint, data = {}, method = 'POST') {
 // KHỞI TẠO VÀ CHUYỂN TRANG
 // =======================================================
 
-function initForm(){
-    // TODO: LOGIC XÁC THỰC FIREBASE AUTH VÀ LOAD THÔNG TIN USER ĐẦU TIÊN
-    try{
-        document.getElementById('infoSpinner').style.display='block';
-        
-        // CẬP NHẬT THÔNG TIN USER PLACEHOLDER
-        document.getElementById('userEmail').innerText=userEmail;
-        document.getElementById('technicianName').innerText=technicianName||'Không xác định';
-        
-        // Hiển thị nút Manager nếu là Manager (Phải được thêm vào index.html)
-        if (isManager && document.getElementById('managerPageButton')) document.getElementById('managerPageButton').style.display = 'inline-block';
-        
-        loadBorrowHistoryForLast5Days();
-        document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
-        toggleForm();
-        
-        if (isManager){ loadTechnicians(); initItemSearch(); }
-        loadSelfDashboard();
-        
-        if (localStorage.getItem('darkMode')==='true') document.body.classList.add('dark-mode');
-        document.getElementById('infoSpinner').style.display='none';
-    }catch(e){
-        showError('infoErrorMessage','Lỗi khởi tạo: '+e.message);
-        document.getElementById('infoSpinner').style.display='none';
-    }
-}
+// File: app.js
 
+// File: app.js
+
+// File: app.js
+
+function initForm(){
+    const authButton = document.getElementById('authButton');
+    document.getElementById('infoSpinner').style.display = 'block'; // <-- BẬT SPINNER
+    
+    // Chúng ta KHÔNG CẦN getRedirectResult() nữa.
+    // CHỈ CẦN LẮNG NGHE TRẠNG THÁI AUTH LÀ ĐỦ.
+    
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            // TRƯỜNG HỢP 1: User đã đăng nhập (từ session hoặc popup vừa xong)
+            console.log("Auth State: Đã tìm thấy user.");
+            handleAuthSuccess(user); // Hàm này sẽ tự ẩn spinner
+        } else {
+            // TRƯỜG HỢP 2: User chưa đăng nhập
+            console.log("Auth State: Không tìm thấy user. Hiển thị nút đăng nhập.");
+            
+            // Ẩn nội dung chính
+            document.getElementById('mainPage').style.display = 'none';
+            document.getElementById('managerPage').style.display = 'none';
+
+            // Hiển thị nút đăng nhập
+            if (authButton) {
+                authButton.textContent = 'Đăng nhập bằng Gmail';
+                authButton.style.display = 'inline-block';
+                authButton.onclick = signInWithGoogle; // Đã được trỏ tới hàm popup mới
+            }
+            
+            // Cập nhật placeholder
+            document.getElementById('userEmail').innerText = 'Chưa đăng nhập';
+            document.getElementById('technicianName').innerText = 'Chưa đăng nhập';
+            
+            // TẮT SPINNER
+            document.getElementById('infoSpinner').style.display = 'none'; 
+        }
+    });
+    
+    // Khởi tạo các listener tĩnh
+    document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
+    
+    if (localStorage.getItem('darkMode')==='true') document.body.classList.add('dark-mode');
+}
 function toggleDarkMode(){ document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode',document.body.classList.contains('dark-mode')); }
 function showManagerPage(){ 
     document.getElementById('mainPage').style.display='none'; 
     document.getElementById('managerPage').style.display='block'; 
     loadTechnicians(); // Tải dữ liệu Manager khi chuyển trang
 }
-function showMainPage(){ document.getElementById('managerPage').style.display='none'; document.getElementById('mainPage').style.display='block'; }
+function showMainPage(){ 
+    document.getElementById('managerPage').style.display='none'; 
+    document.getElementById('mainPage').style.display='block'; 
+
+    // === THÊM CÁC DÒNG SAU ĐỂ TẢI LẠI DỮ LIỆU ===
+
+    // 1. Tải lại bảng Tổng quan và Đối chiếu sổ
+    loadSelfDashboard(); 
+
+    // 2. Tải lại bảng Lịch sử (tùy theo tab đang chọn)
+    var type = document.getElementById('transactionType').value;
+    if (type === 'Mượn') {
+        loadBorrowHistoryForLast5Days(); // Tải lại lịch sử mượn
+    } else {
+        loadReturnHistory(); // Tải lại lịch sử trả
+    }
+}
 
 function toggleForm(){
     var type=document.getElementById('transactionType').value;
     document.getElementById('borrowInputForm').style.display = (type==='Mượn')?'block':'none';
     document.getElementById('borrowHistoryForm').style.display = (type==='Mượn')?'block':'none';
     document.getElementById('returnForm').style.display = (type==='Trả')?'block':'none';
-    if (type==='Trả') loadBorrowedItems();
+    
+    if (type==='Trả') {
+        loadSelfDashboard();
+        loadReturnHistory();
+    }
 }
 
 
@@ -97,14 +254,20 @@ function toggleForm(){
 // DASHBOARD & OVERVIEW (THAY THẾ getTechnicianDashboardData/getBorrowedItems)
 // =======================================================
 
+// public/app.js (Sửa lỗi loadSelfDashboard - Đảm bảo an toàn)
+
+// File: app.js
+
 function loadSelfDashboard(){
     document.getElementById('overviewSpinner').style.display='block';
     document.getElementById('returnSpinner').style.display='block';
+    document.getElementById('infoErrorMessage').style.display = 'none'; 
 
     callApi('/dashboard', { technicianEmail: userEmail })
         .then(payload => {
-            displayBorrowedItems(payload.items, false);
-            borrowNotes = payload.pendingNotes || [];
+            // *** THÊM DÒNG NÀY VÀO ***
+            // (false = không phải giao diện quản lý)
+            displayBorrowedItems(payload.items || [], false); 
         })
         .catch(err => {
             showError('overviewErrorMessage', 'Lỗi tải tổng quan: ' + err.message);
@@ -118,13 +281,16 @@ function loadSelfDashboard(){
 
 function loadManagerDashboard(email) {
     document.getElementById('technicianSpinner').style.display='block';
-    document.getElementById('managerBorrowedItemsBody').innerHTML='<tr><td colspan="8">Đang tải...</td></tr>';
     document.getElementById('managerOverviewBody').innerHTML='<tr><td colspan="6">Đang tải...</td></tr>';
 
     callApi('/dashboard', { technicianEmail: email })
         .then(payload => {
             borrowNotes = payload.pendingNotes || []; 
+            pendingReturnNotes = payload.pendingReturnNotes || []; // <-- THÊM DÒNG NÀY
+            
             displayBorrowNotes();
+            displayReturnNotes(pendingReturnNotes); // <-- THÊM DÒNG NÀY
+            
             displayBorrowedItems(payload.items || [], true);
         })
         .catch(err => {
@@ -148,10 +314,19 @@ function loadBorrowedItems() {
 
 function loadBorrowHistoryForLast5Days(){
     document.getElementById('historySpinner').style.display='block';
+    // FIX: Đảm bảo history luôn có {history: [], totalPages: 0}
     callApi('/history/byemail', { email: userEmail, isLast5Days: true, currentPage: currentPage, pageSize: pageSize })
-        .then(history => { displayBorrowHistory(history.history); })
-        .catch(err => { showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); })
-        .finally(() => { document.getElementById('historySpinner').style.display='none'; });
+        .then(history => { 
+            displayBorrowHistory(history.history); 
+        })
+        .catch(err => { 
+            showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); 
+            // Nếu lỗi, vẫn phải tắt spinner để không bị treo
+            displayBorrowHistory([]); 
+        })
+        .finally(() => { 
+            document.getElementById('historySpinner').style.display='none'; 
+        });
 }
 
 function loadBorrowHistory(){
@@ -175,7 +350,7 @@ function displayBorrowHistory(history){
     var tbody=document.getElementById('borrowHistoryBody');
     tbody.innerHTML='';
     
-    var pendingStatusHTML = ' <span style="color: #008000; font-weight: bold;">(Đang xử lý...)</span>'; 
+    var pendingStatusHTML = ' <span style="color: blue; font-weight: bold; font-style: italic">(Đang xử lý...)</span>'; 
 
     if (!history||!history.length){ tbody.innerHTML='<tr><td colspan="2">Không có lịch sử mượn</td></tr>'; return;
 }
@@ -192,9 +367,9 @@ function displayBorrowHistory(history){
         }).join('<br>');
    
         if (entry.note) {
-            note = entry.note + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư:</strong><br>' + items;
+            note = entry.note + '<br><strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + items;
         } else {
-            note = '<strong style="font-weight: bold; font-style: italic;">Vật tư:</strong><br>' + items;
+            note = '<strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã thêm:</strong><br>' + items;
         }
       }
       
@@ -210,70 +385,166 @@ function displayBorrowHistory(history){
 }
 
 // ===== Logic hiển thị Tổng quan (Giữ nguyên) =====
+
+
 function displayBorrowedItems(items, isManagerView){
     var overviewBody = isManagerView ? document.getElementById('managerOverviewBody') : document.getElementById('overviewBody');
-    var returnBody   = document.getElementById('borrowedItemsBody');
-    var managerReturnBody = document.getElementById('managerBorrowedItemsBody');
-
+    var returnBody   = document.getElementById('borrowedItemsBody'); // Bảng của KTV
+    var reconciledBody = document.getElementById('reconciledTicketsBody'); // Bảng KTV (Đã đối chiếu)
+    // Xóa nội dung cũ
     overviewBody.innerHTML='';
-    if (!isManagerView) returnBody.innerHTML='';
-    if (isManagerView) managerReturnBody.innerHTML='';
+    if (!isManagerView) {
+        returnBody.innerHTML='';
+        if (reconciledBody) reconciledBody.innerHTML = ''; // <-- THÊM DÒNG NÀY
+    }
+    
+    // Kiểm tra nếu không có dữ liệu
     if (!items||!items.length){
       overviewBody.innerHTML='<tr><td colspan="6">Không có vật tư đã mượn</td></tr>';
-      if (!isManagerView) returnBody.innerHTML='<tr><td colspan="7">Không có vật tư đã mượn</td></tr>';
+      if (!isManagerView) returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>'; // 4 cột
       if (isManagerView) managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
       return;
     }
 
+    // --- HIỂN THỊ BẢNG TỔNG QUAN (Giữ nguyên) ---
+    // --- HIỂN THỊ BẢNG TỔNG QUAN (Chung cho cả 2) ---
     items.forEach(function(item){
       var unre = (item.unreconciledUsageDetails||[]).map(function(u){
         return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>';
       }).join('<br>') || 'Chưa có';
       var remaining = item.quantity - item.totalUsed;
 
-      var row=document.createElement('tr');
-      row.innerHTML =
-        '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-        '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-        '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
-      
-        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-        '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-        '<td data-label="Chi tiết số sổ">'+unre+'</td>';
-      overviewBody.appendChild(row);
-
-      if (!isManagerView){
-        (item.unreconciledUsageDetails||[]).forEach(function(detail){
-          var rr=document.createElement('tr');
-          rr.innerHTML =
-            '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-       
-       '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-            '<td data-label="Số lượng sử dụng">'+detail.quantity+'</td>'+
-            '<td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" value="0"></td>'+
-            '<td data-label="Số sổ">'+detail.ticket+'</td>'+
-            '<td data-label="Ghi chú">'+(detail.note||'-')+'</td>'+
-            '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="'+detail.ticket+'"></td>';
-        returnBody.appendChild(rr);
-        });
-      }
-
-      if (isManagerView){
-        (item.unreconciledUsageDetails||[]).forEach(function(detail){
-          var mr=document.createElement('tr');
-          mr.innerHTML =
+      // Chỉ hiển thị trên Tổng quan nếu KTV vẫn còn nợ HOẶC còn sổ chưa đối chiếu
+      if (item.quantity > 0 || item.totalUsed > 0) {
+          var row=document.createElement('tr');
+          row.innerHTML =
             '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
             '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-            '<td data-label="Số lượng sử dụng">'+detail.quantity+'</td>'+
-            '<td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" value="0"></td>'+
-            '<td data-label="Số lượng còn lại">'+remaining+'</td>'+
-            '<td data-label="Số sổ">'+detail.ticket+'</td>'+
-            '<td data-label="Ghi chú">'+(detail.note||'-')+'</td>'+
-            '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="'+detail.ticket+'"></td>';
-          managerReturnBody.appendChild(mr);
-        });
+            '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
+            '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+            '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
+            '<td data-label="Chi tiết số sổ">'+unre+'</td>';
+          overviewBody.appendChild(row);
       }
     });
+    
+    // --- HIỂN THỊ BẢNG ĐỐI CHIẾU ---
+
+    if (!isManagerView){
+        // *** LOGIC GOM NHÓM (CÓ SẮP XẾP) ***
+        const tickets = {}; // Nơi gom nhóm
+        const reconciledTickets = {}; // Đã đối chiếu (MỚI)
+        // 1. Tái cấu trúc dữ liệu: Gom vật tư theo Sổ
+        items.forEach(function(item) {
+            (item.unreconciledUsageDetails || []).forEach(function(detail) {
+                if (!tickets[detail.ticket]) {
+                    tickets[detail.ticket] = {
+                        ticket: detail.ticket,
+                        // Trích xuất số sổ để sắp xếp
+                        ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
+                        items: [] 
+                    };
+                }
+                tickets[detail.ticket].items.push({
+                    name: item.name,
+                    code: item.code,
+                    quantity: detail.quantity
+                });
+            });
+            // *** THÊM KHỐI NÀY: Gom ĐÃ đối chiếu ***
+            (item.reconciledUsageDetails || []).forEach(function(detail) { //)"]
+                if (!reconciledTickets[detail.ticket]) {
+                    reconciledTickets[detail.ticket] = {
+                        ticket: detail.ticket,
+                        ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
+                        items: [] 
+                    };
+                }
+                reconciledTickets[detail.ticket].items.push({ name: item.name, code: item.code, quantity: detail.quantity });
+            });
+        });
+
+        // 2. SẮP XẾP MẢNG CÁC SỔ
+        const sortedTickets = Object.values(tickets).sort(function(a, b) {
+            return a.ticketNumber - b.ticketNumber;
+        });
+
+        // 3. Render dữ liệu đã gom nhóm VÀ sắp xếp
+        sortedTickets.forEach(function(ticket) {
+            var rr = document.createElement('tr');
+            
+            // Tách Tên vật tư ra 1 chuỗi
+            var itemsNameHtml = ticket.items.map(function(it) {
+                return (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')';
+            }).join('<br>');
+            
+            // Tách Số lượng ra 1 chuỗi
+            var itemsQtyHtml = ticket.items.map(function(it) {
+                return it.quantity;
+            }).join('<br>');
+            
+            // Render 4 cột
+            rr.innerHTML =
+                '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
+                '<td data-label="Tên vật tư">' + itemsNameHtml + '</td>' +
+                '<td data-label="Số lượng sử dụng" style="text-align: center;">' + itemsQtyHtml + '</td>' +
+                '<td data-label="Xác nhận đối chiếu"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
+            
+            returnBody.appendChild(rr);
+        });
+        // 4. SẮP XẾP MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
+        const sortedReconciled = Object.values(reconciledTickets).sort(function(a, b) {
+            return b.ticketNumber - a.ticketNumber; // Sắp xếp giảm dần (mới nhất lên trên)
+        });
+
+        // 5. RENDER MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
+        if (reconciledBody) {
+            sortedReconciled.forEach(function(ticket) {
+                var rRow = document.createElement('tr');
+                var rItemsNameHtml = ticket.items.map(function(it) { return (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')'; }).join('<br>');
+                var rItemsQtyHtml = ticket.items.map(function(it) { return it.quantity; }).join('<br>');
+                
+                rRow.innerHTML =
+                    '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
+                    '<td data-label="Tên vật tư">' + rItemsNameHtml + '</td>' +
+                    '<td data-label="Số lượng sử dụng" style="text-align: center;">' + rItemsQtyHtml + '</td>';
+                reconciledBody.appendChild(rRow);
+            });
+        }
+        
+        if (Object.keys(tickets).length === 0) {
+             returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>';
+        }
+        if (reconciledBody && Object.keys(reconciledTickets).length === 0) {
+             reconciledBody.innerHTML='<tr><td colspan="3">Chưa có sổ đã đối chiếu</td></tr>';
+        }
+
+    }
+    //else { // if (isManagerView)
+    //     // *** LOGIC CŨ: GIỮ NGUYÊN CHO QUẢN LÝ (CHI TIẾT TỪNG VẬT TƯ) ***
+    //     let hasUnreconciled = false;
+    //     items.forEach(function(item){
+    //         (item.unreconciledUsageDetails||[]).forEach(function(detail){
+    //             hasUnreconciled = true;
+    //             var remaining = item.quantity - item.totalUsed;
+    //             var mr=document.createElement('tr');
+    //             mr.innerHTML =
+    //                 '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
+    //                 '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
+    //                 '<td data-label="Số lượng sử dụng">'+detail.quantity+'</td>'+
+    //                 '<td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" value="0"></td>'+
+    //                 '<td data-label="Số lượng còn lại">'+remaining+'</td>'+
+    //                 '<td data-label="Số sổ">'+detail.ticket+'</td>'+
+    //                 '<td data-label="Ghi chú">'+(detail.note||'-')+'</td>'+
+    //                 '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="'+detail.ticket+'"></td>';
+    //             managerReturnBody.appendChild(mr);
+    //         });
+    //     });
+        
+    //     if (!hasUnreconciled) {
+    //         managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
+    //     }
+    // }
 }
 
 
@@ -311,42 +582,42 @@ function submitBorrowForm(){
         });
 }
 
+// File: app.js (THAY THẾ HÀM NÀY)
+
 function submitReturnForm(){
     selectedTickets=[];
-    var items=[];
-    var checkboxes=document.querySelectorAll('#borrowedItemsTable .ticket-checkbox:checked');
-    var inputs=document.querySelectorAll('#borrowedItemsTable .quantity-return-input');
-    var valid=true;
-    checkboxes.forEach(function(cb){ selectedTickets.push(cb.value); });
-    inputs.forEach(function(input){
-      var tr=input.closest('tr');
-      var code=tr.cells[1].innerText;
-      var name=tr.cells[0].innerText;
-      var qUsed=parseFloat(tr.cells[2].innerText)||0;
-      var qRet =parseFloat(input.value)||0;
-      var ticket=tr.cells[4].innerText;
-      if (qRet<0){ showError('returnErrorMessage','Số lượng trả không hợp lệ.'); valid=false; return; }
-      if (selectedTickets.includes(ticket)){
-        items.push({ code:code, name:name, quantityUsed:qUsed, quantityReturned:qRet });
-      }
-    });
-    if (!valid || selectedTickets.length===0 || items.length===0){
-      showError('returnErrorMessage','Vui lòng chọn số sổ và nhập số lượng trả hợp lệ.');
-    return;
+    
+    // Chỉ cần tìm các checkbox đã được chọn
+    var checkboxes = document.querySelectorAll('#borrowedItemsTable .ticket-checkbox:checked');
+    
+    // Nếu không chọn checkbox nào, báo lỗi
+    if (checkboxes.length === 0) {
+        showError('returnErrorMessage','Vui lòng chọn ít nhất một số sổ để xác nhận.');
+        return;
     }
 
+    // Lấy giá trị (là số sổ) từ các checkbox
+    checkboxes.forEach(function(cb){ 
+        selectedTickets.push(cb.value); 
+    });
+
+    // Gửi dữ liệu. Backend chỉ cần 'tickets' để đối chiếu
     var data={
-      timestamp:new Date().toISOString(), type:'Trả', email:userEmail,
-      date:new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
-      tickets:selectedTickets, items:items
+      timestamp: new Date().toISOString(), 
+      type:'Trả', 
+      email:userEmail,
+      date: new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      tickets: selectedTickets, // Mảng các số sổ đã chọn
+      items: [] // Gửi mảng rỗng để backend phân biệt đây là 'Đối chiếu' (Reconcile)
     };
+    
     document.getElementById('returnSpinner').style.display='block';
     
     callApi('/submit/return', data)
         .then(() => {
             showSuccess('returnSuccessMessage','Xác nhận đối chiếu thành công!');
             selectedTickets=[]; 
-            loadSelfDashboard(); // Tải lại Dashboard để cập nhật tồn kho/sổ chưa đối chiếu
+            loadSelfDashboard(); // Tải lại Dashboard
         })
         .catch(err => {
             showError('returnErrorMessage','Lỗi xác nhận: '+err.message);
@@ -708,14 +979,18 @@ function loadUnusedItems(){
         });
 }
 
-function submitUnusedReturn(){
+function approveReturnNote(){
     var email=document.getElementById('technicianEmail').value;
     var date=document.getElementById('returnUnusedTransactionDate').value;
     var items=[];
     var valid=true;
     var inputs=document.querySelectorAll('#unusedItemsTable .quantity-return-input');
     
-    // Tái tạo logic lấy items trả về kho
+    // 1. Lấy thông tin note KTV
+    var selectedTs = document.getElementById('returnNoteSelect').value;
+    var techNote = (document.getElementById('technicianReturnNote').value || '').trim();
+
+    // 2. Lặp qua bảng vật tư (Logic cũ)
     inputs.forEach(function(input){
       var tr=input.closest('tr');
       var code=tr.cells[1].innerText;
@@ -729,13 +1004,31 @@ function submitUnusedReturn(){
     if (!valid || !email || !date || !items.length){ showError('returnUnusedErrorMessage','Vui lòng chọn KTV, ngày và ít nhất một vật tư hợp lệ.');
     return; }
 
-    var data={ timestamp:new Date().toISOString(), type:'Trả', email:email, date:date, items:items, note:'Trả vật tư không sử dụng' };
+    // 3. *** LOGIC MỚI: Gán note ***
+    // Nếu quản lý có chọn note (selectedTs) VÀ note đó có nội dung (techNote), thì dùng note của KTV.
+    // Ngược lại, dùng note mặc định.
+    const finalNote = (selectedTs && techNote) ? techNote : 'Trả vật tư không sử dụng';
+
+    // 4. Tạo data object
+    var data={ 
+        timestamp:new Date().toISOString(), 
+        type:'Trả', 
+        email:email, 
+        date:date, 
+        items:items, 
+        note: finalNote, // <-- ĐÃ SỬA
+        returnTimestamp: selectedTs 
+    };
+    
     document.getElementById('returnUnusedSpinner').style.display='block';
     
-    callApi('/submit/return', data)
+    callApi('/submit/return', data) //
       .then(() => {
         showSuccess('returnUnusedSuccessMessage','Trả vật tư không sử dụng thành công!');
         document.getElementById('returnUnusedTransactionDate').value='';
+        document.getElementById('returnNoteSelect').value = ''; 
+        document.getElementById('technicianReturnNote').value = ''; 
+        
         loadUnusedItems(); 
         loadTechnicianData();
       })
@@ -837,7 +1130,196 @@ function removeTicketRange(i){
     displayTicketRanges();
 }
 
-// ... (Các hàm khác như submitUnusedReturn, loadTicketRanges, saveTicketRanges giữ nguyên) ...
+// File: app.js (THÊM CÁC HÀM NÀY VÀO CUỐI)
 
+/**
+ * Gửi yêu cầu (note) trả vật tư không sử dụng
+ */
+function submitReturnNote(){
+    var note=(document.getElementById('returnNoteItems').value||'').trim();
+    if (!note){ showError('returnNoteErrorMessage','Vui lòng nhập nội dung trả.'); return; }
+    
+    var data={
+      timestamp: new Date().toISOString(),
+      type:'Trả', 
+      email:userEmail, 
+      date: new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      note:note,
+      items: [] 
+    };
+    
+    document.getElementById('returnNoteSpinner').style.display='block';
+    
+    callApi('/submit/return', data)
+        .then(() => {
+            showSuccess('returnNoteSuccessMessage','Gửi yêu cầu trả thành công!');
+            
+            // === BẮT ĐẦU CẬP NHẬT GIAO DIỆN TỨC THỜI ===
+            var tbody = document.getElementById('returnHistoryBody');
+            
+            // Xóa dòng "Không có lịch sử" nếu có
+            var firstRow = tbody.rows[0];
+            if (firstRow && (firstRow.cells.length === 1 || (firstRow.cells[1] && firstRow.cells[1].innerText === 'Không có lịch sử trả hàng'))) {
+                tbody.innerHTML = '';
+            }
+
+            var tr = document.createElement('tr');
+            var date = new Date().toLocaleString('vi-VN');
+            // Thêm trạng thái MÀU XANH
+            var statusHtml = ' <span style="color: blue; font-weight: bold; font-style: italic">(Đang xử lý...)</span>';
+            
+            tr.innerHTML = '<td data-label="Thời gian">' + date + '</td>' +
+                           '<td data-label="Nội dung trả">' + note + statusHtml + '</td>';
+            
+            tbody.prepend(tr); // Thêm vào đầu bảng
+            // === KẾT THÚC CẬP NHẬT GIAO DIỆN ===
+            
+            document.getElementById('returnNoteItems').value='';
+        })
+        .catch(err => {
+            showError('returnNoteErrorMessage','Lỗi gửi yêu cầu: '+err.message);
+        })
+        .finally(() => {
+            document.getElementById('returnNoteSpinner').style.display='none';
+        });
+}
+
+/**
+ * Hiển thị danh sách các note trả hàng đang chờ
+ */
+function displayReturnNotes(notes){
+    var select=document.getElementById('returnNoteSelect');
+    select.innerHTML='<option value="">Chọn lệnh trả</option>';
+    
+    var statusText = ' (Đang xử lý...)'; 
+    (notes||[]).forEach(function(n){
+        var o=document.createElement('option');
+        o.value=n.timestamp; 
+        o.text='⛔ ['+n.date+'] '+n.note + statusText; 
+        select.appendChild(o);
+    });
+    document.getElementById('technicianReturnNote').value='';
+}
+
+/**
+ * Hiển thị nội dung note trả khi Quản lý chọn
+ */
+function displaySelectedReturnNote(){
+    var ts=document.getElementById('returnNoteSelect').value;
+    // Tìm trong biến global pendingReturnNotes (sẽ tạo ở bước sau)
+    var n=(pendingReturnNotes||[]).find(function(x){return x.timestamp===ts;});
+    document.getElementById('technicianReturnNote').value = n ? n.note : '';
+}
+// File: app.js (DÁN VÀO CUỐI FILE)
+
+function rejectReturnNote() {
+    var selectedTs = document.getElementById('returnNoteSelect').value;
+    var reason = (document.getElementById('returnRejectionReason').value || '').trim();
+    var email = document.getElementById('technicianEmail').value;
+
+    if (!selectedTs) {
+        showError('returnUnusedErrorMessage', 'Vui lòng chọn một note trả hàng để từ chối.');
+        return;
+    }
+    if (!reason) {
+        showError('returnUnusedErrorMessage', 'Vui lòng nhập lý do từ chối.');
+        return;
+    }
+
+    var data = {
+        email: email,
+        timestamp: selectedTs, // timestamp của note cần từ chối
+        reason: reason
+    };
+
+    document.getElementById('returnUnusedSpinner').style.display = 'block';
+
+    // Gọi API endpoint mới
+    callApi('/manager/rejectReturnNote', data)
+        .then(() => {
+            showSuccess('returnUnusedSuccessMessage', 'Đã từ chối note thành công!');
+            document.getElementById('returnRejectionReason').value = '';
+            document.getElementById('returnNoteSelect').value = '';
+            document.getElementById('technicianReturnNote').value = '';
+            loadTechnicianData(); // Tải lại, note sẽ biến mất khỏi danh sách
+        })
+        .catch(err => {
+            showError('returnUnusedErrorMessage', 'Lỗi từ chối note: ' + err.message);
+        })
+        .finally(() => {
+            document.getElementById('returnUnusedSpinner').style.display = 'none';
+        });
+}
+/**
+ * Tải lịch sử TRẢ hàng không sử dụng
+ */
+function loadReturnHistory(){
+    document.getElementById('returnHistorySpinner').style.display='block';
+    
+    // Gọi API mới
+    callApi('/history/return', { email: userEmail, currentPage: 1, pageSize: 50 }) // Tạm thời tải 50
+        .then(history => { 
+            displayReturnHistory(history.history); 
+        })
+        .catch(err => { 
+            document.getElementById('returnHistoryBody').innerHTML = '<tr><td colspan="2">Lỗi tải lịch sử.</td></tr>';
+        })
+        .finally(() => { 
+            document.getElementById('returnHistorySpinner').style.display='none'; 
+        });
+}
+
+/**
+ * Hiển thị lịch sử TRẢ hàng (Tương tự displayBorrowHistory)
+ */
+function displayReturnHistory(history){
+    var tbody=document.getElementById('returnHistoryBody');
+    tbody.innerHTML='';
+
+    if (!history||!history.length){ tbody.innerHTML='<tr><td colspan="2">Không có lịch sử trả hàng</td></tr>'; return; }
+    
+    history.forEach(function(entry){
+      var note = entry.note || '';
+      var itemsHtml = '';
+      var hasItems = Object.keys(entry.itemsEntered).length > 0;
+
+      // 1. Tạo danh sách vật tư (nếu có)
+      if (hasItems) {
+          itemsHtml = Object.values(entry.itemsEntered).map(function(it){ 
+              return '— '+it.name+' ('+it.code+'): '+it.quantity; 
+          }).join('<br>');
+      }
+
+      // 2. Tạo HTML trạng thái (MÀU XANH/ĐỎ)
+      var statusHtml = '';
+      if (entry.status === 'Pending') {
+          statusHtml = ' <span style="color: blue; font-weight: bold; font-style: italic;">(Đang xử lý...)</span>';
+      } else if (entry.status === 'Rejected') {
+          // Thêm lý do từ chối (nếu có)
+          var reason = entry.reason ? (': ' + entry.reason) : '';
+          statusHtml = ' <span style="color: red; font-weight: bold; font-style: italic;">(Bị từ chối' + reason + ')</span>';
+      }
+
+      // 3. Kết hợp note, trạng thái, và vật tư
+      var finalNoteHtml = '';
+      if (note && hasItems) {
+          // Note đã được duyệt và có vật tư
+          finalNoteHtml = note + statusHtml + '<br><strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      } else if (note) { 
+          // Chỉ có note (Pending hoặc Rejected)
+          finalNoteHtml = note + statusHtml;
+      } else if (hasItems) { 
+          // Đã duyệt, không có note gốc
+          finalNoteHtml = '<strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      }
+
+      if (!finalNoteHtml) finalNoteHtml = 'Không có dữ liệu';
+    
+      var date=new Date(entry.timestamp).toLocaleString('vi-VN');
+      var tr=document.createElement('tr');
+      tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung trả">'+finalNoteHtml+'</td>'; 
+      tbody.appendChild(tr);
+    });
+}
 // DOM ready
 document.addEventListener('DOMContentLoaded', function(){ initForm(); });

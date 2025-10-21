@@ -1,0 +1,408 @@
+/* ==============================================
+   CÀI ĐẶT GỐC (VARIABLES) - PHONG CÁCH TỐI GIẢN
+   ============================================== */
+:root {
+  --primary-color: #007bff;
+  --secondary-color: #6c757d;
+  --background-color: #f8f9fa; /* Nền xám rất nhạt */
+  --text-color: #212529; /* Chữ đen nhạt */
+  --error-color: #dc3545;
+  --success-color: #28a745;
+  --card-background: #ffffff;
+  --border-color: #e7e7e7; /* Viền mờ */
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  /* Font hệ thống hiện đại */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.6;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-size: 16px; /* Cỡ chữ gốc */
+}
+body.dark-mode {
+  --background-color: #121212; /* Nền đen sâu */
+  --text-color: #e0e0e0;
+  --card-background: #1e1e1e;
+  --border-color: #333;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+h2, h3, h4 {
+  color: var(--primary-color);
+  margin-bottom: 16px;
+  letter-spacing: -0.2px;
+}
+.form-section {
+  background: var(--card-background);
+  padding: 24px; /* Tăng khoảng trắng */
+  margin-bottom: 24px;
+  border-radius: 12px; /* Bo góc mềm mại */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Bóng mờ */
+  border: 1px solid var(--border-color);
+}
+.dark-mode .form-section {
+  background: #1e1e1e;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  font-size: 15px;
+}
+input, select, textarea {
+  width: 100%;
+  max-width: 500px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px; /* Bo góc mềm */
+  font-size: 16px; /* Giữ nguyên cỡ chữ */
+  background: var(--card-background);
+  color: var(--text-color);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); /* Hiệu ứng focus */
+}
+textarea#borrowItems, textarea#technicianNote {
+  height: 150px;
+  resize: vertical;
+}
+button {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  padding: 12px 24px;
+  border: none !important;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600; /* Chữ nút đậm */
+  transition: background-color 0.3s, transform 0.1s;
+  margin: 5px;
+}
+button:hover {
+  background-color: #0056b3 !important;
+  transform: translateY(-1px);
+}
+button:active {
+  transform: translateY(0);
+}
+#darkModeToggle::before {
+  content: "Chuyển chế độ tối";
+}
+.dark-mode #darkModeToggle::before {
+  content: "Chuyển chế độ sáng";
+}
+.ui-button, button.ui-widget {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  border: none !important;
+}
+.ui-button:hover, button.ui-widget:hover {
+  background-color: #0056b3 !important;
+}
+
+/* ==============================================
+   BẢNG (TABLE) - PHONG CÁCH TỐI GIẢN
+   ============================================== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  background: var(--card-background);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+.dark-mode table {
+  background: #1e1e1e;
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+}
+th, td {
+  padding: 16px; /* Tăng padding */
+  text-align: left;
+  border-bottom: 1px solid var(--border-color); /* Chỉ giữ viền ngang */
+  border-right: none; /* Bỏ viền dọc */
+}
+th:last-child, td:last-child {
+  border-right: none;
+}
+/* === THAY ĐỔI LỚN: Tiêu đề tối giản === */
+th {
+  background-color: #f9f9f9; /* Nền xám nhạt */
+  color: #555; /* Chữ xám đậm */
+  font-weight: 600;
+  text-transform: uppercase; /* Chữ hoa */
+  font-size: 12px; /* Chữ nhỏ */
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color);
+}
+.dark-mode th {
+  background-color: #2a2a2a; /* Nền tối */
+  color: #aaa;
+  border-bottom: 2px solid var(--border-color);
+}
+tr:nth-child(even) {
+  background-color: #fcfcfc; /* Nền sọc ngựa vằn rất nhạt */
+}
+.dark-mode tr:nth-child(even) {
+  background-color: #222;
+}
+
+/* ==============================================
+   CÁC THÀNH PHẦN KHÁC (SPINNER, UI, v.v.)
+   ============================================== */
+.warning {
+  color: var(--error-color);
+  font-weight: bold;
+}
+.unreconciled {
+  color: var(--success-color);
+  font-weight: bold;
+}
+.error {
+  color: var(--error-color);
+  margin-bottom: 10px;
+  padding: 10px;
+  background: #ffe6e6;
+  border-radius: 4px;
+  animation: fadeIn 0.5s;
+}
+.success {
+  color: var(--success-color);
+  background: #e6ffe6;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  animation: fadeIn 0.5s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.ui-autocomplete {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--card-background);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.dark-mode .ui-autocomplete {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+#returnUnusedSection {
+  margin-top: 20px;
+}
+#unusedItemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+#unusedItemsTable th, #unusedItemsTable td {
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  text-align: left;
+}
+#unusedItemsTable th {
+  background-color: #f9f9f9; /* Nền xám nhạt */
+  color: #555; /* Chữ xám đậm */
+  font-weight: 600;
+  text-transform: uppercase; /* Chữ hoa */
+  font-size: 12px; /* Chữ nhỏ */
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color); /* Viền mờ */
+}
+.dark-mode #unusedItemsTable th {
+  background-color: #0056b3;
+  border-bottom: 2px solid #003d82;
+}
+.quantity-return-input {
+  width: 80px;
+}
+.ticket-range-input, .quantity-return-input, .item-row input {
+  max-width: 120px;
+}
+#excelUploadForm, #excelDataTable {
+  margin-top: 20px;
+}
+.form-hint {
+  display: block;
+  color: var(--text-color);
+  font-size: 14px;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+.dark-mode .form-hint {
+  color: #b0b0b0;
+}
+#managerNote {
+  width: 100%;
+  max-width: 500px;
+  height: 80px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+.dark-mode #managerNote {
+  background: #333;
+  color: #e0e0e0;
+  border-color: #444;
+}
+#reportSection {
+  margin-top: 20px;
+}
+#reportTable td {
+  vertical-align: top;
+}
+#reportTable td:nth-child(3), #reportTable td:nth-child(4), #reportTable td:nth-child(5) {
+  white-space: pre-wrap;
+}
+#managerNote:focus {
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+/* ==============================================
+   CSS CHO RESPONSIVE (DI ĐỘNG) - ĐÃ BỎ CARD VIEW
+   ============================================== */
+@media (max-width: 768px) {
+  body {
+    padding: 10px 5px;
+    font-size: 15px; /* Cỡ chữ di động chuẩn */
+  }
+  h2, h3, h4 {
+    font-size: 1.2em;
+  }
+  .form-section {
+    padding: 15px;
+  }
+  
+  /* Sửa lỗi font: Đồng bộ font-size */
+  input, select, textarea {
+    font-size: 15px; /* Đồng bộ với body */
+    padding: 12px;
+  }
+  button {
+    font-size: 15px; /* Đồng bộ */
+    padding: 12px 20px;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  /* === THAY ĐỔI LỚN: Bảng sẽ cuộn ngang === */
+  table {
+    display: block;
+    overflow-x: auto; /* Cho phép cuộn ngang */
+    white-space: nowrap; /* Giữ nội dung trên 1 hàng */
+  }
+  
+  th, td {
+    font-size: 15px; /* Đồng bộ font */
+    padding: 12px;
+  }
+  
+  /* Sửa lỗi hiển thị Checkbox (nếu có) */
+  input[type="checkbox"] {
+    width: auto; 
+    max-width: none;
+    height: 20px;
+    width: 20px;
+  }
+  
+  /* Căn giữa cột số lượng (nếu cần) - Giữ nguyên */
+  #borrowedItemsTable td:nth-child(3),
+  #reconciledTicketsTable td:nth-child(3) {
+    text-align: center;
+  }
+
+} /* <-- Dấu đóng cho @media (max-width: 768px) */
+
+
+/* ==============================================
+   CSS CHO MÀN HÌNH RẤT NHỎ (480px)
+   ============================================== */
+@media (max-width: 480px) {
+  body {
+    font-size: 14px; /* Giảm 1px cho màn hình nhỏ nhất */
+  }
+  input, select, textarea {
+    font-size: 14px; /* Đồng bộ */
+  }
+  button {
+    font-size: 14px; /* Đồng bộ */
+  }
+  th, td {
+    font-size: 14px; /* Đồng bộ */
+  }
+  table td {
+    padding: 8px; /* Giảm padding */
+  }
+
+  input[type="date"] {
+    width: 100%;
+    max-width: 500px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px; /* Đồng bộ */
+    background-color: var(--card-background);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    padding: 5px;
+    cursor: pointer;
+    filter: invert(0.6);
+  }       
+  .dark-mode input[type="date"] {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #444;
+  } 
+  .dark-mode input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+}
+
+/* ==============================================
+   FIX PLACEHOLDER (Dán vào cuối)
+   ============================================== */
+::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+  font-size: inherit; /* Luôn dùng cỡ chữ của input */
+  color: #aaa;
+  opacity: 1; /* Firefox */
+}
+.dark-mode ::placeholder {
+  color: #666;
+}

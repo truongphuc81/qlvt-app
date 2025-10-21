@@ -1,89 +1,371 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+<head>
+  <title>Phiếu Mượn/Trả Vật Tư</title>
+  <meta charset="utf-8"/>
+  <link rel="stylesheet" href="styles.css">
+  
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script>
+    // CẤU HÌNH FIREBASE SDK (SỬ DỤNG GIÁ TRỊ THỰC CỦA BẠN)
+    const firebaseConfig = {
+        apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+        authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+        projectId: "quan-ly-vat-tu-backend",
+        storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+        messagingSenderId: "323292129107",
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
+        measurementId: "G-N3VLYSXTR8"
+    };
+    
+    // Khởi tạo Firebase và Auth Service
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebaseApp.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.4.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.4.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.4.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+    // Fallback (giữ nguyên từ code gốc)
+    setTimeout(function(){
+      if (typeof jQuery==='undefined') document.write('<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"><\/script>');
+      if (typeof jQuery.ui==='undefined') document.write('<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"><\/script>');
+      if (typeof XLSX==='undefined') document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"><\/script>');
+    }, 3000);
+  </script>
+</head>
+<body>
+  <h2>Phiếu Mượn/Trả Vật Tư</h2>
+  <button id="darkModeToggle" onclick="toggleDarkMode()"></button>
+  
+  <button id="authButton" style="display:none;">Đăng nhập bằng Gmail</button>
+  <button id="signOutButton" onclick="firebase.auth().signOut().then(() => { window.location.reload(); })" style="display:none; background-color: #dc3545; color: white;">Đăng xuất</button>
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+  <button onclick="showManagerPage()" id="managerPageButton" style="display:none;">
+    Chuyển sang Trang Quản Lý
+  </button>
+  
+  <div id="mainPage">
+    <div class="form-section">
+      <h3>Thông tin chung</h3>
+      <label>Email kỹ thuật viên: <span id="userEmail">Loading...</span></label><br>
+      <label>Tên kỹ thuật viên: <span id="technicianName">Loading...</span></label><br>
+      <label>Loại giao dịch:</label><br>
+      <select id="transactionType" onchange="toggleForm()">
+        <option value="Mượn">Mượn</option>
+        <option value="Trả">Trả</option>
+      </select><br>
+      <div id="infoSpinner" style="display:none;text-align:center;">
+        <div 
+class="spinner"></div><p>Đang tải...</p>
+      </div>
+      <div id="infoSuccessMessage" class="success" style="display:none;"></div>
+      <div id="infoErrorMessage" class.error" style="display:none;"></div>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+    <div id="borrowInputForm" class="form-section">
+      <h3>Mượn hàng</h3>
+      <label>Nội dung mượn hàng:</label><br>
+      <textarea id="borrowItems" placeholder="VD: 2 mực 12A, 3 mực 26A"></textarea><br>
+      <button id="submitBorrowButton" onclick="submitForm()">Gửi</button>
+      <div id="borrowSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang xử lý...</p>
+      </div>
+  
+      <div id="borrowSuccessMessage" class="success" style="display:none;"></div>
+      <div id="borrowErrorMessage" class="error" style="display:none;"></div>
+    </div>
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
-      });
-    </script>
-  </body>
+    <div id="borrowHistoryForm" class="form-section">
+      <h3>Lịch sử mượn 5 ngày gần nhất</h3>
+      <label>Chọn ngày xem lịch sử (nếu muốn xem ngày cụ thể):</label><br>
+      <input type="date" id="historyDate"><br>
+      <table id="borrowHistoryTable">
+        <thead>
+          <tr><th>Thời gian</th><th>Nội dung mượn</th></tr>
+        
+</thead>
+  
+        <tbody id="borrowHistoryBody"></tbody>
+      </table>
+      <button onclick="loadMoreHistory()">Tải thêm</button>
+      <div id="historySpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang tải...</p>
+      </div>
+      <div id="historySuccessMessage" class="success" style="display:none;"></div>
+      <div id="historyErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div class="form-section">
+      <h3>Tổng quan mặt hàng đã mượn</h3>
+      <table id="overviewTable">
+      
+  <thead>
+  
+          <tr>
+            <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn chưa trả</th>
+            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
+          </tr>
+        </thead>
+        <tbody id="overviewBody"></tbody>
+      </table>
+      <div id="overviewSpinner" style="display:none;text-align:center;">
+      
+  <div class="spinner"></div><p>Đang tải...</p>
+  
+      </div>
+      <div id="overviewSuccessMessage" class="success" style="display:none;"></div>
+      <div id="overviewErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="returnForm" class="form-section" style="display:none;">
+    
+      <div classs="form-section" id="returnNoteForm" style="border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
+        <h3>Trả vật tư không sử dụng</h3>
+        <label>Nội dung trả hàng (ghi rõ số lượng, vật tư):</label><br>
+        <textarea id="returnNoteItems" placeholder="VD: 1 mực 12A (nguyên), 5m dây mạng (thừa)"></textarea><br>
+        <button id="submitReturnNoteButton" onclick="submitReturnNote()">Gửi Note Trả</button>
+        <div id="returnNoteSpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div><p>Đang xử lý...</p>
+        </div>
+        <div id="returnNoteSuccessMessage" class="success" style="display:none;"></div>
+        <div id="returnNoteErrorMessage" class="error" style="display:none;"></div>
+      </div>
+      
+      <div id="returnHistorySection" class="form-section" style="margin-top: 20px; border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
+        <h3>Lịch sử trả hàng không sử dụng</h3>
+        <table id="returnHistoryTable">
+          <thead>
+            <tr><th>Thời gian</th><th>Nội dung trả</th></tr>
+          </thead>
+          <tbody id="returnHistoryBody"></tbody>
+        </table>
+        <div id="returnHistorySpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div><p>Đang tải...</p>
+        </div>
+      </div>
+
+      <h3>Đối chiếu sổ 3 liên</h3>
+      <h4>Số sổ chưa đối chiếu</h4>
+      <table id="borrowedItemsTable">
+        <thead>
+          <tr>
+            <th>Số sổ</th>
+            <th>Tên vật tư</th>
+            <th>Số lượng sử dụng</th>
+            <th>Xác nhận đối chiếu</th>
+          </tr>
+        </thead>
+        <tbody id="borrowedItemsBody"></tbody>
+      </table>
+
+      <button id="submitReturnButton" onclick="submitForm()">Xác nhận đối chiếu</button>
+      <button onclick="showErrorReportForm()">Báo cáo sai sót</button>
+      
+      <div id="returnSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang xử lý...</p>
+      </div>
+      <div id="returnSuccessMessage" class="success" style="display:none;"></div>
+      <div id="returnErrorMessage" class="error" style="display:none;"></div>
+
+      <div id="reconciledTicketsSection" style="margin-top: 30px;">
+        <h4 style="color: var(--success-color);">Sổ 3 liên đã đối chiếu</h4>
+        <table id="reconciledTicketsTable">
+          <thead>
+            <tr>
+              <th>Số sổ</th>
+              <th>Tên vật tư</th>
+              <th style="text-align: center;">Số lượng sử dụng</th>
+            </tr>
+          </thead>
+          <tbody id="reconciledTicketsBody"></tbody>
+        </table>
+      </div>
+
+      <div id="errorReportForm" class="form-section" style="display:none; margin-top: 20px;">
+        <h3>Báo cáo sai sót</h3>
+        <label>Loại sai sót:</label><br>
+        <select id="errorType">
+          <option value="Số sổ">Số sổ</option>
+          <option value="Giao dịch mượn/trả">Giao dịch mượn/trả</option>
+          <option value="Tồn kho">Tồn kho</option>
+        </select><br>
+        <label>Mô tả sai sót:</label><br>
+        <textarea id="errorDescription" required></textarea><br>
+        <label>Số sổ hoặc ngày giao dịch liên quan:</label><br>
+        <input type="text" id="relatedTicketOrDate" placeholder="VD: Sổ 01 hoặc 01/05/2025"><br>
+        <label>Đề xuất chỉnh sửa:</label><br>
+        <textarea id="suggestedFix"></textarea><br>
+        <button onclick="submitErrorReport()">Gửi báo cáo</button>
+        <button onclick="hideErrorReportForm()">Hủy</button>
+        <div id="errorReportSpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div><p>Đang xử lý...</p>
+        </div>
+        <div id="errorReportSuccessMessage" class="success" style="display:none;"></div>
+        <div id="errorReportErrorMessage" class="error" style="display:none;"></div>
+      </div>
+      
+    </div> </div> <div id="managerPage" class="form-section" style="display:none;">
+    <h2>Trang Quản Lý</h2>
+    <button onclick="showMainPage()">Quay lại Trang Chính</button>
+
+    <div class="form-section">
+      <h3>Chọn kỹ thuật viên</h3>
+      <select id="technicianEmail" onchange="loadTechnicianData(); loadTicketRanges()">
+        <option value="">Chọn kỹ thuật viên</option>
+      </select>
+      <div id="technicianSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang tải...</p>
+      </div>
+      <div id="technicianSuccessMessage" class="success" style="display:none;"></div>
+      <div id="technicianErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="managerOverviewSection" class="form-section">
+      <h3>Tổng quan mặt hàng đã mượn của kỹ thuật viên</h3>
+      <table id="managerOverviewTable">
+        <thead>
+          <tr>
+            <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn chưa trả</th>
+            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
+          </tr>
+        </thead>
+        <tbody id="managerOverviewBody"></tbody>
+      </table>
+      <div id="managerOverviewSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang tải...</p>
+      </div>
+      <div id="managerOverviewSuccessMessage" style="display:none;"></div>
+      <div id="managerOverviewErrorMessage" style="display:none;"></div>
+    </div>
+
+    <div id="ticketRangeForm" class="form-section">
+      <h3>Quản lý dải số sổ</h3>
+      <label>Số bắt đầu:</label><br>
+      <input type="number" id="ticketRangeStart" class="ticket-range-input" min="1" placeholder="VD: 1"><br>
+      <label>Số kết thúc:</label><br>
+      <input type="number" id="ticketRangeEnd" class="ticket-range-input" min="1" placeholder="VD: 100"><br>
+      <button onclick="addTicketRange()">Thêm dải số</button><br>
+      <h4>Danh sách dải số sổ</h4>
+      <table id="ticketRangesTable">
+        <thead>
+          <tr><th>Số bắt đầu</th><th>Số kết thúc</th><th>Xóa</th></tr>
+        </thead>
+        <tbody id="ticketRangesBody"></tbody>
+      </table>
+      <button onclick="saveTicketRanges()">Lưu dải số sổ</button>
+      <div id="ticketRangeSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang xử lý...</p>
+      </div>
+      <div id="ticketRangeSuccessMessage" class="success" style="display:none;"></div>
+      <div id="ticketRangeErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="excelUploadForm" class="form-section">
+      <h3>Upload danh sách bán hàng</h3>
+      <input type="file" id="excelFile" accept=".xlsx,.xls"><br>
+      <button onclick="uploadExcel()">Tải lên và xem trước</button><br>
+      <table id="excelDataTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>Ngày</th><th>Mã vật tư</th><th>Tên vật tư</th>
+            <th>Số sổ</th><th>Số lượng sử dụng</th><th>Email</th><th>Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody id="excelDataBody"></tbody>
+      </table>
+      <button id="confirmExcelButton" style="display:none;" onclick="confirmExcelData()">Xác nhận và lưu</button>
+      <div id="excelSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang xử lý...</p>
+      </div>
+      <div id="excelSuccessMessage" class="success" style="display:none;"></div>
+      <div id="excelErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="managerBorrowForm" class="form-section">
+      <h3>Nhập vật tư mượn hoặc trả không sử dụng</h3>
+      <label><input type="radio" name="managerMode" id="borrowMode" checked onchange="toggleReturnUnusedMode()"> Nhập vật tư mượn</label>
+      <label><input type="radio" name="managerMode" id="returnUnusedMode" onchange="toggleReturnUnusedMode()"> Trả vật tư không sử dụng</label><br>
+
+      <div id="borrowInputSection" style="display:block;">
+        <label><input type="checkbox" id="directBorrow" onchange="toggleBorrowInput()"> Nhập trực tiếp (không cần lệnh mượn)</label><br>
+        <div id="borrowNoteSelectDiv" style="display:block;">
+          <label>Chọn lệnh mượn:</label><br>
+          <select id="borrowNoteSelect" onchange="displaySelectedNote()">
+            <option value="">Chọn lệnh mượn</option>
+          </select><br>
+          <label>Nội dung mượn của kỹ thuật viên:</label><br>
+          <textarea id="technicianNote" readonly></textarea><br>
+        </div>
+        <div id="directBorrowNoteDiv" style="display:none;">
+          <label>Nội dung mượn trực tiếp:</label><br>
+          <textarea id="managerBorrowNote" placeholder="VD: VT001 100 mét, VT002 10 cái"></textarea><br>
+        </div>
+
+        <label>Tìm vật tư:</label><br>
+        <input type="text" id="managerItemSearch" placeholder="Nhập mã hoặc tên vật tư"><br>
+        <label>Số lượng:</label><br>
+        <input type="number" id="managerItemQuantity" placeholder="Số lượng" min="1"><br>
+        <button onclick="addManagerItem()">Thêm vật tư</button><br>
+
+        <h4>Danh sách vật tư mượn</h4>
+        <table id="managerSelectedItemsTable">
+          <thead>
+            <tr><th>Mã vật tư</th><th>Tên vật tư</th><th>Số lượng</th><th>Xóa</th></tr>
+          </thead>
+          <tbody id="managerSelectedItemsBody"></tbody>
+        </table>
+
+        <label>Ngày giao dịch:</label><br>
+        <input type="text" id="managerTransactionDate" placeholder="DD/MM/YYYY" required><br>
+        <button onclick="submitManagerBorrow()">Gửi mượn</button>
+        <div id="managerBorrowSpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div><p>Đang xử lý...</p>
+        </div>
+        <div id="managerBorrowSuccessMessage" class="success" style="display:none;"></div>
+        <div id="managerBorrowErrorMessage" class="error" style="display:none;"></div>
+      </div>
+
+ 
+      <div id="returnUnusedSection" style="display:none;">
+      
+        <div id="returnNoteSelectDiv" style="border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
+          <label>Chọn lệnh trả (Nếu KTV có gửi note):</label><br>
+          <select id="returnNoteSelect" onchange="displaySelectedReturnNote()">
+            <option value="">Chọn lệnh trả</option>
+          </select><br>
+          <label>Nội dung note trả của kỹ thuật viên:</label><br>
+          <textarea id="technicianReturnNote" readonly></textarea><br>
+        </div>
+
+        <h4>Danh sách vật tư đã mượn (chưa trả)</h4>
+        <table id="unusedItemsTable">
+          <thead>
+            <tr><th>Tên vật tư</th><th>Mã vật tư</th><th>Số lượng đã mượn</th><th>Số lượng trả</th></tr>
+          </thead>
+          <tbody id="unusedItemsBody"></tbody>
+        </table>
+        
+        <label>Ngày giao dịch:</label><br>
+        <input type="text" id="returnUnusedTransactionDate" placeholder="DD/MM/YYYY" required><br>
+        
+        <label for="returnRejectionReason" style="font-weight: 500; margin-top: 10px;">Lý do (Nếu Từ chối):</label><br>
+        <textarea id="returnRejectionReason" style="width: 100%; max-width: 500px; height: 60px;"></textarea><br>
+        
+        <button onclick="approveReturnNote()">Duyệt Note & Xác nhận trả</button>
+        <button onclick="rejectReturnNote()" style="background-color: var(--error-color);">Từ chối Note</button>
+        
+        <div id="returnUnusedSpinner" style="display:none;text-align:center;">
+          <div class="spinner"></div><p>Đang xử lý...</p>
+        </div>
+        <div id="returnUnusedSuccessMessage" class="success" style="display:none;"></div>
+        <div id="returnUnusedErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
 </html>
