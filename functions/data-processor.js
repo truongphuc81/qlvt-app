@@ -760,6 +760,8 @@ async function processExcelData({ sheets, spreadsheetId, data }) {
     // NOTE: Cần đọc lại TicketRanges vì không được cache trong GCF
     const { ticketRangesMap } = await readAllSheetsData({ sheets, spreadsheetId, email: null }); 
     
+    // / <-- THÊM LOG NÀY ĐỂ XEM DỮ LIỆU ĐỌC ĐƯỢC -->
+    console.log('[DEBUG] ticketRangesMap loaded:', JSON.stringify(ticketRangesMap, null, 2));
     const processed = (data || []).map(row => {
         
         // --- LOGIC CHUYỂN ĐỔI NGÀY THÁNG EXCEL ---

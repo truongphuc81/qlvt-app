@@ -3,6 +3,7 @@
 <head>
   <title>Phiếu Mượn/Trả Vật Tư</title>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="styles.css">
   
   <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
@@ -40,7 +41,7 @@
 <body>
   <h2>Phiếu Mượn/Trả Vật Tư</h2>
   <button id="darkModeToggle" onclick="toggleDarkMode()"></button>
-  
+  <button id="tableViewToggle" onclick="toggleTableView()"></button>
   <button id="authButton" style="display:none;">Đăng nhập bằng Gmail</button>
   <button id="signOutButton" onclick="firebase.auth().signOut().then(() => { window.location.reload(); })" style="display:none; background-color: #dc3545; color: white;">Đăng xuất</button>
 
@@ -271,8 +272,10 @@ class="spinner"></div><p>Đang tải...</p>
       <table id="excelDataTable" style="display:none;">
         <thead>
           <tr>
-            <th>Ngày</th><th>Mã vật tư</th><th>Tên vật tư</th>
-            <th>Số sổ</th><th>Số lượng sử dụng</th><th>Email</th><th>Ghi chú</th>
+            <th>Ngày</th>
+            <th>Số sổ</th>     <th>Mã vật tư</th> <th>Tên vật tư</th> <th>Số lượng sử dụng</th>
+            <th>Email</th>
+            <th>Ghi chú</th>
           </tr>
         </thead>
         <tbody id="excelDataBody"></tbody>

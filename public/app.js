@@ -174,20 +174,51 @@ async function callApi(endpoint, data = {}, method = 'POST') {
 
 function initForm(){
     const authButton = document.getElementById('authButton');
-    document.getElementById('infoSpinner').style.display = 'block'; // <-- BẬT SPINNER
-    
-    // Chúng ta KHÔNG CẦN getRedirectResult() nữa.
-    // CHỈ CẦN LẮNG NGHE TRẠNG THÁI AUTH LÀ ĐỦ.
-    
+    const toggleButton = document.getElementById('tableViewToggle'); // Thêm dòng này
+    document.getElementById('infoSpinner').style.display = 'block'; 
+
+    console.log("Đang thiết lập Persistence (lưu trữ)...");
+
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+      .then(() => {
+        console.log("Thiết lập Persistence thành công. Đang gắn Auth Listener...");
+        return attachAuthListener(authButton); 
+      })
+      .catch((error) => {
+        console.error("Lỗi setPersistence:", error);
+        showError('infoErrorMessage', 'Lỗi khởi tạo Auth: ' + error.message);
+        document.getElementById('infoSpinner').style.display = 'none';
+      });
+
+    // === BẮT ĐẦU THÊM KHỐI NÀY ===
+    // Đọc và áp dụng lựa chọn chế độ xem bảng
+    const savedView = localStorage.getItem('tableView');
+    if (savedView === 'card') {
+        document.body.classList.add('card-view-mobile');
+        // if (toggleButton) toggleButton.textContent = 'Xem dạng Bảng cuộn';
+    } else {
+        // Mặc định là 'scroll'
+        document.body.classList.remove('card-view-mobile');
+        // if (toggleButton) toggleButton.textContent = 'Xem dạng Thẻ';
+    }
+    // === KẾT THÚC THÊM KHỐI ===
+
+    document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
+
+    if (localStorage.getItem('darkMode')==='true') document.body.classList.add('dark-mode');
+}
+
+function attachAuthListener(authButton) {
+    // Hàm này chứa logic onAuthStateChanged Y HỆT như cũ
     auth.onAuthStateChanged(user => {
         if (user) {
-            // TRƯỜNG HỢP 1: User đã đăng nhập (từ session hoặc popup vừa xong)
+            // TRƯỜNG HỢP 1: User đã đăng nhập
             console.log("Auth State: Đã tìm thấy user.");
             handleAuthSuccess(user); // Hàm này sẽ tự ẩn spinner
         } else {
-            // TRƯỜG HỢP 2: User chưa đăng nhập
+            // TRƯỜNG HỢP 2: User chưa đăng nhập
             console.log("Auth State: Không tìm thấy user. Hiển thị nút đăng nhập.");
-            
+
             // Ẩn nội dung chính
             document.getElementById('mainPage').style.display = 'none';
             document.getElementById('managerPage').style.display = 'none';
@@ -196,23 +227,19 @@ function initForm(){
             if (authButton) {
                 authButton.textContent = 'Đăng nhập bằng Gmail';
                 authButton.style.display = 'inline-block';
-                authButton.onclick = signInWithGoogle; // Đã được trỏ tới hàm popup mới
+                authButton.onclick = signInWithGoogle; // Trỏ tới hàm popup
             }
-            
+
             // Cập nhật placeholder
             document.getElementById('userEmail').innerText = 'Chưa đăng nhập';
             document.getElementById('technicianName').innerText = 'Chưa đăng nhập';
-            
+
             // TẮT SPINNER
             document.getElementById('infoSpinner').style.display = 'none'; 
         }
     });
-    
-    // Khởi tạo các listener tĩnh
-    document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
-    
-    if (localStorage.getItem('darkMode')==='true') document.body.classList.add('dark-mode');
 }
+
 function toggleDarkMode(){ document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode',document.body.classList.contains('dark-mode')); }
 function showManagerPage(){ 
     document.getElementById('mainPage').style.display='none'; 
@@ -293,11 +320,6 @@ function loadManagerDashboard(email) {
             
             displayBorrowedItems(payload.items || [], true);
         })
-        .catch(err => {
-            showError('technicianErrorMessage', 'Lỗi tải dữ liệu: ' + err.message);
-            document.getElementById('managerBorrowedItemsBody').innerHTML='<tr><td colspan="8">Lỗi tải dữ liệu</td></tr>';
-            document.getElementById('managerOverviewBody').innerHTML='<tr><td colspan="6">Lỗi tải dữ liệu</td></tr>';
-        })
         .finally(() => {
             document.getElementById('technicianSpinner').style.display='none';
         });
@@ -363,7 +385,7 @@ function displayBorrowHistory(history){
       }
       else if (hasItems){
         var items=Object.values(entry.itemsEntered).map(function(it){ 
-          return '— '+it.name+' ('+it.code+'): '+it.quantity; 
+          return '— '+it.name+': '+it.quantity; 
         }).join('<br>');
    
         if (entry.note) {
@@ -399,12 +421,12 @@ function displayBorrowedItems(items, isManagerView){
     }
     
     // Kiểm tra nếu không có dữ liệu
-    if (!items||!items.length){
-      overviewBody.innerHTML='<tr><td colspan="6">Không có vật tư đã mượn</td></tr>';
-      if (!isManagerView) returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>'; // 4 cột
-      if (isManagerView) managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
-      return;
-    }
+    // if (!items||!items.length){
+    //   overviewBody.innerHTML='<tr><td colspan="6">Không có vật tư đã mượn</td></tr>';
+    //   if (!isManagerView) returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>'; // 4 cột
+    //   if (isManagerView) managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
+    //   return;
+    // }
 
     // --- HIỂN THỊ BẢNG TỔNG QUAN (Giữ nguyên) ---
     // --- HIỂN THỊ BẢNG TỔNG QUAN (Chung cho cả 2) ---
@@ -705,15 +727,24 @@ function uploadExcel(){
         var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
         var sheet=wb.SheetNames[0];
         // Đọc dữ liệu thành JSON với cấu trúc header đã định nghĩa
-        var json=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{ header:['date','itemCode','itemName','ticket','quantity','note'], skipHeader:true });
-        
+        var json=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{ 
+        header:['date','ticket','itemCode','itemName','quantity','note'], // <-- THỨ TỰ MỚI
+        skipHeader:true 
+        });
+        console.log('[DEBUG Frontend] Dữ liệu đọc từ Excel:', JSON.stringify(json, null, 2));
         if (!json.length){ showError('excelErrorMessage','File Excel trống.'); document.getElementById('excelSpinner').style.display='none'; return; }
         
         // GỌI API GCF để chuẩn hóa dữ liệu
         callApi('/manager/processExcelData', { data: json })
-          .then(data => { 
-            displayExcelData(data); 
-          })
+          .then(data => {
+        // <-- THÊM LOG NÀY -->
+        console.log('[DEBUG] Dữ liệu trả về từ /processExcelData:', JSON.stringify(data, null, 2)); 
+
+        processedExcelData = data; // Gán vào biến toàn cục
+        displayExcelData(data); // Hiển thị xem trước
+        document.getElementById('excelDataTable').style.display='table';
+        document.getElementById('confirmExcelButton').style.display='inline-block';
+      })
           .catch(err => { 
             showError('excelErrorMessage','Lỗi xử lý: '+err.message); 
           })
@@ -730,34 +761,55 @@ function uploadExcel(){
 }
 
 // Bổ sung hàm Display Data
-function displayExcelData(data){
-    excelData=data||[];
-    var tbody=document.getElementById('excelDataBody'); tbody.innerHTML='';
-    if (!excelData.length){
-      tbody.innerHTML='<tr><td colspan="7">Không có dữ liệu</td></tr>';
-      document.getElementById('excelDataTable').style.display='none';
-      document.getElementById('confirmExcelButton').style.display='none';
-      return;
-}
+function displayExcelData(excelData){
+    var tbody=document.getElementById('excelDataBody');
+    tbody.innerHTML=''; // Xóa dữ liệu cũ
+
+    if (!excelData||!excelData.length){
+        tbody.innerHTML='<tr><td colspan="7">Không có dữ liệu hợp lệ.</td></tr>';
+        return;
+    }
+
     excelData.forEach(function(r){
-      var tr=document.createElement('tr');
-      tr.innerHTML='<td data-label="Ngày">'+(r.date||'')+'</td><td data-label="Mã vật tư">'+(r.itemCode||'')+'</td><td data-label="Tên vật tư">'+(r.itemName||'')+'</td><td data-label="Số sổ">'+(r.ticket||'')+'</td><td data-label="Số lượng">'+(r.quantity||'')+'</td><td data-label="Email">'+(r.email||'Không xác định')+'</td><td data-label="Ghi chú">'+(r.note||'')+'</td>';
-      tbody.appendChild(tr);
+        var tr=document.createElement('tr');
+        // SỬA THỨ TỰ CÁC CỘT TD Ở ĐÂY CHO KHỚP VỚI TH TRONG HTML
+        tr.innerHTML=
+            '<td data-label="Ngày">'+(r.date||'')+'</td>'+
+            '<td data-label="Số sổ">'+(r.ticket||'')+'</td>'+       // <-- CỘT 2 MỚI
+            '<td data-label="Mã vật tư">'+(r.itemCode||'')+'</td>'+ // <-- CỘT 3 MỚI
+            '<td data-label="Tên vật tư">'+(r.itemName||'')+'</td>'+ // <-- CỘT 4 MỚI
+            '<td data-label="Số lượng">'+(r.quantity||0)+'</td>'+
+            '<td data-label="Email">'+(r.email||'Không xác định')+'</td>'+
+            '<td data-label="Ghi chú">'+(r.note||'')+'</td>';
+        tbody.appendChild(tr);
     });
+
+    // Hiển thị bảng và nút xác nhận
     document.getElementById('excelDataTable').style.display='table';
     document.getElementById('confirmExcelButton').style.display='inline-block';
 }
 
 // Bổ sung hàm Confirm Data
+// File: app.js (Modify confirmExcelData)
+
 function confirmExcelData(){
-    if (!excelData.length){ showError('excelErrorMessage','Không có dữ liệu để lưu.'); return;
-}
+    // Use the correct global variable
+    if (!processedExcelData || !processedExcelData.length){ // <-- CHANGE HERE
+        showError('excelErrorMessage','Không có dữ liệu để lưu.'); 
+        return;
+    }
+    
     document.getElementById('excelSpinner').style.display='block';
     
-    callApi('/manager/saveExcelData', { data: excelData })
+    // Send the correct data
+    callApi('/manager/saveExcelData', { data: processedExcelData }) // <-- CHANGE HERE
       .then(() => {
         showSuccess('excelSuccessMessage','Lưu dữ liệu thành công!');
-        excelData=[]; document.getElementById('excelDataBody').innerHTML='';
+        
+        // Clear the correct variable after saving
+        processedExcelData=[]; // <-- CHANGE HERE 
+        
+        document.getElementById('excelDataBody').innerHTML='';
         document.getElementById('excelDataTable').style.display='none';
         document.getElementById('confirmExcelButton').style.display='none';
         document.getElementById('excelFile').value='';
@@ -1320,6 +1372,17 @@ function displayReturnHistory(history){
       tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung trả">'+finalNoteHtml+'</td>'; 
       tbody.appendChild(tr);
     });
+}
+function toggleTableView() {
+    const body = document.body;
+    const isCardView = body.classList.toggle('card-view-mobile'); // Toggle và lấy trạng thái mới
+    localStorage.setItem('tableView', isCardView ? 'card' : 'scroll'); // Lưu lựa chọn
+
+    // Cập nhật text nút (Tùy chọn)
+    // const toggleButton = document.getElementById('tableViewToggle');
+    // if (toggleButton) {
+    //     toggleButton.textContent = isCardView ? 'Xem dạng Bảng cuộn' : 'Xem dạng Thẻ';
+    // }
 }
 // DOM ready
 document.addEventListener('DOMContentLoaded', function(){ initForm(); });

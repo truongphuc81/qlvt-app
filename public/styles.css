@@ -105,6 +105,13 @@ button:active {
 .dark-mode #darkModeToggle::before {
   content: "Chuyển chế độ sáng";
 }
+/* Nút chuyển đổi giao diện bảng */
+#tableViewToggle::before {
+  content: "Xem dạng Thẻ"; /* Mặc định là xem cuộn */
+}
+body.card-view-mobile #tableViewToggle::before {
+  content: "Xem dạng Bảng cuộn";
+}
 .ui-button, button.ui-widget {
   background-color: var(--primary-color) !important;
   color: white !important;
@@ -123,8 +130,9 @@ table {
   margin-bottom: 20px;
   background: var(--card-background);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: hidden; /* Quan trọng để bo góc */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  table-layout: auto; /* Cho phép trình duyệt tự điều chỉnh cột */
 }
 .dark-mode table {
   background: #1e1e1e;
@@ -136,11 +144,15 @@ th, td {
   text-align: left;
   border-bottom: 1px solid var(--border-color); /* Chỉ giữ viền ngang */
   border-right: none; /* Bỏ viền dọc */
+  /* === THAY ĐỔI: Cho phép xuống dòng === */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 th:last-child, td:last-child {
   border-right: none;
 }
-/* === THAY ĐỔI LỚN: Tiêu đề tối giản === */
+/* === TIÊU ĐỀ TỐI GIẢN (Xám/Đen) === */
 th {
   background-color: #f9f9f9; /* Nền xám nhạt */
   color: #555; /* Chữ xám đậm */
@@ -149,6 +161,8 @@ th {
   font-size: 12px; /* Chữ nhỏ */
   letter-spacing: 0.5px;
   border-bottom: 2px solid var(--border-color);
+  /* Ưu tiên không xuống dòng cho tiêu đề */
+  white-space: nowrap;
 }
 .dark-mode th {
   background-color: #2a2a2a; /* Nền tối */
@@ -226,19 +240,21 @@ tr:nth-child(even) {
   border-collapse: collapse;
   margin-bottom: 20px;
 }
+/* Bảng này giữ lại phong cách cũ vì nó là bảng con */
 #unusedItemsTable th, #unusedItemsTable td {
   border: 1px solid var(--border-color);
   padding: 8px;
   text-align: left;
 }
 #unusedItemsTable th {
-  background-color: #f9f9f9; /* Nền xám nhạt */
-  color: #555; /* Chữ xám đậm */
+  background-color: var(--primary-color);
+  color: white;
   font-weight: 600;
-  text-transform: uppercase; /* Chữ hoa */
-  font-size: 12px; /* Chữ nhỏ */
-  letter-spacing: 0.5px;
-  border-bottom: 2px solid var(--border-color); /* Viền mờ */
+  border-bottom: 2px solid #0056b3;
+  font-size: 14px; /* Reset font-size */
+  text-transform: none; /* Reset text-transform */
+  letter-spacing: 0;
+  white-space: normal; /* Cho phép tiêu đề bảng này xuống dòng */
 }
 .dark-mode #unusedItemsTable th {
   background-color: #0056b3;
@@ -293,7 +309,7 @@ tr:nth-child(even) {
 }
 
 /* ==============================================
-   CSS CHO RESPONSIVE (DI ĐỘNG) - ĐÃ BỎ CARD VIEW
+   CSS CHO RESPONSIVE (DI ĐỘNG) - NỘI DUNG TỰ XUỐNG DÒNG
    ============================================== */
 @media (max-width: 768px) {
   body {
@@ -319,31 +335,198 @@ tr:nth-child(even) {
     margin-bottom: 10px;
   }
   
-  /* === THAY ĐỔI LỚN: Bảng sẽ cuộn ngang === */
+  /* === THAY ĐỔI LỚN: KHÔNG DÙNG CARD, GIỮ NGUYÊN BẢNG === */
   table {
-    display: block;
-    overflow-x: auto; /* Cho phép cuộn ngang */
-    white-space: nowrap; /* Giữ nội dung trên 1 hàng */
+    /* Không cần display: block */
+    /* Không cần overflow-x: auto */
+    /* Không cần white-space: nowrap */
+    box-shadow: none; /* Bỏ shadow trên di động */
+    border-radius: 8px; /* Giữ bo góc nhẹ */
+    border: 1px solid var(--border-color); /* Thêm viền nhẹ */
   }
   
   th, td {
     font-size: 15px; /* Đồng bộ font */
-    padding: 12px;
+    padding: 10px 8px; /* Giảm padding cho di động */
+    white-space: normal; /* Đảm bảo nội dung xuống dòng */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    border-right: 1px solid var(--border-color); /* Thêm kẻ dọc nhẹ */
+  }
+  th:last-child, td:last-child {
+    border-right: none; /* Bỏ kẻ dọc cuối */
   }
   
-  /* Sửa lỗi hiển thị Checkbox (nếu có) */
+  /* Giữ lại tiêu đề ngang */
+  table thead {
+    display: table-header-group; 
+  }
+  /* Giữ lại cấu trúc hàng/cột */
+  table tbody, table tr, table td {
+    display: table-row-group; /* Reset về mặc định */
+  }
+  table tr {
+      display: table-row; /* Reset về mặc định */
+      width: auto;
+      margin-bottom: 0; 
+      border: none; 
+      border-radius: 0; 
+      padding: 0; 
+      background: none; 
+  }
+  table td {
+    display: table-cell; /* Reset về mặc định */
+    position: static; /* Reset */
+    padding: 10px 8px; /* Reset padding */
+    border-bottom: 1px solid var(--border-color); /* Giữ kẻ ngang */
+    text-align: left; /* Reset */
+    min-height: auto; /* Reset */
+    vertical-align: middle; /* Căn giữa dọc */
+  }
+  /* Bỏ label :before */
+  table td:before {
+    display: none;
+  }
+  
+  /* Sửa lỗi hiển thị Checkbox */
   input[type="checkbox"] {
     width: auto; 
     max-width: none;
     height: 20px;
     width: 20px;
+    vertical-align: middle; /* Căn giữa checkbox */
   }
   
-  /* Căn giữa cột số lượng (nếu cần) - Giữ nguyên */
+  /* Căn giữa cột số lượng */
   #borrowedItemsTable td:nth-child(3),
   #reconciledTicketsTable td:nth-child(3) {
     text-align: center;
   }
+
+  /* === BỘ QUY TẮC DÀNH CHO CARD VIEW (KHI BODY CÓ CLASS .card-view-mobile) === */
+  /* Ghi đè lại các quy tắc bảng cuộn/xuống dòng */
+  body.card-view-mobile table {
+    display: block;
+    overflow-x: hidden; /* Không cuộn ngang */
+    white-space: normal; /* Cho phép xuống dòng */
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+  }
+  body.card-view-mobile table thead {
+    display: none; /* Ẩn tiêu đề ngang */
+  }
+  body.card-view-mobile table tbody,
+  body.card-view-mobile table tr,
+  body.card-view-mobile table td {
+    display: block;
+    width: 100%;
+  }
+  /* Thiết kế CARD (cho mỗi <tr>) */
+  body.card-view-mobile table tr {
+    display: block; /* Ghi đè table-row */
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--card-background); /* Nền card */
+    white-space: normal; /* Cho phép xuống dòng */
+  }
+  /* Thiết kế HÀNG (cho mỗi <td>) */
+  body.card-view-mobile table td {
+    display: block; /* Ghi đè table-cell */
+    position: relative;
+    padding: 12px 10px 12px 45%; /* Padding chuẩn: 45% cho label */
+    border: none;
+    text-align: left;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    min-height: 40px; /* Chiều cao tối thiểu */
+    border-bottom: 1px solid var(--border-color); /* Kẻ ngang giữa các ô */
+    font-size: 15px; /* Đồng bộ font */
+    white-space: normal; /* Cho phép xuống dòng */
+    vertical-align: top; /* Căn trên cho card view */
+  }
+  body.card-view-mobile table tr td:last-child {
+    border-bottom: none; /* Bỏ kẻ ngang ở ô cuối */
+  }
+  /* Thiết kế LABEL (Tiêu đề :before) */
+  body.card-view-mobile table td:before {
+    display: block; /* Hiển thị lại label */
+    content: attr(data-label);
+    position: absolute;
+    left: 10px;
+    width: 40%;
+    font-weight: bold; /* Đậm hơn */
+    color: var(--primary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* --- Ngoại lệ cho giao diện thẻ --- */
+  /* Sửa Checkbox */
+  body.card-view-mobile input[type="checkbox"] {
+    width: auto;
+    max-width: none;
+    height: 20px;
+    width: 20px;
+    margin: 0;
+  }
+  /* Căn phải ô checkbox */
+  body.card-view-mobile #borrowedItemsTable td:nth-child(4) {
+    text-align: right;
+  }
+  /* Sửa cột căn giữa */
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3),
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px; /* Reset padding 45% */
+    padding-right: 10px;
+    font-weight: 600; /* Làm nổi bật số lượng */
+  }
+  /* Ẩn label của cột căn giữa */
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3):before,
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3):before {
+    display: none;
+  }
+  /* --- ĐỊNH NGHĨA DATA LABELS (Chỉ dùng cho Card View) --- */
+  body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng mượn"; }
+  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Cần trả"; }
+  body.card-view-mobile #borrowHistoryTable td:nth-child(1):before { content: "Thời gian"; }
+  body.card-view-mobile #borrowHistoryTable td:nth-child(2):before { content: "Nội dung mượn"; }
+  body.card-view-mobile #returnHistoryTable td:nth-child(1):before { content: "Thời gian"; }
+  body.card-view-mobile #returnHistoryTable td:nth-child(2):before { content: "Nội dung trả"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(1):before { content: "Số sổ"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(2):before { content: "Tên vật tư"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(4):before { content: "Xác nhận"; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(1):before { content: "Số sổ"; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(2):before { content: "Tên vật tư"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(3):before { content: "Tổng mượn"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(4):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Cần trả"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(1):before { content: "Số bắt đầu"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(2):before { content: "Số kết thúc"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(3):before { content: "Xóa"; }
+  body.card-view-mobile #excelDataTable td:nth-child(1):before { content: "Ngày"; }
+  body.card-view-mobile #excelDataTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #excelDataTable td:nth-child(3):before { content: "Tên vật tư"; }
+  body.card-view-mobile #excelDataTable td:nth-child(4):before { content: "Số sổ"; }
+  body.card-view-mobile #excelDataTable td:nth-child(5):before { content: "Số lượng"; }
+  body.card-view-mobile #excelDataTable td:nth-child(6):before { content: "Email"; }
+  body.card-view-mobile #excelDataTable td:nth-child(7):before { content: "Ghi chú"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(1):before { content: "Mã vật tư"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(2):before { content: "Tên vật tư"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(3):before { content: "Số lượng"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(4):before { content: "Xóa"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(4):before { content: "SL chuyển"; }
 
 } /* <-- Dấu đóng cho @media (max-width: 768px) */
 
@@ -363,9 +546,16 @@ tr:nth-child(even) {
   }
   th, td {
     font-size: 14px; /* Đồng bộ */
+    padding: 8px 6px; /* Giảm padding thêm */
   }
-  table td {
-    padding: 8px; /* Giảm padding */
+  
+  /* Cập nhật padding cho card view trên màn hình rất nhỏ */
+  body.card-view-mobile table td {
+    padding: 10px 10px 10px 40%; 
+  }
+  body.card-view-mobile table td:before {
+    width: 35%; 
+    font-size: 13px;
   }
 
   input[type="date"] {

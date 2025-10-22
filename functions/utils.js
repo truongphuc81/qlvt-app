@@ -25,6 +25,8 @@ function fmtDate(d){
 
 // Lấy email từ số sổ (ticket) - logic này sẽ cần gọi Sheets API, nhưng ta sẽ để GCF xử lý
 // Vì GCF sẽ cần gọi Sheets API, ta chỉ giữ lại logic tìm kiếm sau khi đọc Ranges
+// File: functions/utils.js
+
 function getEmailByTicketNumber(ticket, rangesMap) {
     try {
         var s = (ticket == null) ? '' : ('' + ticket).trim();
@@ -35,10 +37,23 @@ function getEmailByTicketNumber(ticket, rangesMap) {
         if (!isFinite(num)) return '';
 
         var ranges = rangesMap || [];
+        console.log(`[DEBUG] Checking ticket number: ${num}`); // <-- LOG 1: Số sổ đang kiểm tra
+
         for (var i = 0; i < ranges.length; i++) {
             var r = ranges[i];
-            if (num >= r.start && num <= r.end) return r.email;
+            
+            // <-- LOG 2: In ra từng dải số đang so sánh -->
+            console.log(`[DEBUG] Comparing with range: Email=${r.email}, Start=${r.start} (Type: ${typeof r.start}), End=${r.end} (Type: ${typeof r.end})`); 
+            
+            // Kiểm tra kiểu dữ liệu trước khi so sánh
+            if (typeof r.start === 'number' && typeof r.end === 'number' && num >= r.start && num <= r.end) {
+                console.log(`[DEBUG] Match found! Returning email: ${r.email}`); // <-- LOG 3: Dải số khớp
+                return r.email;
+            } else if (typeof r.start !== 'number' || typeof r.end !== 'number') {
+                 console.warn(`[DEBUG] Invalid types for range: Email=${r.email}, Start=${r.start}, End=${r.end}`); // <-- LOG 4: Cảnh báo kiểu sai
+            }
         }
+        console.log(`[DEBUG] No matching range found for ticket ${num}.`); // <-- LOG 5: Không tìm thấy
         return '';
     } catch (e) {
         console.error('getEmailByTicketNumber error:', e);
