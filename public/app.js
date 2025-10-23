@@ -9,6 +9,7 @@ let technicianName = '';
 let isManager = false;
 let processedExcelData = [];
 let techniciansLoaded = false;
+let technicianMap = new Map();
 
 // Biến trạng thái toàn cục
 var selectedTickets = [];
@@ -417,14 +418,17 @@ function displayBorrowHistory(history){
 
       // 3. Kết hợp note, trạng thái, và vật tư
       var finalNoteHtml = '';
-      if (note && hasItems) {
-          // Note đã được duyệt và có vật tư
-          finalNoteHtml = note + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
-      } else if (note) {
-          // Chỉ có note (Pending hoặc Rejected)
-          finalNoteHtml = note + statusHtml;
+      // Thêm gạch ngang nếu bị từ chối và có note
+      var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
+
+      if (noteDisplay && hasItems) {
+          // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
+          finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      } else if (noteDisplay) {
+          // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
+          finalNoteHtml = noteDisplay + statusHtml;
       } else if (hasItems) {
-          // Đã duyệt, không có note gốc (trường hợp mượn trực tiếp)
+          // Chỉ có vật tư (mượn trực tiếp)
           finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã mượn:</strong><br>' + itemsHtml;
       }
 
@@ -735,15 +739,40 @@ function submitErrorReport(){
 // =======================================================
 
 function loadTechnicians(){
+    techniciansLoaded = false; // Reset trạng thái khi bắt đầu tải
+    technicianMap.clear(); // Xóa map cũ
     document.getElementById('technicianSpinner').style.display='block';
     callApi('/manager/technicians')
         .then(techs => {
             var sel=document.getElementById('technicianEmail');
+            var selFrom = document.getElementById('transferFromTech');
+            var selTo = document.getElementById('transferToTech');
+
             sel.innerHTML='<option value="">Chọn kỹ thuật viên</option>';
-            (techs||[]).forEach(function(t){ var o=document.createElement('option'); o.value=t.email; o.text=t.email; sel.appendChild(o); });
+            // Đảm bảo các select khác tồn tại trước khi set innerHTML
+            if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>';
+            if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';
+
+            (techs||[]).forEach(function(t){
+                const name = t.name || t.email; // Ưu tiên tên
+                const text = t.name ? `${t.name} (${t.email})` : t.email;
+
+                // Lưu vào Map (Email -> Tên) <-- THÊM
+                technicianMap.set(t.email, name);
+
+                var o=document.createElement('option');
+                o.value=t.email;
+                o.text= text;
+
+                sel.appendChild(o.cloneNode(true));
+                if (selFrom) selFrom.appendChild(o.cloneNode(true));
+                if (selTo) selTo.appendChild(o.cloneNode(true));
+            });
+            techniciansLoaded = true; // Đánh dấu đã tải xong
         })
         .catch(err => {
-            showError('technicianErrorMessage','Lỗi tải danh sách: '+err.message);
+            showError('technicianErrorMessage','Lỗi tải danh sách KTV: '+err.message);
+            techniciansLoaded = false; // Đánh dấu tải lỗi
         })
         .finally(() => {
             document.getElementById('technicianSpinner').style.display='none';
@@ -1411,15 +1440,18 @@ function displayReturnHistory(history){
 
       // 3. Kết hợp note, trạng thái, và vật tư
       var finalNoteHtml = '';
-      if (note && hasItems) {
-          // Note đã được duyệt và có vật tư
-          finalNoteHtml = note + statusHtml + '<br><strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
-      } else if (note) { 
-          // Chỉ có note (Pending hoặc Rejected)
-          finalNoteHtml = note + statusHtml;
-      } else if (hasItems) { 
-          // Đã duyệt, không có note gốc
-          finalNoteHtml = '<strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      // Thêm gạch ngang nếu bị từ chối và có note
+      var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
+
+      if (noteDisplay && hasItems) {
+          // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
+          finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      } else if (noteDisplay) {
+          // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
+          finalNoteHtml = noteDisplay + statusHtml;
+      } else if (hasItems) {
+          // Chỉ có vật tư (đã duyệt, không có note gốc)
+          finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
       }
 
       if (!finalNoteHtml) finalNoteHtml = 'Không có dữ liệu';
@@ -1487,33 +1519,54 @@ function rejectBorrowNote() {
             document.getElementById('managerBorrowSpinner').style.display = 'none';
         });
 }
+// File: app.js (THAY THẾ HÀM NÀY, khoảng dòng 1435)
+
+/**
+ * Tải và hiển thị thông báo yêu cầu đang chờ cho Quản lý (chi tiết theo KTV)
+ */
 function loadPendingNotifications() {
     const notificationArea = document.getElementById('managerNotificationArea');
     const notificationText = document.getElementById('pendingCountsText');
     const spinner = document.getElementById('notificationSpinner');
 
-    if (!notificationArea || !notificationText || !spinner) return; // Thoát nếu element không tồn tại
+    if (!notificationArea || !notificationText || !spinner) return;
 
     spinner.style.display = 'block';
-    notificationArea.style.display = 'none'; // Ẩn khu vực cũ nếu có
+    notificationArea.style.display = 'none';
 
-    // Gọi API mới để lấy số lượng
-    callApi('/manager/pendingCounts', {}) // Không cần gửi data
-        .then(counts => {
-            console.log('API Response for pendingCounts:', counts);
-            const borrowCount = counts.pendingBorrowCount || 0;
-            const returnCount = counts.pendingReturnCount || 0;
+    // Gọi API để lấy danh sách email
+    callApi('/manager/pendingCounts', {})
+        .then(result => {
+            const borrowEmails = result.pendingBorrowEmails || [];
+            const returnEmails = result.pendingReturnEmails || [];
 
-            if (borrowCount > 0 || returnCount > 0) {
-                notificationText.textContent = `Có ${borrowCount} lệnh mượn và ${returnCount} lệnh trả đang chờ xử lý.`;
-                notificationArea.style.display = 'block'; // Hiển thị khu vực thông báo
+            console.log('API Response for pendingCounts (Emails):', result); // Giữ lại log để debug
+
+            let messages = [];
+
+            // Tạo thông báo cho lệnh mượn
+            if (borrowEmails.length > 0) {
+                const borrowNames = borrowEmails.map(email => technicianMap.get(email) || email).join(', ');
+                messages.push(`Lệnh mượn chờ duyệt: ${borrowNames}`);
+            }
+
+            // Tạo thông báo cho lệnh trả
+            if (returnEmails.length > 0) {
+                const returnNames = returnEmails.map(email => technicianMap.get(email) || email).join(', ');
+                messages.push(`Lệnh trả chờ duyệt: ${returnNames}`);
+            }
+
+            // Hiển thị nếu có thông báo
+            if (messages.length > 0) {
+                // Dùng <br> nếu có cả 2 loại thông báo
+                notificationText.innerHTML = messages.join('<br>');
+                notificationArea.style.display = 'block';
             } else {
-                notificationArea.style.display = 'none'; // Ẩn nếu không có yêu cầu nào
+                notificationArea.style.display = 'none';
             }
         })
         .catch(err => {
             console.error("Lỗi tải thông báo:", err);
-            // Không hiển thị lỗi này ra UI để tránh làm phiền
             notificationArea.style.display = 'none';
         })
         .finally(() => {

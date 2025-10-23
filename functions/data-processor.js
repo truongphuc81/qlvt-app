@@ -586,6 +586,7 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
                 date: data.date, 
                 note: note, 
                 isFulfilled: false,
+                status: 'Pending',
                 createdAt: new Date().toISOString()
             });
         }
@@ -616,6 +617,7 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
                 date: data.date, 
                 note: note, 
                 isFulfilled: false,
+                status: 'Pending',
                 createdAt: new Date().toISOString()
             });
             // Ghi 1 dòng note vào Lịch sử (giống Mượn)
@@ -1016,32 +1018,50 @@ async function rejectBorrowNote({ db, data }) {
 }
 
 /**
- * Lấy số lượng note mượn và trả đang chờ (chưa fulfilled) từ Firestore
+ * Lấy danh sách email KTV có note mượn và trả đang chờ (chưa fulfilled, chưa rejected)
  */
 async function getPendingCounts({ db }) {
+    let pendingBorrowEmails = [];
+    let pendingReturnEmails = [];
+
     try {
-        // Đếm note mượn chưa fulfilled
+        // Lấy note mượn đang chờ
         const borrowSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
             .where('isFulfilled', '==', false)
-            .where('status', '!=', 'Rejected') // Bỏ qua note đã từ chối
-            .count() // Sử dụng count() để lấy số lượng hiệu quả
-            .get();
-        const pendingBorrowCount = borrowSnapshot.data().count;
+            .where('status', 'not-in', ['Rejected']) // Vẫn dùng not-in
+            .get(); // Dùng get() để lấy documents
 
-        // Đếm note trả chưa fulfilled
+        const borrowEmailsSet = new Set(); // Dùng Set để tránh trùng lặp email
+        borrowSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.email) {
+                borrowEmailsSet.add(data.email);
+            }
+        });
+        pendingBorrowEmails = Array.from(borrowEmailsSet); // Chuyển Set thành Array
+
+        // Lấy note trả đang chờ
         const returnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
             .where('isFulfilled', '==', false)
-            .where('status', '!=', 'Rejected') // Bỏ qua note đã từ chối
-            .count()
-            .get();
-        const pendingReturnCount = returnSnapshot.data().count;
+            .where('status', 'not-in', ['Rejected']) // Vẫn dùng not-in
+            .get(); // Dùng get()
 
-        return { pendingBorrowCount, pendingReturnCount };
+        const returnEmailsSet = new Set();
+        returnSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.email) {
+                returnEmailsSet.add(data.email);
+            }
+        });
+        pendingReturnEmails = Array.from(returnEmailsSet);
+
+        // Trả về danh sách email
+        return { pendingBorrowEmails, pendingReturnEmails };
 
     } catch (error) {
-        console.error("Error getting pending counts:", error);
-        // Trả về 0 nếu có lỗi để tránh crash client
-        return { pendingBorrowCount: 0, pendingReturnCount: 0 };
+        console.error("Error getting pending counts/emails:", error);
+        // Trả về mảng rỗng nếu có lỗi
+        return { pendingBorrowEmails: [], pendingReturnEmails: [] };
     }
 }
 // ... (Xuất module) ...
