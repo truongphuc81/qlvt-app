@@ -344,52 +344,102 @@ async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isMana
 // =======================================================
 // 2. LỊCH SỬ (getBorrowHistory)
 // =======================================================
-async function getBorrowHistory({ sheets, spreadsheetId, email, dateStr = null, isLast5Days = false, currentPage, pageSize }) {
+// File: data-processor.js (REPLACE this function)
+
+// File: data-processor.js (THAY THẾ HÀM NÀY)
+
+async function getBorrowHistory({ sheets, spreadsheetId, db, email, dateStr = null, isLast5Days = false, currentPage, pageSize }) {
     const { itemCodeMap, history } = await readAllSheetsData({ sheets, spreadsheetId, email });
     const normEmail = utils.normalizeCode(email);
-    
-    const now = new Date();
-    const fiveDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5); 
-    const buckets = {};
 
-    const reversedHistory = history.reverse();
-    
+    // 1. Lấy trạng thái từ Firestore (Logic được làm rõ hơn)
+    const statusMap = new Map();
+    const snapshot = await db.collection(PENDING_NOTES_COLLECTION) // Đọc collection note MƯỢN
+        .where('email', '==', normEmail)
+        .get();
+
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        const timestamp = data.timestamp; // Key là timestamp của note
+        if (!timestamp) return; // Bỏ qua nếu không có timestamp
+
+        if (data.status === 'Rejected') {
+            statusMap.set(timestamp, { status: 'Rejected', reason: data.rejectionReason || 'Không rõ' });
+        } else if (data.isFulfilled === false) { // Nếu chưa fulfilled và không phải Rejected -> là Pending
+            statusMap.set(timestamp, { status: 'Pending' });
+        } else { // isFulfilled === true
+             // Nếu đã fulfilled mà không có trạng thái đặc biệt, coi là Fulfilled
+             // Chỉ gán nếu chưa có trạng thái khác (Pending/Rejected) được gán trước đó
+             if (!statusMap.has(timestamp)) {
+                statusMap.set(timestamp, { status: 'Fulfilled' });
+             }
+        }
+    });
+
+    // --- Phần xử lý dữ liệu từ Google Sheet ---
+    const now = new Date();
+    const fiveDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
+    const buckets = {}; // Dùng để gom nhóm các dòng lịch sử liên quan đến cùng một note/giao dịch
+    const reversedHistory = history.reverse(); // Đảo ngược để xử lý từ mới đến cũ
+
     reversedHistory.forEach(row => {
-        const ts = row[0];
+        const ts = row[0]; // Timestamp từ Sheet
         const type = row[1] || '';
         const eml = utils.normalizeCode(row[2]);
         const ngay = row[3] || '';
         const code = utils.normalizeCode(row[4] || '');
         const qty = Number(row[6]) || 0;
         const note = row[7] || '';
-        const pendingNoteId = row[9] || '';
+        const pendingNoteId = row[9] || ''; // ID liên kết đến note trong Firestore (quan trọng)
 
+        // Chỉ lấy giao dịch 'Mượn' của đúng KTV
         if (type !== 'Mượn') return;
         if (normEmail && eml !== normEmail) return;
 
         const tsDate = (ts instanceof Date) ? ts : new Date(ts);
         if (isNaN(tsDate.getTime())) return;
 
+        // Lọc theo ngày (nếu có)
         if (dateStr && ngay !== dateStr) return;
-        
         if (isLast5Days) {
             const rowDay = new Date(tsDate.getFullYear(), tsDate.getMonth(), tsDate.getDate());
-            if (rowDay < fiveDaysAgo) return; 
+            if (rowDay < fiveDaysAgo) return;
         }
 
-        // TẠO KEY GROUPING: Ưu tiên PendingNoteID, nếu không có thì dùng Timestamp
+        // Key để gom nhóm: Ưu tiên ID note, nếu không có thì dùng timestamp của giao dịch
         const key = pendingNoteId || tsDate.toISOString();
-        
-        // 1. Khởi tạo/Cập nhật Bucket:
+
+        // Lấy trạng thái từ Map DỰA VÀO pendingNoteId (nếu có)
+        // Chỉ những dòng có pendingNoteId mới có thể có trạng thái Pending/Rejected
+        const statusInfo = pendingNoteId ? statusMap.get(pendingNoteId) : null;
+
+        // Nếu chưa có bucket cho key này, tạo mới
         if (!buckets[key]) {
-            buckets[key] = { timestamp: tsDate.toISOString(), date: ngay, note: note, itemsEntered: {} }; 
+             buckets[key] = {
+                 timestamp: tsDate.toISOString(), // Giữ timestamp gốc của giao dịch
+                 date: ngay,
+                 note: note, // Ghi chú từ dòng đầu tiên tìm thấy
+                 itemsEntered: {}, // Danh sách vật tư
+                 // Gán status nếu tìm thấy thông tin từ Firestore.
+                 // Nếu không có ID note (giao dịch trực tiếp), mặc định là Fulfilled.
+                 // Nếu có ID note mà không tìm thấy statusInfo (lỗi?), tạm để là null.
+                 status: statusInfo ? statusInfo.status : (pendingNoteId ? null : 'Fulfilled'),
+                 reason: statusInfo ? statusInfo.reason : null
+             };
         } else {
-            if (note && (!buckets[key].note || note.length > buckets[key].note.length)) {
+             // Nếu bucket đã tồn tại, cập nhật nếu cần
+             // Ưu tiên giữ lại note dài nhất (thường là note gốc KTV gửi)
+             if (note && (!buckets[key].note || note.length > buckets[key].note.length)) {
                 buckets[key].note = note;
-            }
+             }
+             // Cập nhật trạng thái nếu trước đó chưa tìm thấy
+             if (statusInfo && !buckets[key].status) {
+                 buckets[key].status = statusInfo.status;
+                 buckets[key].reason = statusInfo.reason;
+             }
         }
 
-        // 2. Thêm Items:
+        // Thêm vật tư vào bucket (chỉ khi có mã và số lượng)
         if (code && qty > 0) {
             const m = buckets[key].itemsEntered;
             if (!m[code]) m[code] = { code: code, name: itemCodeMap.get(code) || row[5], quantity: 0 };
@@ -397,14 +447,20 @@ async function getBorrowHistory({ sheets, spreadsheetId, email, dateStr = null, 
         }
     });
 
+    // Chuyển buckets thành mảng và lọc
     const arr = Object.keys(buckets).map(k => buckets[k]);
-    
+    // Giữ lại: Pending/Rejected HOẶC (Fulfilled VÀ có vật tư hoặc có note gốc)
+    const finalArr = arr.filter(b => (b.status !== 'Fulfilled') || (b.status === 'Fulfilled' && (Object.keys(b.itemsEntered).length > 0 || b.note)));
+
+    // Sắp xếp lại theo thời gian giảm dần (mới nhất lên trước)
+    finalArr.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     // Xử lý phân trang
-    const totalItems = arr.length;
+    const totalItems = finalArr.length;
     const totalPages = Math.ceil(totalItems / pageSize);
     const start = (currentPage - 1) * pageSize;
-    const historyPage = arr.slice(start, start + pageSize);
-    
+    const historyPage = finalArr.slice(start, start + pageSize);
+
     return { history: historyPage, totalPages: totalPages };
 }
 
@@ -691,6 +747,33 @@ async function rejectPendingReturnNote_({ email, tsISO, reason }) {
     }
     return false;
 }
+
+/**
+ * Đánh dấu Pending BORROW Note là Rejected
+ */
+async function rejectPendingBorrowNote_({ email, tsISO, reason }) {
+    const db = getDb();
+    const normEmail = utils.normalizeCode(email);
+
+    const snapshot = await db.collection(PENDING_NOTES_COLLECTION) // Use the BORROW notes collection
+        .where('email', '==', normEmail)
+        .where('timestamp', '==', tsISO)
+        .where('isFulfilled', '==', false)
+        .limit(1)
+        .get();
+
+    if (!snapshot.empty) {
+        const docRef = snapshot.docs[0].ref;
+        await docRef.update({
+            isFulfilled: true, // Mark as processed
+            status: 'Rejected', // Set new status
+            rejectionReason: reason,
+            fulfilledAt: new Date().toISOString()
+        });
+        return true;
+    }
+    return false;
+}
 // functions/data-processor.js (fulfillPendingNote_ đã sửa lỗi - Tăng cường an toàn)
 
 // =======================================================
@@ -914,6 +997,53 @@ async function rejectReturnNote({ db, data }) {
     }
     return { ok: true, message: 'Note rejected successfully.' };
 }
+async function rejectBorrowNote({ db, data }) {
+    const { email, timestamp, reason } = data;
+    if (!email || !timestamp || !reason) {
+        throw new Error('Thiếu email, timestamp, hoặc lý do từ chối.');
+    }
+
+    const success = await rejectPendingBorrowNote_({ // Call the correct helper
+        email: email,
+        tsISO: timestamp,
+        reason: reason
+    });
+
+    if (!success) {
+        throw new Error('Không tìm thấy note mượn hàng đang chờ, hoặc note đã được xử lý.');
+    }
+    return { ok: true, message: 'Note rejected successfully.' };
+}
+
+/**
+ * Lấy số lượng note mượn và trả đang chờ (chưa fulfilled) từ Firestore
+ */
+async function getPendingCounts({ db }) {
+    try {
+        // Đếm note mượn chưa fulfilled
+        const borrowSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+            .where('isFulfilled', '==', false)
+            .where('status', '!=', 'Rejected') // Bỏ qua note đã từ chối
+            .count() // Sử dụng count() để lấy số lượng hiệu quả
+            .get();
+        const pendingBorrowCount = borrowSnapshot.data().count;
+
+        // Đếm note trả chưa fulfilled
+        const returnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
+            .where('isFulfilled', '==', false)
+            .where('status', '!=', 'Rejected') // Bỏ qua note đã từ chối
+            .count()
+            .get();
+        const pendingReturnCount = returnSnapshot.data().count;
+
+        return { pendingBorrowCount, pendingReturnCount };
+
+    } catch (error) {
+        console.error("Error getting pending counts:", error);
+        // Trả về 0 nếu có lỗi để tránh crash client
+        return { pendingBorrowCount: 0, pendingReturnCount: 0 };
+    }
+}
 // ... (Xuất module) ...
 module.exports = {
     checkManager,
@@ -932,4 +1062,6 @@ module.exports = {
     verifyAndRegisterUser,
     rejectReturnNote,
     getReturnHistory,
+    rejectBorrowNote,
+    getPendingCounts,
 };

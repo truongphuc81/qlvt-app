@@ -4,9 +4,11 @@ const API_BASE_URL = 'https://us-central1-quan-ly-vat-tu-backend.cloudfunctions.
 //const auth = firebase.auth();
 //const provider = new firebase.auth.GoogleAuthProvider();
 // DỮ LIỆU NGƯỜI DÙNG (CẦN ĐƯỢC CẬP NHẬT SAU XÁC THỰC FIREBASE AUTH)
-let userEmail = 'truongphuccit@gmail.com'; 
-let technicianName = 'Trương Đình Phúc';
-let isManager = true; // Set true để test chức năng Quản lý
+let userEmail = '';
+let technicianName = '';
+let isManager = false;
+let processedExcelData = [];
+let techniciansLoaded = false;
 
 // Biến trạng thái toàn cục
 var selectedTickets = [];
@@ -173,6 +175,7 @@ async function callApi(endpoint, data = {}, method = 'POST') {
 // File: app.js
 
 function initForm(){
+
     const authButton = document.getElementById('authButton');
     const toggleButton = document.getElementById('tableViewToggle'); // Thêm dòng này
     document.getElementById('infoSpinner').style.display = 'block'; 
@@ -241,10 +244,15 @@ function attachAuthListener(authButton) {
 }
 
 function toggleDarkMode(){ document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode',document.body.classList.contains('dark-mode')); }
-function showManagerPage(){ 
-    document.getElementById('mainPage').style.display='none'; 
-    document.getElementById('managerPage').style.display='block'; 
-    loadTechnicians(); // Tải dữ liệu Manager khi chuyển trang
+// File: app.js (Sửa hàm showManagerPage, khoảng dòng 217)
+
+function showManagerPage(){
+    document.getElementById('mainPage').style.display='none';
+    document.getElementById('managerPage').style.display='block';
+    if (!techniciansLoaded) loadTechnicians(); // Chỉ tải KTV lần đầu
+
+    // === THÊM DÒNG NÀY ===
+    loadPendingNotifications(); // Luôn tải thông báo khi vào trang QL
 }
 function showMainPage(){ 
     document.getElementById('managerPage').style.display='none'; 
@@ -370,40 +378,66 @@ function loadMoreHistory(){ currentPage++; var d=document.getElementById('histor
 // File Code.gs: Sửa lỗi hiển thị lịch sử bị tách dòng
 function displayBorrowHistory(history){
     var tbody=document.getElementById('borrowHistoryBody');
-    tbody.innerHTML='';
-    
-    var pendingStatusHTML = ' <span style="color: blue; font-weight: bold; font-style: italic">(Đang xử lý...)</span>'; 
+    // Don't clear immediately if loading more
+    // tbody.innerHTML=''; // <-- REMOVED
 
-    if (!history||!history.length){ tbody.innerHTML='<tr><td colspan="2">Không có lịch sử mượn</td></tr>'; return;
-}
-    history.forEach(function(entry){
-      var note=entry.note||'';
-      var hasItems = Object.keys(entry.itemsEntered).length > 0;
-      
-      if (entry.note && !hasItems) {
-          note += pendingStatusHTML;
-      }
-      else if (hasItems){
-        var items=Object.values(entry.itemsEntered).map(function(it){ 
-          return '— '+it.name+': '+it.quantity; 
-        }).join('<br>');
-   
-        if (entry.note) {
-            note = entry.note + '<br><strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + items;
-        } else {
-            note = '<strong style="color: green; font-weight: bold; font-style: italic;">Vật tư đã thêm:</strong><br>' + items;
+    if (currentPage === 1) { // Clear only if it's the first page
+        tbody.innerHTML = '';
+    }
+
+    if (!history||!history.length){
+        if (currentPage === 1) { // Show message only if first page is empty
+             tbody.innerHTML='<tr><td colspan="2">Không có lịch sử mượn hàng</td></tr>';
         }
+        document.querySelector('#borrowHistoryForm button').style.display = 'none'; // Hide "Load More" if no results
+        return;
+    }
+
+    history.forEach(function(entry){
+      var note = entry.note || '';
+      var itemsHtml = '';
+      var hasItems = Object.keys(entry.itemsEntered).length > 0;
+
+      // 1. Tạo danh sách vật tư (nếu có) - Bỏ mã vật tư
+      if (hasItems) {
+          itemsHtml = Object.values(entry.itemsEntered).map(function(it){
+              return '— '+it.name+': '+it.quantity; // No item code here
+          }).join('<br>');
       }
-      
-      if (!note) note = 'Không có ghi chú'; 
-      
+
+      // 2. Tạo HTML trạng thái (MỚI)
+      var statusHtml = '';
+      if (entry.status === 'Pending') {
+          statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
+      } else if (entry.status === 'Rejected') {
+          var reason = entry.reason ? (': ' + entry.reason) : '';
+          statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
+      }
+      // Implicitly, 'Fulfilled' status has no specific text unless items are present
+
+      // 3. Kết hợp note, trạng thái, và vật tư
+      var finalNoteHtml = '';
+      if (note && hasItems) {
+          // Note đã được duyệt và có vật tư
+          finalNoteHtml = note + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+      } else if (note) {
+          // Chỉ có note (Pending hoặc Rejected)
+          finalNoteHtml = note + statusHtml;
+      } else if (hasItems) {
+          // Đã duyệt, không có note gốc (trường hợp mượn trực tiếp)
+          finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã mượn:</strong><br>' + itemsHtml;
+      }
+
+      if (!finalNoteHtml && !statusHtml) finalNoteHtml = 'Không có dữ liệu'; // Fallback
+
       var date=new Date(entry.timestamp).toLocaleString('vi-VN');
       var tr=document.createElement('tr');
-      
-      // SỬ DỤNG .innerHTML CHO CỘT GHI CHÚ ĐỂ RENDER MÀU XANH
-      tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung mượn">'+note+'</td>'; 
+      tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung mượn">'+finalNoteHtml+'</td>';
       tbody.appendChild(tr);
     });
+
+    // Show or hide "Load More" button based on whether there might be more pages
+    document.querySelector('#borrowHistoryForm button').style.display = history.length < 5 ? 'none' : 'block'; // Adjust '5' if pageSize changes
 }
 
 // ===== Logic hiển thị Tổng quan (Giữ nguyên) =====
@@ -428,27 +462,50 @@ function displayBorrowedItems(items, isManagerView){
     //   return;
     // }
 
-    // --- HIỂN THỊ BẢNG TỔNG QUAN (Giữ nguyên) ---
-    // --- HIỂN THỊ BẢNG TỔNG QUAN (Chung cho cả 2) ---
+    // --- HIỂN THỊ BẢNG TỔNG QUAN ---
     items.forEach(function(item){
-      var unre = (item.unreconciledUsageDetails||[]).map(function(u){
-        return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>';
-      }).join('<br>') || 'Chưa có';
       var remaining = item.quantity - item.totalUsed;
 
       // Chỉ hiển thị trên Tổng quan nếu KTV vẫn còn nợ HOẶC còn sổ chưa đối chiếu
       if (item.quantity > 0 || item.totalUsed > 0) {
           var row=document.createElement('tr');
-          row.innerHTML =
-            '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-            '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-            '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
-            '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-            '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-            '<td data-label="Chi tiết số sổ">'+unre+'</td>';
+          let rowHtml = '';
+
+          // *** BẮT ĐẦU THAY ĐỔI LOGIC ***
+          if (isManagerView) {
+              // --- Giao diện Quản lý (Giữ nguyên 6 cột) ---
+              var unreFull = (item.unreconciledUsageDetails||[]).map(function(u){
+                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>'; // Giữ note
+              }).join('<br>') || 'Chưa có';
+
+              rowHtml =
+                '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
+                '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Giữ Code
+                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
+                '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
+                '<td data-label="Chi tiết số sổ">'+unreFull+'</td>'; // Giữ label cũ
+          } else {
+              // --- Giao diện Kỹ thuật viên (Còn 5 cột) ---
+               var unreSimple = (item.unreconciledUsageDetails||[]).map(function(u){
+                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+'</span>'; // Bỏ note
+              }).join('<br>') || 'Chưa có';
+
+              rowHtml =
+                '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
+                // '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Bỏ Code
+                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
+                '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
+                '<td data-label="Số sổ">'+unreSimple+'</td>'; // Đổi label, dùng unreSimple
+          }
+          // *** KẾT THÚC THAY ĐỔI LOGIC ***
+
+          row.innerHTML = rowHtml;
           overviewBody.appendChild(row);
       }
     });
+
     
     // --- HIỂN THỊ BẢNG ĐỐI CHIẾU ---
 
@@ -1345,11 +1402,11 @@ function displayReturnHistory(history){
       // 2. Tạo HTML trạng thái (MÀU XANH/ĐỎ)
       var statusHtml = '';
       if (entry.status === 'Pending') {
-          statusHtml = ' <span style="color: blue; font-weight: bold; font-style: italic;">(Đang xử lý...)</span>';
+          statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
       } else if (entry.status === 'Rejected') {
           // Thêm lý do từ chối (nếu có)
           var reason = entry.reason ? (': ' + entry.reason) : '';
-          statusHtml = ' <span style="color: red; font-weight: bold; font-style: italic;">(Bị từ chối' + reason + ')</span>';
+          statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
       }
 
       // 3. Kết hợp note, trạng thái, và vật tư
@@ -1383,6 +1440,85 @@ function toggleTableView() {
     // if (toggleButton) {
     //     toggleButton.textContent = isCardView ? 'Xem dạng Bảng cuộn' : 'Xem dạng Thẻ';
     // }
+    // File: app.js (Paste at the end)
+}
+function rejectBorrowNote() {
+    const selectedTs = document.getElementById('borrowNoteSelect').value;
+    const reason = (document.getElementById('borrowRejectionReason').value || '').trim();
+    const email = document.getElementById('technicianEmail').value; // Get selected tech email
+
+    if (!selectedTs) {
+        showError('managerBorrowErrorMessage', 'Vui lòng chọn một note mượn hàng để từ chối.');
+        return;
+    }
+    if (!email) {
+         showError('managerBorrowErrorMessage', 'Vui lòng chọn Kỹ thuật viên.');
+         return;
+    }
+    if (!reason) {
+        showError('managerBorrowErrorMessage', 'Vui lòng nhập lý do từ chối.');
+        return;
+    }
+
+    const data = {
+        email: email,
+        timestamp: selectedTs, // timestamp of the note to reject
+        reason: reason
+    };
+
+    document.getElementById('managerBorrowSpinner').style.display = 'block';
+
+    // Call the new API endpoint
+    callApi('/manager/rejectBorrowNote', data)
+        .then(() => {
+            showSuccess('managerBorrowSuccessMessage', 'Đã từ chối note thành công!');
+            // Clear related fields
+            document.getElementById('borrowRejectionReason').value = '';
+            document.getElementById('borrowNoteSelect').value = '';
+            document.getElementById('technicianNote').value = '';
+            document.getElementById('managerSelectedItemsBody').innerHTML = ''; // Clear items table
+            // Reload technician data to refresh the borrow notes dropdown
+            loadTechnicianData();
+        })
+        .catch(err => {
+            showError('managerBorrowErrorMessage', 'Lỗi từ chối note: ' + err.message);
+        })
+        .finally(() => {
+            document.getElementById('managerBorrowSpinner').style.display = 'none';
+        });
+}
+function loadPendingNotifications() {
+    const notificationArea = document.getElementById('managerNotificationArea');
+    const notificationText = document.getElementById('pendingCountsText');
+    const spinner = document.getElementById('notificationSpinner');
+
+    if (!notificationArea || !notificationText || !spinner) return; // Thoát nếu element không tồn tại
+
+    spinner.style.display = 'block';
+    notificationArea.style.display = 'none'; // Ẩn khu vực cũ nếu có
+
+    // Gọi API mới để lấy số lượng
+    callApi('/manager/pendingCounts', {}) // Không cần gửi data
+        .then(counts => {
+            console.log('API Response for pendingCounts:', counts);
+            const borrowCount = counts.pendingBorrowCount || 0;
+            const returnCount = counts.pendingReturnCount || 0;
+
+            if (borrowCount > 0 || returnCount > 0) {
+                notificationText.textContent = `Có ${borrowCount} lệnh mượn và ${returnCount} lệnh trả đang chờ xử lý.`;
+                notificationArea.style.display = 'block'; // Hiển thị khu vực thông báo
+            } else {
+                notificationArea.style.display = 'none'; // Ẩn nếu không có yêu cầu nào
+            }
+        })
+        .catch(err => {
+            console.error("Lỗi tải thông báo:", err);
+            // Không hiển thị lỗi này ra UI để tránh làm phiền
+            notificationArea.style.display = 'none';
+        })
+        .finally(() => {
+            spinner.style.display = 'none';
+        });
 }
 // DOM ready
 document.addEventListener('DOMContentLoaded', function(){ initForm(); });

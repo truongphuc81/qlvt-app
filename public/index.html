@@ -3,18 +3,17 @@
 <head>
   <title>Phiếu Mượn/Trả Vật Tư</title>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="styles.css">
-  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <link rel="stylesheet" href="styles.css">
+
   <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  
+
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script>
-    // CẤU HÌNH FIREBASE SDK (SỬ DỤNG GIÁ TRỊ THỰC CỦA BẠN)
+    // CẤU HÌNH FIREBASE SDK
     const firebaseConfig = {
         apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
         authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
@@ -24,13 +23,13 @@
         appId: "1:323292129107:web:8e467d10c217197b9b63a6",
         measurementId: "G-N3VLYSXTR8"
     };
-    
+
     // Khởi tạo Firebase và Auth Service
     const firebaseApp = firebase.initializeApp(firebaseConfig);
     const auth = firebaseApp.auth();
     const provider = new firebase.auth.GoogleAuthProvider();
 
-    // Fallback (giữ nguyên từ code gốc)
+    // Fallback
     setTimeout(function(){
       if (typeof jQuery==='undefined') document.write('<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"><\/script>');
       if (typeof jQuery.ui==='undefined') document.write('<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"><\/script>');
@@ -40,15 +39,13 @@
 </head>
 <body>
   <h2>Phiếu Mượn/Trả Vật Tư</h2>
-  <button id="darkModeToggle" onclick="toggleDarkMode()"></button>
-  <button id="tableViewToggle" onclick="toggleTableView()"></button>
-  <button id="authButton" style="display:none;">Đăng nhập bằng Gmail</button>
+  <button id="darkModeToggle" onclick="toggleDarkMode()"></button> <button id="tableViewToggle" onclick="toggleTableView()"></button> <button id="authButton" style="display:none;">Đăng nhập bằng Gmail</button>
   <button id="signOutButton" onclick="firebase.auth().signOut().then(() => { window.location.reload(); })" style="display:none; background-color: #dc3545; color: white;">Đăng xuất</button>
 
   <button onclick="showManagerPage()" id="managerPageButton" style="display:none;">
     Chuyển sang Trang Quản Lý
   </button>
-  
+
   <div id="mainPage">
     <div class="form-section">
       <h3>Thông tin chung</h3>
@@ -60,12 +57,10 @@
         <option value="Trả">Trả</option>
       </select><br>
       <div id="infoSpinner" style="display:none;text-align:center;">
-        <div 
-class="spinner"></div><p>Đang tải...</p>
+        <div class="spinner"></div><p>Đang tải...</p>
       </div>
       <div id="infoSuccessMessage" class="success" style="display:none;"></div>
-      <div id="infoErrorMessage" class.error" style="display:none;"></div>
-    </div>
+      <div id="infoErrorMessage" class="error" style="display:none;"></div> </div>
 
     <div id="borrowInputForm" class="form-section">
       <h3>Mượn hàng</h3>
@@ -75,7 +70,6 @@ class="spinner"></div><p>Đang tải...</p>
       <div id="borrowSpinner" style="display:none;text-align:center;">
         <div class="spinner"></div><p>Đang xử lý...</p>
       </div>
-  
       <div id="borrowSuccessMessage" class="success" style="display:none;"></div>
       <div id="borrowErrorMessage" class="error" style="display:none;"></div>
     </div>
@@ -83,13 +77,10 @@ class="spinner"></div><p>Đang tải...</p>
     <div id="borrowHistoryForm" class="form-section">
       <h3>Lịch sử mượn 5 ngày gần nhất</h3>
       <label>Chọn ngày xem lịch sử (nếu muốn xem ngày cụ thể):</label><br>
-      <input type="date" id="historyDate"><br>
-      <table id="borrowHistoryTable">
+      <input type="text" id="historyDate"><br> <table id="borrowHistoryTable">
         <thead>
           <tr><th>Thời gian</th><th>Nội dung mượn</th></tr>
-        
-</thead>
-  
+        </thead>
         <tbody id="borrowHistoryBody"></tbody>
       </table>
       <button onclick="loadMoreHistory()">Tải thêm</button>
@@ -103,27 +94,24 @@ class="spinner"></div><p>Đang tải...</p>
     <div class="form-section">
       <h3>Tổng quan mặt hàng đã mượn</h3>
       <table id="overviewTable">
-      
-  <thead>
-  
-          <tr>
-            <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn chưa trả</th>
-            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
+        <thead> <tr>
+            <th>Tên vật tư</th>
+            <th>Tổng mượn chưa trả</th>
+            <th>Tổng sử dụng</th>
+            <th>Số lượng cần trả</th>
+            <th>Số sổ</th>
           </tr>
         </thead>
         <tbody id="overviewBody"></tbody>
       </table>
       <div id="overviewSpinner" style="display:none;text-align:center;">
-      
-  <div class="spinner"></div><p>Đang tải...</p>
-  
+         <div class="spinner"></div><p>Đang tải...</p>
       </div>
       <div id="overviewSuccessMessage" class="success" style="display:none;"></div>
       <div id="overviewErrorMessage" class="error" style="display:none;"></div>
     </div>
 
     <div id="returnForm" class="form-section" style="display:none;">
-    
       <div classs="form-section" id="returnNoteForm" style="border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
         <h3>Trả vật tư không sử dụng</h3>
         <label>Nội dung trả hàng (ghi rõ số lượng, vật tư):</label><br>
@@ -135,7 +123,7 @@ class="spinner"></div><p>Đang tải...</p>
         <div id="returnNoteSuccessMessage" class="success" style="display:none;"></div>
         <div id="returnNoteErrorMessage" class="error" style="display:none;"></div>
       </div>
-      
+
       <div id="returnHistorySection" class="form-section" style="margin-top: 20px; border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
         <h3>Lịch sử trả hàng không sử dụng</h3>
         <table id="returnHistoryTable">
@@ -165,7 +153,7 @@ class="spinner"></div><p>Đang tải...</p>
 
       <button id="submitReturnButton" onclick="submitForm()">Xác nhận đối chiếu</button>
       <button onclick="showErrorReportForm()">Báo cáo sai sót</button>
-      
+
       <div id="returnSpinner" style="display:none;text-align:center;">
         <div class="spinner"></div><p>Đang xử lý...</p>
       </div>
@@ -208,84 +196,25 @@ class="spinner"></div><p>Đang tải...</p>
         <div id="errorReportSuccessMessage" class="success" style="display:none;"></div>
         <div id="errorReportErrorMessage" class="error" style="display:none;"></div>
       </div>
-      
+
     </div> </div> <div id="managerPage" class="form-section" style="display:none;">
     <h2>Trang Quản Lý</h2>
     <button onclick="showMainPage()">Quay lại Trang Chính</button>
+
+    <div id="managerNotificationArea" class="form-section" style="display: none; background-color: #fff3cd; border-color: #ffeeba;">
+      <h4><span style="color: #856404;">🔔 Thông báo yêu cầu đang chờ:</span></h4>
+      <p id="pendingCountsText" style="color: #856404; font-weight: bold;"></p>
+      <div id="notificationSpinner" style="display:none;"><div class="spinner"></div></div>
+    </div>
 
     <div class="form-section">
       <h3>Chọn kỹ thuật viên</h3>
       <select id="technicianEmail" onchange="loadTechnicianData(); loadTicketRanges()">
         <option value="">Chọn kỹ thuật viên</option>
       </select>
-      <div id="technicianSpinner" style="display:none;text-align:center;">
-        <div class="spinner"></div><p>Đang tải...</p>
-      </div>
+      <div id="technicianSpinner" style="display:none;text-align:center;">...</div>
       <div id="technicianSuccessMessage" class="success" style="display:none;"></div>
       <div id="technicianErrorMessage" class="error" style="display:none;"></div>
-    </div>
-
-    <div id="managerOverviewSection" class="form-section">
-      <h3>Tổng quan mặt hàng đã mượn của kỹ thuật viên</h3>
-      <table id="managerOverviewTable">
-        <thead>
-          <tr>
-            <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn chưa trả</th>
-            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
-          </tr>
-        </thead>
-        <tbody id="managerOverviewBody"></tbody>
-      </table>
-      <div id="managerOverviewSpinner" style="display:none;text-align:center;">
-        <div class="spinner"></div><p>Đang tải...</p>
-      </div>
-      <div id="managerOverviewSuccessMessage" style="display:none;"></div>
-      <div id="managerOverviewErrorMessage" style="display:none;"></div>
-    </div>
-
-    <div id="ticketRangeForm" class="form-section">
-      <h3>Quản lý dải số sổ</h3>
-      <label>Số bắt đầu:</label><br>
-      <input type="number" id="ticketRangeStart" class="ticket-range-input" min="1" placeholder="VD: 1"><br>
-      <label>Số kết thúc:</label><br>
-      <input type="number" id="ticketRangeEnd" class="ticket-range-input" min="1" placeholder="VD: 100"><br>
-      <button onclick="addTicketRange()">Thêm dải số</button><br>
-      <h4>Danh sách dải số sổ</h4>
-      <table id="ticketRangesTable">
-        <thead>
-          <tr><th>Số bắt đầu</th><th>Số kết thúc</th><th>Xóa</th></tr>
-        </thead>
-        <tbody id="ticketRangesBody"></tbody>
-      </table>
-      <button onclick="saveTicketRanges()">Lưu dải số sổ</button>
-      <div id="ticketRangeSpinner" style="display:none;text-align:center;">
-        <div class="spinner"></div><p>Đang xử lý...</p>
-      </div>
-      <div id="ticketRangeSuccessMessage" class="success" style="display:none;"></div>
-      <div id="ticketRangeErrorMessage" class="error" style="display:none;"></div>
-    </div>
-
-    <div id="excelUploadForm" class="form-section">
-      <h3>Upload danh sách bán hàng</h3>
-      <input type="file" id="excelFile" accept=".xlsx,.xls"><br>
-      <button onclick="uploadExcel()">Tải lên và xem trước</button><br>
-      <table id="excelDataTable" style="display:none;">
-        <thead>
-          <tr>
-            <th>Ngày</th>
-            <th>Số sổ</th>     <th>Mã vật tư</th> <th>Tên vật tư</th> <th>Số lượng sử dụng</th>
-            <th>Email</th>
-            <th>Ghi chú</th>
-          </tr>
-        </thead>
-        <tbody id="excelDataBody"></tbody>
-      </table>
-      <button id="confirmExcelButton" style="display:none;" onclick="confirmExcelData()">Xác nhận và lưu</button>
-      <div id="excelSpinner" style="display:none;text-align:center;">
-        <div class="spinner"></div><p>Đang xử lý...</p>
-      </div>
-      <div id="excelSuccessMessage" class="success" style="display:none;"></div>
-      <div id="excelErrorMessage" class="error" style="display:none;"></div>
     </div>
 
     <div id="managerBorrowForm" class="form-section">
@@ -323,18 +252,18 @@ class="spinner"></div><p>Đang tải...</p>
         </table>
 
         <label>Ngày giao dịch:</label><br>
-        <input type="text" id="managerTransactionDate" placeholder="DD/MM/YYYY" required><br>
-        <button onclick="submitManagerBorrow()">Gửi mượn</button>
-        <div id="managerBorrowSpinner" style="display:none;text-align:center;">
-          <div class="spinner"></div><p>Đang xử lý...</p>
-        </div>
+        <input type="text" id="managerTransactionDate" placeholder="DD/MM/YYYY" required><br> <label for="borrowRejectionReason" style="font-weight: 500; margin-top: 10px;">Lý do (Nếu Từ chối):</label><br>
+        <textarea id="borrowRejectionReason" style="width: 100%; max-width: 500px; height: 60px;"></textarea><br>
+
+        <button onclick="submitManagerBorrow()">Duyệt Note & Gửi mượn</button>
+        <button onclick="rejectBorrowNote()" style="background-color: var(--error-color);">Từ chối Note</button>
+
+        <div id="managerBorrowSpinner" style="display:none;text-align:center;">...</div>
         <div id="managerBorrowSuccessMessage" class="success" style="display:none;"></div>
         <div id="managerBorrowErrorMessage" class="error" style="display:none;"></div>
       </div>
 
- 
       <div id="returnUnusedSection" style="display:none;">
-      
         <div id="returnNoteSelectDiv" style="border-bottom: 2px dashed #ccc; margin-bottom: 20px; padding-bottom: 20px;">
           <label>Chọn lệnh trả (Nếu KTV có gửi note):</label><br>
           <select id="returnNoteSelect" onchange="displaySelectedReturnNote()">
@@ -351,24 +280,78 @@ class="spinner"></div><p>Đang tải...</p>
           </thead>
           <tbody id="unusedItemsBody"></tbody>
         </table>
-        
+
         <label>Ngày giao dịch:</label><br>
-        <input type="text" id="returnUnusedTransactionDate" placeholder="DD/MM/YYYY" required><br>
-        
-        <label for="returnRejectionReason" style="font-weight: 500; margin-top: 10px;">Lý do (Nếu Từ chối):</label><br>
+        <input type="text" id="returnUnusedTransactionDate" placeholder="DD/MM/YYYY" required><br> <label for="returnRejectionReason" style="font-weight: 500; margin-top: 10px;">Lý do (Nếu Từ chối):</label><br>
         <textarea id="returnRejectionReason" style="width: 100%; max-width: 500px; height: 60px;"></textarea><br>
-        
+
         <button onclick="approveReturnNote()">Duyệt Note & Xác nhận trả</button>
         <button onclick="rejectReturnNote()" style="background-color: var(--error-color);">Từ chối Note</button>
-        
-        <div id="returnUnusedSpinner" style="display:none;text-align:center;">
-          <div class="spinner"></div><p>Đang xử lý...</p>
-        </div>
+
+        <div id="returnUnusedSpinner" style="display:none;text-align:center;">...</div>
         <div id="returnUnusedSuccessMessage" class="success" style="display:none;"></div>
         <div id="returnUnusedErrorMessage" class="error" style="display:none;"></div>
       </div>
     </div>
-  </div>
-  <script src="app.js"></script>
+
+    <div id="managerOverviewSection" class="form-section">
+      <h3>Tổng quan mặt hàng đã mượn của kỹ thuật viên</h3>
+      <table id="managerOverviewTable">
+        <thead> <tr>
+            <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn chưa trả</th>
+            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
+          </tr>
+        </thead>
+        <tbody id="managerOverviewBody"></tbody>
+      </table>
+      <div id="managerOverviewSpinner" style="display:none;text-align:center;">...</div>
+      <div id="managerOverviewSuccessMessage" style="display:none;"></div>
+      <div id="managerOverviewErrorMessage" style="display:none;"></div>
+    </div>
+
+    <div id="ticketRangeForm" class="form-section">
+      <h3>Quản lý dải số sổ</h3>
+      <label>Số bắt đầu:</label><br>
+      <input type="number" id="ticketRangeStart" class="ticket-range-input" min="1" placeholder="VD: 1"><br>
+      <label>Số kết thúc:</label><br>
+      <input type="number" id="ticketRangeEnd" class="ticket-range-input" min="1" placeholder="VD: 100"><br>
+      <button onclick="addTicketRange()">Thêm dải số</button><br>
+      <h4>Danh sách dải số sổ</h4>
+      <table id="ticketRangesTable">
+        <thead>
+          <tr><th>Số bắt đầu</th><th>Số kết thúc</th><th>Xóa</th></tr>
+        </thead>
+        <tbody id="ticketRangesBody"></tbody>
+      </table>
+      <button onclick="saveTicketRanges()">Lưu dải số sổ</button>
+      <div id="ticketRangeSpinner" style="display:none;text-align:center;">...</div>
+      <div id="ticketRangeSuccessMessage" class="success" style="display:none;"></div>
+      <div id="ticketRangeErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="excelUploadForm" class="form-section">
+      <h3>Upload danh sách bán hàng</h3>
+      <input type="file" id="excelFile" accept=".xlsx,.xls"><br>
+      <button onclick="uploadExcel()">Tải lên và xem trước</button><br>
+      <table id="excelDataTable" style="display:none;">
+        <thead> <tr>
+            <th>Ngày</th>
+            <th>Số sổ</th>
+            <th>Mã vật tư</th>
+            <th>Tên vật tư</th>
+            <th>Số lượng sử dụng</th>
+            <th>Email</th>
+            <th>Ghi chú</th>
+          </tr>
+        </thead>
+        <tbody id="excelDataBody"></tbody>
+      </table>
+      <button id="confirmExcelButton" style="display:none;" onclick="confirmExcelData()">Xác nhận và lưu</button>
+      <div id="excelSpinner" style="display:none;text-align:center;">...</div>
+      <div id="excelSuccessMessage" class="success" style="display:none;"></div>
+      <div id="excelErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    </div> <script src="app.js"></script>
 </body>
 </html>

@@ -118,14 +118,15 @@ privateRouter.post('/dashboard', apiWrapper(async ({ sheets, spreadsheetId, db, 
 }));
 
 // 4b. Lịch sử Mượn
-privateRouter.post('/history/byemail', apiWrapper(async ({ sheets, spreadsheetId, body, user }) => {
+privateRouter.post('/history/byemail', apiWrapper(async ({ sheets, spreadsheetId, db, body, user }) => { // ADD 'db' here
     return dataProcessor.getBorrowHistory({
-        sheets, 
-        spreadsheetId, 
-        email: body.email || user.email, 
-        dateStr: body.date, 
+        sheets,
+        spreadsheetId,
+        db, // <-- ADD THIS LINE to pass db
+        email: body.email || user.email,
+        dateStr: body.date,
         isLast5Days: body.isLast5Days,
-        currentPage: body.currentPage, 
+        currentPage: body.currentPage,
         pageSize: body.pageSize,
     });
 }));
@@ -198,6 +199,22 @@ privateRouter.post('/manager/saveExcelData', apiWrapper(async ({ sheets, spreads
 // 4n. Từ chối Note Trả hàng (Quản lý)
 privateRouter.post('/manager/rejectReturnNote', apiWrapper(async ({ db, body }) => {
     return dataProcessor.rejectReturnNote({ db, data: body });
+}));
+
+// 4o. Chuyển vật tư (Quản lý)
+privateRouter.post('/manager/transferItems', apiWrapper(async ({ sheets, spreadsheetId, db, body }) => {
+   // ... old code ...
+}));
+
+// PASTE NEW ROUTE HERE
+// 4p. Từ chối Note Mượn hàng (Quản lý)
+privateRouter.post('/manager/rejectBorrowNote', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.rejectBorrowNote({ db, data: body });
+}));
+
+// 4q. Lấy số lượng yêu cầu đang chờ (Quản lý)
+privateRouter.post('/manager/pendingCounts', apiWrapper(async ({ db }) => {
+    return dataProcessor.getPendingCounts({ db });
 }));
 
 // GẮN ROUTER PRIVATE
