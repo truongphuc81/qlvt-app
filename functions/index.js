@@ -217,7 +217,15 @@ privateRouter.post('/manager/pendingCounts', apiWrapper(async ({ db }) => {
     return dataProcessor.getPendingCounts({ db });
 }));
 
-// GẮN ROUTER PRIVATE
+// DÁN ROUTE MỚI NÀY VÀO
+// File: functions/index.js
+
+    // 4s. Chuyển vật tư (Quản lý) - TẠM THỜI ĐƠN GIẢN HÓA ĐỂ TEST
+    privateRouter.post('/manager/transferItems', apiWrapper(async ({ body }) => { // Bỏ bớt params không dùng
+        console.log('[DEBUG ROUTER ***SIMPLE TEST***] /manager/transferItems was definitely called!'); // Log cực kỳ đơn giản
+        // Không gọi dataProcessor nữa
+        return { ok: true, message: "Simple test handler executed." }; // Trả về thành công đơn giản
+    }));
 app.use('/api', privateRouter); 
 
 

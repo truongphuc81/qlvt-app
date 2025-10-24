@@ -597,3 +597,45 @@ tr:nth-child(even) {
 .dark-mode ::placeholder {
   color: #666;
 }
+/* File: styles.css (Dán vào cuối) */
+
+/* CSS cho bảng Chuyển vật tư */
+#transferItemsTable .transfer-quantity-input {
+  width: 80px; /* Input số lượng nhỏ */
+  max-width: 100px;
+  padding: 8px; /* Giảm padding */
+}
+
+/* Responsive cho bảng Chuyển vật tư */
+@media (max-width: 768px) {
+  /* Bảng cuộn ngang */
+  #transferItemsTable th, #transferItemsTable td { white-space: nowrap; } /* Đảm bảo cuộn */
+  #transferItemsTable td:nth-child(1) { min-width: 150px; } /* Tên VT */
+  #transferItemsTable td:nth-child(2) { min-width: 100px; } /* Mã VT */
+  #transferItemsTable td:nth-child(3) { min-width: 80px; text-align: center; } /* Đang nợ */
+  #transferItemsTable td:nth-child(4) { min-width: 120px; } /* SL chuyển */
+
+  /* Giao diện thẻ */
+  body.card-view-mobile #transferItemsTable th,
+  body.card-view-mobile #transferItemsTable td { white-space: normal; } /* Cho phép xuống dòng trong thẻ */
+
+  body.card-view-mobile #transferItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(4):before { content: "SL chuyển"; }
+
+  /* Căn giữa cột "Đang nợ" trong card view */
+  body.card-view-mobile #transferItemsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-weight: 600;
+  }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+    /* Điều chỉnh padding cho bảng transfer trên màn hình rất nhỏ nếu cần */
+    #transferItemsTable td { padding: 8px 6px; }
+}
