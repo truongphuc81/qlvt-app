@@ -36,59 +36,129 @@ const getDb = () => {
 // =======================================================
 
 // Hàm này được sử dụng để đọc tất cả các Sheets cần thiết chỉ trong một lần gọi API
+// File: functions/data-processor.js
+
+/**
+ * Đọc dữ liệu thô cần thiết từ các Sheet
+ */
 async function readAllSheetsData({ sheets, spreadsheetId, email }) {
-    // FIX: THÊM KIỂM TRA AN TOÀN TRƯỚC KHI TRUY CẬP SHEETS API
-    if (!sheets || !sheets.spreadsheets || !sheets.spreadsheets.values) {
-        // Trả về một lỗi có thể xử lý được nếu client không tồn tại
-        throw new Error("Sheets API Client is unavailable for reading data.");
-    }
-    
-    // NOTE: Đã loại bỏ PendingNotes Sheet (Index 5)
-    const ranges = [
-        'Danh sách kỹ thuật viên!A2:B', // 0: techs
-        'Danh sách vật tư!A2:B',        // 1: items
-        'TicketRanges!A2:C',            // 2: ranges
-        'Lịch sử Mượn Trả Vật Tư!A2:J', // 3: history
-        'Đối chiếu sổ 3 liên!A2:H',      // 4: comparison
-    ];
-
-    const sheetsResponse = await sheets.spreadsheets.values.batchGet({
-        spreadsheetId,
-        ranges: ranges
-    });
-
-    const valueRanges = sheetsResponse.data.valueRanges || [];
-
-    // HÀNH ĐỘNG: Đảm bảo mọi kết quả đều có .values và .values là Array
-    const safeGetValues = (index) => (valueRanges[index] && valueRanges[index].values) || [];
-
-    const safeTechs = safeGetValues(0);
-    const safeItems = safeGetValues(1);
-    const safeRanges = safeGetValues(2);
-    const safeHistory = safeGetValues(3);
-    const safeComparison = safeGetValues(4);
-    
-    // Chuyển đổi dữ liệu thô sang Map/Array dễ dùng
+    // Luôn cần Item Code Map
     const itemCodeMap = new Map();
-    safeItems.forEach(row => {
-        const code = utils.normalizeCode(row[0]);
-        if (code) itemCodeMap.set(code, row[1] || 'Không xác định');
-    });
+    // Luôn cần Ticket Ranges Map
+    const ticketRangesMap = [];
 
-    const ticketRangesMap = safeRanges.map(row => ({
-        email: utils.normalizeCode(row[0]),
-        start: Number(row[1]) || 0,
-        end: Number(row[2]) || 0,
-    }));
-    
-    return {
-        techs: safeTechs,
-        itemCodeMap,
-        ticketRangesMap,
-        history: safeHistory,
-        comparison: safeComparison,
-    };
-}
+    // Khởi tạo các mảng dữ liệu mặc định là rỗng
+    let history = [];
+    let comparisonData = [];
+    let pendingNotes = []; // Khởi tạo pendingNotes ở đây
+
+    try { // Bắt đầu khối try lớn bao quanh toàn bộ hàm
+
+        // 1. Đọc Danh sách Vật tư -> Map Code -> Tên
+        try {
+            const itemsResult = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: 'Danh sách vật tư!A2:B', // Chỉ đọc Mã (A) và Tên (B)
+            });
+            (itemsResult.data.values || []).forEach(row => {
+                if (row[0]) itemCodeMap.set(utils.normalizeCode(row[0]), row[1] || row[0]);
+            });
+            console.log(`[DEBUG readAllSheetsData] Loaded ${itemCodeMap.size} items.`);
+        } catch (err) {
+            console.error("!!! ERROR reading Item List sheet:", err.message);
+            // Có thể tiếp tục mà không có item map, tên sẽ là mã code
+        }
+
+        // 2. Đọc Lịch sử Mượn/Trả (nếu cần email hoặc đang xử lý dashboard)
+        if (email) { // Chỉ đọc lịch sử nếu có email cụ thể được cung cấp
+           try {
+                const historyResult = await sheets.spreadsheets.values.get({
+                    spreadsheetId,
+                    range: 'Lịch sử Mượn Trả Vật Tư!A2:J', // Đọc 10 cột A-J
+                });
+                history = (historyResult.data.values || []).filter(row => row.length > 2 && utils.normalizeCode(row[2]) === utils.normalizeCode(email)); // Lọc theo email
+                console.log(`[DEBUG readAllSheetsData] Read ${history.length} history rows for ${email}.`);
+            } catch (err) {
+                console.error(`!!! ERROR reading History sheet for ${email}:`, err.message);
+                history = []; // Trả về mảng rỗng nếu lỗi
+            }
+        }
+
+
+        // 3. Đọc dữ liệu Đối chiếu sổ 3 liên (nếu cần email hoặc đang xử lý dashboard)
+        if (email) { // Chỉ đọc đối chiếu nếu có email
+            try {
+                const comparisonResult = await sheets.spreadsheets.values.get({
+                    spreadsheetId,
+                    range: 'Đối chiếu sổ 3 liên!A2:H', // Đọc các cột A-H
+                });
+                comparisonData = (comparisonResult.data.values || []).filter(row => row.length > 5 && utils.normalizeCode(row[5]) === utils.normalizeCode(email)); // Lọc theo email (Cột F)
+                console.log(`[DEBUG readAllSheetsData] Read ${comparisonData.length} rows from Comparison sheet for ${email}.`);
+            } catch (err) {
+                console.error(`!!! ERROR reading Comparison sheet for ${email}:`, err.message);
+                comparisonData = []; // Đảm bảo trả về mảng rỗng nếu lỗi
+            }
+        }
+
+
+        // 4. Đọc Dải số sổ (Luôn cần khi xử lý Excel hoặc dashboard)
+         try {
+             const rangesResult = await sheets.spreadsheets.values.get({
+                 spreadsheetId,
+                 range: 'TicketRanges!A2:C', // Đọc Email(A), Start(B), End(C)
+             });
+             (rangesResult.data.values || []).forEach(row => {
+                 const emailR = row[0] || '';
+                 const start = Number(row[1]) || 0;
+                 const end = Number(row[2]) || 0;
+                 if (emailR && start > 0 && end >= start) {
+                     ticketRangesMap.push({ email: emailR, start, end });
+                 }
+             });
+             console.log(`[DEBUG readAllSheetsData] Loaded ${ticketRangesMap.length} ticket ranges.`);
+         } catch (err) {
+             console.error("!!! ERROR reading TicketRanges sheet:", err.message);
+             // Có thể tiếp tục nhưng việc tìm email qua số sổ sẽ thất bại
+         }
+
+
+        // 5. Đọc Pending Notes từ Firestore (nếu cần email)
+        // Lưu ý: Phần này bị comment trong code bạn gửi, giữ nguyên trạng thái comment
+        /*
+        if (email) {
+            try {
+                const db = getDb();
+                console.log(`[DEBUG] Querying Firestore for email: ${email}`); // Log trước khi query
+                const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+                    .where('email', '==', utils.normalizeCode(email))
+                    .where('isFulfilled', '==', false)
+                    .orderBy('createdAt','desc') // FIX: Buộc sử dụng trường createdAt (đã xác nhận tồn tại)
+                    .get();
+
+                pendingNotes = pendingSnapshot.docs.map(doc => doc.data());
+                console.log(`[DEBUG] Found ${pendingNotes.length} pending notes for ${email} in Firestore.`); // Log sau khi query
+            } catch (firestoreError) {
+                console.error("!!! FIRESTORE ERROR reading pending notes:", firestoreError);
+                pendingNotes = []; // Trả về mảng rỗng nếu lỗi Firestore
+            }
+        }
+        */
+
+        // Trả về tất cả dữ liệu đã đọc (hoặc mảng rỗng nếu có lỗi)
+        return {
+            itemCodeMap,
+            history,
+            comparisonData, // Luôn là một mảng
+            ticketRangesMap,
+            pendingNotes // Sẽ là [] nếu không đọc Firestore
+        };
+
+    } catch (error) { // Khối catch lớn bao quanh toàn bộ hàm
+        console.error('Error in readAllSheetsData:', error);
+        // THÊM DÒNG RETURN NÀY để đảm bảo hàm luôn trả về cấu trúc đúng
+        return { itemCodeMap: new Map(), history: [], comparisonData: [], ticketRangesMap: [], pendingNotes: [] };
+    }
+} // Đóng hàm readAllSheetsData
 // =======================================================
 // 5. CHECK MANAGER ROLE
 // =======================================================
@@ -196,14 +266,16 @@ async function saveTicketRanges({ sheets, spreadsheetId, email, ranges }) {
 // 1. DASHBOARD DATA (getTechnicianDashboardData)
 // =======================================================
 async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isManager }) {
+    console.log(`[DEBUG Dashboard ${email}] Function CALLED.`);
     const normEmail = utils.normalizeCode(email).toLowerCase();
     
     // START DEBUG LOG: Ghi lại email đang được sử dụng để truy vấn
     console.log(`[DEBUG] Querying Firestore for email: ${normEmail}`);
     
     // Đọc tất cả các Sheets cần thiết (KHÔNG BAO GỒM PendingBorrowNotes SHEET)
-    const { itemCodeMap, ticketRangesMap, history, comparison } = await readAllSheetsData({ sheets, spreadsheetId, email: normEmail });
-    
+    const { itemCodeMap, history, comparisonData, ticketRangesMap } = await readAllSheetsData({ sheets, spreadsheetId, email: normEmail });
+    // <<< LOG 1: Dữ liệu sử dụng thô đọc được >>>
+    console.log(`[DEBUG Dashboard ${normEmail}] Raw Comparison Data:`, JSON.stringify(comparisonData, null, 2));
     // A. Xử lý logic Mượn/Trả cơ bản (Tái tạo getBorrowedItems)
     const byCode = {};
     const totalReconciledUsed = {}; 
@@ -230,65 +302,59 @@ async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isMana
         }
     });
 
-    // B. Xử lý logic Đối chiếu Sổ (Usage)
-    comparison.forEach(row => {
-        // Cột: 0:Ngày, 1:Mã vật tư, 2:Tên vật tư, 3:Email, 4:Số sổ, 5:Số lượng sử dụng, 6:Ghi chú, 7:Trạng thái
-        const uEmail = utils.normalizeCode(row[3]);
-        const ticket = row[4] || '';
-        const status = (row[7] || '').toString().trim();
+    // B. Xử lý dữ liệu Đối chiếu (comparisonData)
+    comparisonData.forEach(row => {
+        const itemCode = utils.normalizeCode(row[1] || ''); // Mã VT
+        const ticket = row[3] || ''; // Số sổ
+        const quantityUsed = Number(row[4]) || 0; // SL sử dụng
+        const status = row[7] || 'Chưa đối chiếu'; // Trạng thái
+        const note = row[6] || ''; // Ghi chú
 
-        // Tính email nếu trường email trống
-        const ticketOwnerEmail = utils.getEmailByTicketNumber(ticket, ticketRangesMap);
-        const effectiveEmail = uEmail || ticketOwnerEmail;
-        if (normEmail && utils.normalizeCode(effectiveEmail) !== normEmail) return;
+        if (!itemCode || quantityUsed <= 0 || !ticket) return;
 
-        const uCode = utils.normalizeCode(row[1] || '');
-        const qUsed = Number(row[5]) || 0;
-        const uNote = row[6] || '';
-
-        if (!uCode || qUsed <= 0) return;
-        
-        if (!byCode[uCode]) {
-            byCode[uCode] = { code: uCode, name: itemCodeMap.get(uCode) || '', quantity: 0, totalUsed: 0, totalReturned: 0, unreconciledUsageDetails: [], reconciledUsageDetails: [] };
+        // Đảm bảo có mục này trong byCode (tạo nếu chưa có)
+        if (!byCode[itemCode]) {
+            // Nếu vật tư này không có trong lịch sử Mượn/Trả, tạm thời tạo với quantity=0
+             byCode[itemCode] = { name: itemCodeMap.get(itemCode) || row[2], quantity: 0, totalUsed: 0, unreconciledUsageDetails: [], reconciledUsageDetails: [] };
+             console.log(`[DEBUG Dashboard ${normEmail}] Initialized byCode for ${itemCode} from comparison data.`); // Log thêm
         }
 
+        // Phân loại vào unreconciled hoặc reconciled
+        const detail = { ticket, quantity: quantityUsed, note };
         if (status === 'Chưa đối chiếu') {
-            byCode[uCode].unreconciledUsageDetails.push({ ticket, quantity: qUsed, note: uNote });
-            byCode[uCode].totalUsed += qUsed;
-        } else {
-            byCode[uCode].reconciledUsageDetails.push({ ticket, quantity: qUsed, note: uNote });
-            if (status === 'Đã đối chiếu') {
-                totalReconciledUsed[uCode] = (totalReconciledUsed[uCode] || 0) + qUsed;
-            }
+            byCode[itemCode].unreconciledUsageDetails.push(detail);
+            byCode[itemCode].totalUsed += quantityUsed; // Cộng vào tổng sử dụng
+        } else if (status === 'Đã đối chiếu') {
+            byCode[itemCode].reconciledUsageDetails.push(detail);
+            // ĐÃ ĐỐI CHIẾU VẪN PHẢI CỘNG VÀO totalUsed ĐỂ KHẤU TRỪ ĐÚNG
+            byCode[itemCode].totalUsed += quantityUsed;
         }
     });
 
-    // C. Tổng hợp kết quả cuối cùng (giống logic Apps Script)
-    const items = Object.keys(byCode).map(k => {
-        const it = byCode[k];
-        const reconciledUsed = totalReconciledUsed[it.code] || 0;
+    // <<< LOG 2: Dữ liệu sau khi tổng hợp sử dụng >>>
+    console.log(`[DEBUG Dashboard ${normEmail}] Aggregated byCode Data (after comparison):`, JSON.stringify(byCode, null, 2));
 
-        // Tổng mượn chưa trả = Mượn - Trả về kho - Đã Sử dụng (ĐÃ ĐỐI CHIẾU)
-        const quantityAfterReconciliation = Math.max(0, it.quantity - it.totalReturned - reconciledUsed); 
-        
-        // Số lượng còn lại cần đối chiếu (dùng cho Overview)
-        const remaining = quantityAfterReconciliation - it.totalUsed; 
-
+    // C. Kết hợp và tính toán
+    const items = Object.keys(byCode).map(code => {
+        const data = byCode[code];
+        const remaining = data.quantity - data.totalUsed; // Số lượng còn lại
         return {
-            code: it.code,
-            name: it.name,
-            quantity: quantityAfterReconciliation, 
-            totalUsed: it.totalUsed,
-            totalReturned: it.totalReturned,
-            unreconciledUsageDetails: it.unreconciledUsageDetails,
-            reconciledUsageDetails: it.reconciledUsageDetails,
-            remaining: remaining
+            code: code,
+            name: data.name,
+            quantity: data.quantity, // Tổng mượn còn nợ
+            totalUsed: data.totalUsed, // Tổng đã dùng (cả đối chiếu và chưa)
+            remaining: remaining, // Số cần trả về kho
+            unreconciledUsageDetails: data.unreconciledUsageDetails,
+            reconciledUsageDetails: data.reconciledUsageDetails
         };
-    }).filter(a => 
+    }).filter(a =>
         a.quantity > 0 ||                 // 1. Vẫn còn nợ
-        a.totalUsed > 0 ||                 // 2. Vẫn còn sổ CHƯA đối chiếu
+        (a.unreconciledUsageDetails && a.unreconciledUsageDetails.length > 0) || // 2. Vẫn còn sổ CHƯA đối chiếu (Sửa lại logic filter)
         (a.reconciledUsageDetails && a.reconciledUsageDetails.length > 0) // 3. HOẶC có lịch sử ĐÃ đối chiếu
     );
+
+    // <<< LOG 3: Dữ liệu cuối cùng trả về client >>>
+    console.log(`[DEBUG Dashboard ${normEmail}] Final items data:`, JSON.stringify(items, null, 2));
     
     /// D. Xử lý Pending Notes (Truy vấn FIRESTORE)
     const db = getDb(); // Lấy Firestore client
@@ -889,27 +955,124 @@ async function processExcelData({ sheets, spreadsheetId, data }) {
 }
 
 // Tái tạo saveExcelData
+// File: functions/data-processor.js (THAY THẾ HÀM NÀY)
+
+/**
+ * Lưu dữ liệu Excel đã xử lý vào sheet 'Đối chiếu sổ 3 liên', xử lý trùng lặp.
+ */
 async function saveExcelData({ sheets, spreadsheetId, data }) {
-    if (!data || !data.length) throw new Error('Không có dữ liệu để lưu');
-    
-    const rows = [];
+    if (!data || data.length === 0) {
+        throw new Error('Không có dữ liệu hợp lệ để lưu.');
+    }
+
+    const sheetName = 'Đối chiếu sổ 3 liên';
+    const rangeToRead = `${sheetName}!A:H`; // Đọc các cột A-H
+
+    // 1. Đọc dữ liệu hiện có từ Sheet
+    let existingDataMap = new Map(); // Key: "Ticket_ItemCode", Value: { rowIndex, status }
+    let headerRowSkipped = false;
+    try {
+        const readResult = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: rangeToRead,
+        });
+        const values = readResult.data.values || [];
+
+        // Bỏ qua header (hàng 0), bắt đầu từ hàng 1 (index 0 sau khi bỏ header)
+        for (let i = 1; i < values.length; i++) {
+            const row = values[i];
+            const ticket = row[3] || ''; // Cột D = Số sổ
+            const itemCode = utils.normalizeCode(row[1] || ''); // Cột B = Mã vật tư
+            const status = row[7] || ''; // Cột H = Trạng thái
+
+            if (ticket && itemCode) {
+                const key = `${ticket}_${itemCode}`;
+                const rowIndex = i + 1; // Row index (1-based) trong sheet
+                existingDataMap.set(key, { rowIndex, status });
+            }
+        }
+        headerRowSkipped = true; // Đánh dấu đã xử lý xong việc đọc
+    } catch (err) {
+        console.error("Lỗi đọc sheet 'Đối chiếu sổ 3 liên':", err);
+        throw new Error("Không thể đọc dữ liệu hiện có để kiểm tra trùng lặp.");
+    }
+
+
+    // 2. Phân loại dữ liệu mới (Append hoặc Update)
+    const rowsToAppend = [];
+    const updateRequests = []; // Dùng cho batchUpdate
+
     data.forEach(r => {
-        if (!r.date || !r.itemCode || !r.itemName || !r.ticket || r.quantity <= 0) return;
+        // Chuẩn bị dữ liệu hàng mới (giống code cũ)
+        const ticket = r.ticket || '';
+        const itemCode = utils.normalizeCode(r.itemCode || '');
+        if (!ticket || !itemCode) return; // Bỏ qua nếu thiếu ticket hoặc itemCode
 
-        rows.push([ r.date, r.itemCode, r.itemName, r.email || '', r.ticket, Number(r.quantity), r.note || '', 'Chưa đối chiếu' ]);
+        const key = `${ticket}_${itemCode}`;
+        const existingEntry = existingDataMap.get(key);
+
+        // Chuẩn bị dữ liệu cho ô (theo đúng 8 cột A-H)
+        const rowData = [
+            r.date || '',         // A: Ngày
+            r.itemCode || '',     // B: Mã VT
+            r.itemName || '',     // C: Tên VT
+            ticket,               // D: Số sổ
+            Number(r.quantity) || 0, // E: Số lượng
+            r.email || '',        // F: Email KTV
+            r.note || '',         // G: Ghi chú
+            'Chưa đối chiếu'      // H: Trạng thái
+        ];
+
+        if (existingEntry) {
+            // Đã tồn tại
+            if (existingEntry.status === 'Chưa đối chiếu') {
+                // Tồn tại và chưa đối chiếu -> Cập nhật
+                updateRequests.push({
+                    range: `${sheetName}!A${existingEntry.rowIndex}:H${existingEntry.rowIndex}`, // Cập nhật cả hàng A-H
+                    values: [rowData] // Dữ liệu mới
+                });
+            } else {
+                // Tồn tại và ĐÃ đối chiếu -> Bỏ qua
+                console.log(`Skipping update for already reconciled ticket ${ticket}, item ${itemCode}`);
+            }
+        } else {
+            // Chưa tồn tại -> Thêm mới
+            rowsToAppend.push(rowData); // Chỉ thêm dữ liệu hàng
+        }
     });
 
-    if (rows.length === 0) throw new Error('Không có dòng hợp lệ để lưu');
+    // 3. Thực hiện ghi vào Sheet
+    try {
+        // Thực hiện Append trước (nếu có)
+        if (rowsToAppend.length > 0) {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `${sheetName}!A:H`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                resource: { values: rowsToAppend },
+            });
+            console.log(`Appended ${rowsToAppend.length} new rows.`);
+        }
 
-    // Ghi vào sheet Đối chiếu sổ 3 liên
-    await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: 'Đối chiếu sổ 3 liên!A:H',
-        valueInputOption: 'USER_ENTERED',
-        insertDataOption: 'INSERT_ROWS',
-        resource: { values: rows },
-    });
-    return true;
+        // Thực hiện BatchUpdate (nếu có)
+        if (updateRequests.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId,
+                resource: {
+                    valueInputOption: 'USER_ENTERED',
+                    data: updateRequests
+                }
+            });
+            console.log(`Updated ${updateRequests.length} existing rows.`);
+        }
+
+        return { ok: true, message: `Lưu thành công. Thêm mới ${rowsToAppend.length} dòng, cập nhật ${updateRequests.length} dòng.` };
+
+    } catch (err) {
+        console.error("Lỗi ghi dữ liệu Excel vào Sheet:", err);
+        throw new Error("Xảy ra lỗi khi lưu dữ liệu vào Google Sheet.");
+    }
 }
 
 // Tái tạo consumeBorrowNote (đánh dấu Pending Note là Fulfilled)
