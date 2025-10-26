@@ -10,15 +10,15 @@ const USAGE_TICKETS_COLLECTION = 'usage_tickets';
 const PENDING_RETURN_NOTES_COLLECTION = 'pending_return_notes';
 
 // FIX: Hàm tiện ích để lấy Firestore Client (sẽ chỉ chạy sau khi index.js gọi initializeApp)
-const getDb = () => {
-    try {
-        return admin.firestore();
-    } catch (e) {
-        // Lỗi này KHÔNG nên xảy ra nếu index.js được cấu hình đúng.
-        console.error("Firestore initialization error: Make sure admin.initializeApp() is called.");
-        throw e;
-    }
-};
+// const getDb = () => {
+//     try {
+//         return admin.firestore();
+//     } catch (e) {
+//         // Lỗi này KHÔNG nên xảy ra nếu index.js được cấu hình đúng.
+//         console.error("Firestore initialization error: Make sure admin.initializeApp() is called.");
+//         throw e;
+//     }
+// };
 // =======================================================
 // HELPER TRUY CẬP SHEETS
 // =======================================================
@@ -265,7 +265,8 @@ async function saveTicketRanges({ sheets, spreadsheetId, email, ranges }) {
 // =======================================================
 // 1. DASHBOARD DATA (getTechnicianDashboardData)
 // =======================================================
-async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isManager }) {
+async function getTechnicianDashboardData({ sheets, spreadsheetId, db, email, isManager }) {
+    console.log('!!! RUNNING LATEST getTechnicianDashboardData CODE !!!');
     const normEmail = utils.normalizeCode(email).toLowerCase();
     
     // START DEBUG LOG: Ghi lại email đang được sử dụng để truy vấn
@@ -335,15 +336,19 @@ async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isMana
     // C. Kết hợp và tính toán
     const items = Object.keys(byCode).map(code => {
         const data = byCode[code];
-        const remaining = data.quantity - data.totalUsed; // Số lượng còn lại
-        return {
-            code: code,
+        const borrowed = Number(data.quantity) || 0;
+        const returned = Number(data.totalReturned) || 0;
+        const used     = Number(data.totalUsed) || 0;
+        const remaining = (borrowed - returned) - used;
+    return {
+            code,
             name: data.name,
-            quantity: data.quantity, // Tổng mượn còn nợ
-            totalUsed: data.totalUsed, // Tổng đã dùng (cả đối chiếu và chưa)
-            remaining: remaining, // Số cần trả về kho
+            quantity: borrowed,
+            totalReturned: returned,
+            totalUsed: used,
+            remaining,
             unreconciledUsageDetails: data.unreconciledUsageDetails,
-            reconciledUsageDetails: data.reconciledUsageDetails
+            reconciledUsageDetails: data.reconciledUsageDetails,
         };
     }).filter(a =>
         a.quantity > 0 ||                 // 1. Vẫn còn nợ
@@ -357,7 +362,6 @@ async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isMana
     /// D. Xử lý Pending Notes (Truy vấn FIRESTORE)
     let pendingNotes = []; // Khởi tạo mảng rỗng ở đây
     try { // Thêm try...catch cho Firestore query
-        const db = getDb();
         console.log(`[DEBUG Dashboard ${normEmail}] Querying Firestore PENDING_NOTES...`); // Log trước query
 
         // D.1. Lấy Pending Borrow Notes
@@ -409,7 +413,6 @@ async function getTechnicianDashboardData({ sheets, spreadsheetId, email, isMana
     // D.2. LẤY PENDING RETURN NOTES (Tương tự, đảm bảo có try...catch và kiểm tra)
     let pendingReturnNotes = [];
     try {
-        const db = getDb(); // Lấy lại db nếu cần
         console.log(`[DEBUG Dashboard ${normEmail}] Querying Firestore PENDING_RETURN_NOTES...`);
 
         const pendingReturnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
@@ -668,8 +671,8 @@ async function getReturnHistory({ sheets, spreadsheetId, db, email, currentPage,
 // =======================================================
 // 3. SUBMIT TRANSACTION (submitTransaction)
 // =======================================================
-async function submitTransaction({ sheets, spreadsheetId, data }) {
-    const db = getDb(); // Lấy db an toàn
+async function submitTransaction({ sheets, spreadsheetId, db, data }) {
+    // const db = getDb(); // Lấy db an toàn
     const COL_COUNT_HIST = 10;
     const rows = [];
     const lowerEmail = utils.normalizeCode(data.email);
@@ -711,7 +714,7 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
 
         // 4. Nếu quản lý mượn theo lệnh chờ => Fulfilled pending
         if (data.borrowTimestamp) {
-            await fulfillPendingNote_({ email: data.email, tsISO: pendingNoteId }); 
+            await fulfillPendingNote_({ db, email: data.email, tsISO: pendingNoteId }); 
         }
         
     } else if (data.type === 'Trả') { // --- LOGIC TRẢ/ĐỐI CHIẾU ---
@@ -743,53 +746,79 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
         }
         
         // 2. KTV XÁC NHẬN ĐỐI CHIẾU SỔ (LOGIC CŨ)
-        else if (isKtvReconcile) {
-            if (tickets.length > 0) {
-                const sheetName = 'Đối chiếu sổ 3 liên';
-                
-                // 1. Đọc toàn bộ sheet 'Đối chiếu sổ 3 liên'
-                const readResult = await sheets.spreadsheets.values.get({
-                    spreadsheetId,
-                    range: `${sheetName}!A:H`, // Đọc cột E (Sổ) và H (Trạng thái)
-                });
-                
-                const values = readResult.data.values || [];
-                const updateRequests = [];
-                // Dùng Set để tra cứu các sổ cần update nhanh hơn
-                const ticketsToUpdate = new Set(tickets); 
+        // 2. KTV XÁC NHẬN ĐỐI CHIẾU SỔ
+        // 2. KTV XÁC NHẬN ĐỐI CHIẾU SỔ 
+else if (isKtvReconcile) {
+    console.log('!!! RUNNING LATEST KTV RECONCILE CODE !!!');
+    console.log(`[DEBUG Reconcile] Received tickets: ${JSON.stringify(tickets)}`);
 
-                // 2. Lặp qua từng hàng (bỏ qua header hàng 0)
-                for (let i = 1; i < values.length; i++) {
-                    const row = values[i];
-                    if (row.length < 8) continue; // Bỏ qua hàng trống
+    if (tickets.length > 0) {
+        const sheetName = 'Đối chiếu sổ 3 liên';
+        const updateRequests = [];
+        const ticketsToUpdate = new Set((tickets || []).map(t => (t ?? '').toString().trim()));
 
-                    const ticketInSheet = row[4] || ''; // Cột E = Số sổ (index 4)
-                    const statusInSheet = row[7] || ''; // Cột H = Trạng thái (index 7)
+        try {
+            // 1. Đọc toàn bộ sheet 'Đối chiếu sổ 3 liên'
+            console.log(`[DEBUG Reconcile] Reading sheet: ${sheetName}!A:H`);
+            const readResult = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `${sheetName}!A:H`,
+            });
+            const values = readResult.data.values || [];
+            console.log(`[DEBUG Reconcile] Read ${values.length - 1} data rows from sheet.`);
 
-                    // 3. Nếu sổ này nằm trong danh sách KTV chọn VÀ nó 'Chưa đối chiếu'
-                    if (ticketsToUpdate.has(ticketInSheet) && statusInSheet === 'Chưa đối chiếu') {
-                        const rowIndex = i + 1; // row index (1-based) cho Google Sheets
-                        
-                        // 4. Thêm yêu cầu cập nhật cho ô H (Trạng thái)
-                        updateRequests.push({
-                            range: `${sheetName}!H${rowIndex}`, // VD: 'Đối chiếu sổ 3 liên!H111'
-                            values: [['Đã đối chiếu']]
-                        });
-                    }
-                }
+            // 2. Lặp qua từng hàng để tìm dòng cần cập nhật
+            const norm = s => (s || '').toString().trim().toLowerCase();
+            for (let i = 1; i < values.length; i++) { // bỏ header
+                const row = values[i];
+                if (row.length < 8) continue;
 
-                // 5. Gửi batch update lên Google Sheets nếu có
-                if (updateRequests.length > 0) {
-                    await sheets.spreadsheets.values.batchUpdate({
-                        spreadsheetId,
-                        resource: {
-                            valueInputOption: 'USER_ENTERED',
-                            data: updateRequests
-                        }
+                const ticketInSheet = (row[3] || '').toString().trim(); // ✅ Cột D = Số sổ
+                const statusInSheet = (row[7] || '').toString().trim(); // H = Trạng thái
+                const rowIndex = i + 1; // 1-based
+
+                const isPending =
+                    norm(statusInSheet) === 'chưa đối chiếu' ||
+                    norm(statusInSheet) === '' ||
+                    norm(statusInSheet) === 'pending';
+
+                if (ticketsToUpdate.has(ticketInSheet) && isPending) {
+                    console.log(`[DEBUG Reconcile] Match found for ticket ${ticketInSheet} at row ${rowIndex}. Adding update request.`);
+                    updateRequests.push({
+                        range: `${sheetName}!H${rowIndex}`,
+                        values: [['Đã đối chiếu']]
                     });
                 }
             }
+
+            console.log(`[DEBUG Reconcile] Prepared ${updateRequests.length} update requests:`, JSON.stringify(updateRequests));
+
+            // 3. Gửi batch update lên Google Sheets
+            if (updateRequests.length > 0) {
+                console.log(`[DEBUG Reconcile] Attempting batchUpdate...`);
+                await sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId,
+                    requestBody: {
+                        valueInputOption: 'USER_ENTERED',
+                        data: updateRequests
+                    }
+                });
+                console.log(`[DEBUG Reconcile] batchUpdate successful. Updated rows: ${updateRequests.length}`);
+                return { ok: true, updated: updateRequests.length };
+            } else {
+                console.warn(`[WARN Reconcile] No valid rows found to update for tickets: ${JSON.stringify(tickets)}`);
+                return { ok: false, updated: 0, message: 'Không tìm thấy dòng nào để cập nhật.' };
+            }
+
+        } catch (sheetError) {
+            console.error('!!! ERROR during Sheet read/update in Reconcile:', sheetError);
+            throw new Error("Lỗi khi cập nhật trạng thái đối chiếu trên Google Sheet: " + sheetError.message);
         }
+    } else {
+        console.warn('[WARN Reconcile] tickets array is empty.');
+        return { ok: false, updated: 0, message: 'Không có ticket nào được gửi.' };
+    }
+}
         
         // 3. QUẢN LÝ XÁC NHẬN TRẢ KHÔNG SỬ DỤNG (CẬP NHẬT)
         else if (isManagerConfirmReturn) {
@@ -799,7 +828,7 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
 
             // Nếu Quản lý xác nhận dựa trên Note, fulfill note đó
             if (data.returnTimestamp) {
-                await fulfillPendingReturnNote_({ email: data.email, tsISO: data.returnTimestamp }); 
+                await fulfillPendingReturnNote_({ db, email: data.email, tsISO: data.returnTimestamp }); 
             }
         }
     }
@@ -819,8 +848,8 @@ async function submitTransaction({ sheets, spreadsheetId, data }) {
 /**
  * Đánh dấu Pending RETURN Note là Fulfilled
  */
-async function fulfillPendingReturnNote_({ email, tsISO }) { 
-    const db = getDb();
+async function fulfillPendingReturnNote_({ db, email, tsISO }) { 
+    // const db = getDb();
     const normEmail = utils.normalizeCode(email);
     
     const snapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
@@ -844,8 +873,8 @@ async function fulfillPendingReturnNote_({ email, tsISO }) {
 /**
  * Đánh dấu Pending RETURN Note là Rejected
  */
-async function rejectPendingReturnNote_({ email, tsISO, reason }) { 
-    const db = getDb();
+async function rejectPendingReturnNote_({ db, email, tsISO, reason }) { 
+    // const db = getDb();
     const normEmail = utils.normalizeCode(email);
     
     const snapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
@@ -871,8 +900,8 @@ async function rejectPendingReturnNote_({ email, tsISO, reason }) {
 /**
  * Đánh dấu Pending BORROW Note là Rejected
  */
-async function rejectPendingBorrowNote_({ email, tsISO, reason }) {
-    const db = getDb();
+async function rejectPendingBorrowNote_({ db, email, tsISO, reason }) {
+    // const db = getDb();
     const normEmail = utils.normalizeCode(email);
 
     const snapshot = await db.collection(PENDING_NOTES_COLLECTION) // Use the BORROW notes collection
@@ -903,8 +932,8 @@ async function rejectPendingBorrowNote_({ email, tsISO, reason }) {
  * Đánh dấu Pending Note là Fulfilled bằng cách tìm kiếm theo timestamp.
  */
 
-async function fulfillPendingNote_({ email, tsISO }) { 
-    const db = getDb(); // Lấy db an toàn
+async function fulfillPendingNote_({ db, email, tsISO }) { 
+    // const db = getDb(); // Lấy db an toàn
     const normEmail = utils.normalizeCode(email);
     
     // 1. Tìm tài liệu (Document) theo Timestamp và Email
@@ -1202,6 +1231,7 @@ async function rejectReturnNote({ db, data }) {
     }
     
     const success = await rejectPendingReturnNote_({
+        db, 
         email: email,
         tsISO: timestamp,
         reason: reason
@@ -1219,6 +1249,7 @@ async function rejectBorrowNote({ db, data }) {
     }
 
     const success = await rejectPendingBorrowNote_({ // Call the correct helper
+        db, 
         email: email,
         tsISO: timestamp,
         reason: reason

@@ -46,11 +46,21 @@ function signInWithGoogle() {
 async function callAuthApi(endpoint, data) {
     // Logic fetch tương tự callApi nhưng không cần header Auth ban đầu
     const headers = { 'Content-Type': 'application/json' };
-    const response = await fetch(API_BASE_URL + endpoint, { method: 'POST', headers, body: JSON.stringify(data), });
+    const response = await fetch(API_BASE_URL + endpoint, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify(data),
+    });
     const result = await response.json();
-    if (!response.ok || result.error) throw new Error(result.error || 'Lỗi server.');
-    return result.data;
+    if (!response.ok || result.error) 
+        throw new Error(result.error || 'Lỗi server.');
+    
+    // 🔹 Trả về đúng kiểu dữ liệu dù backend có hoặc không bọc trong {data: ...}
+    return (result && result.data !== undefined) ? result.data : result;
 }
+
+
+
 
 // --- HÀM XỬ LÝ AUTH THÀNH CÔNG (MỚI) ---
 // File: app.js
@@ -121,47 +131,82 @@ async function getFirebaseIdToken() {
     return null; 
 }
 
-async function getFirebaseIdToken() {
-    const user = auth.currentUser;
-    if (user) {
-        return user.getIdToken();
-    }
-    // Nếu không có người dùng, ta không thể lấy token.
-    return null; 
-}
 
 // --- HÀM GỌI API (ĐÃ SỬA) ---
-async function callApi(endpoint, data = {}, method = 'POST') {
-    const idToken = await getFirebaseIdToken(); // Lấy token
-    
-    // Nếu API không phải là Auth/Register và người dùng chưa có token, chặn yêu cầu
-    if (!idToken && !endpoint.startsWith('/auth/')) { 
-        showError('infoErrorMessage', 'Vui lòng đăng nhập để tiếp tục.');
-        throw new Error("User not authenticated.");
-    }
-    
-    const headers = {
-        'Content-Type': 'application/json',
-        // GỬI TOKEN LÊN GCF
-        'Authorization': idToken ? 'Bearer ' + idToken : '', 
-    };
-
-    const response = await fetch(API_BASE_URL + endpoint, {
-        method: method,
-        headers: headers,
-        body: JSON.stringify(data),
-    });
-
-    const result = await response.json();
-    if (!response.ok || result.error) {
-        // Xử lý lỗi 401 nếu token hết hạn/không hợp lệ
-        if (response.status === 401) {
-            alert("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-            // TODO: Triển khai logic đăng xuất/đăng nhập lại ở đây
+async function callApi(endpoint, data) {
+    console.log(`Calling API: ${endpoint}`); // Log khi bắt đầu gọi
+    try {
+        const user = auth.currentUser;
+        let idToken = null;
+        if (user) {
+            try {
+                idToken = await user.getIdToken(true); // Lấy token mới nhất
+            } catch (tokenError) {
+                console.error("Error getting ID token:", tokenError);
+                showError('infoErrorMessage', 'Lỗi xác thực, vui lòng đăng nhập lại.');
+                // Cân nhắc: Có thể signOut ở đây nếu token lỗi nghiêm trọng
+                // firebase.auth().signOut();
+                throw new Error('Không thể lấy token xác thực.'); // Ném lỗi để dừng
+            }
+        } else {
+             // Nếu không có user VÀ endpoint không phải là public => Lỗi
+             if (!['/auth/verifyAndRegister', '/announcement/current'].includes(endpoint)) { // Thêm các endpoint public vào đây nếu có
+                  console.warn(`User not logged in for protected endpoint: ${endpoint}`);
+                  showError('infoErrorMessage', 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.');
+                  firebase.auth().signOut(); // Đăng xuất luôn
+                  throw new Error('Yêu cầu xác thực.');
+             }
+             // Cho phép gọi API public nếu không có user
         }
-        throw new Error(result.error || 'Lỗi server không xác định.');
+
+
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (idToken) {
+            headers['Authorization'] = 'Bearer ' + idToken;
+        }
+
+        const res = await fetch(API_BASE_URL + endpoint, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(data)
+        });
+
+        console.log(`API Response Status for ${endpoint}: ${res.status}`); // Log status code
+
+        // Lấy text response để kiểm tra
+        const text = await res.text();
+        console.log(`API Response Text for ${endpoint}:`, text); // Log text thô
+
+        if (!res.ok) {
+            // Ném lỗi với nội dung text nếu có, hoặc status text
+            throw new Error(text || `Lỗi HTTP! Status: ${res.status}`);
+        }
+
+        // Xử lý response thành công (2xx)
+        if (!text) {
+            // Nếu body rỗng dù status OK -> trả về object rỗng mặc định
+            console.warn(`Empty success response received for endpoint: ${endpoint}`);
+            return {}; // Trả về object rỗng thay vì undefined
+        }
+
+        try {
+            // Parse JSON từ text đã lấy
+            const jsonData = JSON.parse(text);
+            console.log(`API Parsed JSON for ${endpoint}:`, jsonData); // Log JSON đã parse
+            return jsonData;
+        } catch (e) {
+            // Nếu parse lỗi -> báo lỗi JSON không hợp lệ
+            console.error(`Failed to parse JSON for endpoint ${endpoint}:`, text, e);
+            throw new Error('Dữ liệu trả về từ server không hợp lệ.');
+        }
+
+    } catch (error) {
+         console.error(`API Call failed for ${endpoint}:`, error);
+         // Ném lại lỗi để các hàm gọi .catch() có thể xử lý
+         throw error;
     }
-    return result.data; 
 }
 
 
@@ -284,7 +329,9 @@ function toggleForm(){
     document.getElementById('borrowHistoryForm').style.display = (type==='Mượn')?'block':'none';
     document.getElementById('returnForm').style.display = (type==='Trả')?'block':'none';
     
-    if (type==='Trả') {
+    if (type==='Mượn') {
+         loadBorrowHistoryForLast5Days(); // <-- THÊM DÒNG NÀY
+    } else { // type === 'Trả'
         loadSelfDashboard();
         loadReturnHistory();
     }
@@ -473,7 +520,7 @@ function displayBorrowedItems(items, isManagerView){
 
     // --- HIỂN THỊ BẢNG TỔNG QUAN ---
     items.forEach(function(item){
-      var remaining = item.quantity - item.totalUsed;
+      var remaining = (item.quantity - item.totalReturned) - item.totalUsed;
 
       // Chỉ hiển thị trên Tổng quan nếu KTV vẫn còn nợ HOẶC còn sổ chưa đối chiếu
       if (item.quantity > 0 || item.totalUsed > 0) {
