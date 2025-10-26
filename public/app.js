@@ -193,7 +193,12 @@ function initForm(){
         showError('infoErrorMessage', 'Lỗi khởi tạo Auth: ' + error.message);
         document.getElementById('infoSpinner').style.display = 'none';
       });
-
+// Khởi tạo datepicker
+    jQuery(function() {
+        // Gộp tất cả selector vào một
+        jQuery("#historyDate, #managerTransactionDate, #returnUnusedTransactionDate, #transferDate")
+            .datepicker({ dateFormat: 'dd/mm/yy' }); // <-- Đảm bảo #transferDate có ở đây
+    });
     // === BẮT ĐẦU THÊM KHỐI NÀY ===
     // Đọc và áp dụng lựa chọn chế độ xem bảng
     const savedView = localStorage.getItem('tableView');
@@ -738,26 +743,25 @@ function submitErrorReport(){
 // MANAGER AREA (ĐÃ HOÀN THIỆN LOGIC GỌI API)
 // =======================================================
 
+// File: app.js (Sửa hàm loadTechnicians, khoảng dòng 625)
 function loadTechnicians(){
-    techniciansLoaded = false; // Reset trạng thái khi bắt đầu tải
-    technicianMap.clear(); // Xóa map cũ
+    techniciansLoaded = false;
+    technicianMap.clear();
     document.getElementById('technicianSpinner').style.display='block';
     callApi('/manager/technicians')
         .then(techs => {
             var sel=document.getElementById('technicianEmail');
-            var selFrom = document.getElementById('transferFromTech');
-            var selTo = document.getElementById('transferToTech');
+            var selFrom = document.getElementById('transferFromTech'); // <-- THÊM
+            var selTo = document.getElementById('transferToTech');   // <-- THÊM
 
             sel.innerHTML='<option value="">Chọn kỹ thuật viên</option>';
             // Đảm bảo các select khác tồn tại trước khi set innerHTML
-            if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>';
-            if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';
+            if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>'; // <-- THÊM
+            if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';     // <-- THÊM
 
             (techs||[]).forEach(function(t){
-                const name = t.name || t.email; // Ưu tiên tên
+                const name = t.name || t.email;
                 const text = t.name ? `${t.name} (${t.email})` : t.email;
-
-                // Lưu vào Map (Email -> Tên) <-- THÊM
                 technicianMap.set(t.email, name);
 
                 var o=document.createElement('option');
@@ -765,14 +769,15 @@ function loadTechnicians(){
                 o.text= text;
 
                 sel.appendChild(o.cloneNode(true));
-                if (selFrom) selFrom.appendChild(o.cloneNode(true));
-                if (selTo) selTo.appendChild(o.cloneNode(true));
+                // Chỉ thêm vào nếu select tồn tại (phòng trường hợp HTML chưa load kịp)
+                if (selFrom) selFrom.appendChild(o.cloneNode(true)); // <-- THÊM
+                if (selTo) selTo.appendChild(o.cloneNode(true));   // <-- THÊM
             });
-            techniciansLoaded = true; // Đánh dấu đã tải xong
+            techniciansLoaded = true;
         })
         .catch(err => {
             showError('technicianErrorMessage','Lỗi tải danh sách KTV: '+err.message);
-            techniciansLoaded = false; // Đánh dấu tải lỗi
+            techniciansLoaded = false;
         })
         .finally(() => {
             document.getElementById('technicianSpinner').style.display='none';
@@ -1571,6 +1576,133 @@ function loadPendingNotifications() {
         })
         .finally(() => {
             spinner.style.display = 'none';
+        });
+}
+/**
+ * Tải danh sách vật tư KTV đang nợ để chuyển
+ */
+function loadTransferableItems() {
+    const fromEmail = document.getElementById('transferFromTech').value;
+    const tbody = document.getElementById('transferItemsBody');
+    tbody.innerHTML = '<tr><td colspan="4"><div class="spinner"></div> Đang tải...</td></tr>';
+
+    if (!fromEmail) {
+        tbody.innerHTML = '<tr><td colspan="4">Vui lòng chọn Kỹ thuật viên chuyển</td></tr>';
+        return;
+    }
+
+    callApi('/dashboard', { technicianEmail: fromEmail })
+        .then(payload => {
+            const items = payload.items || [];
+            tbody.innerHTML = '';
+
+            const transferableItems = items.filter(it => it.quantity > 0);
+
+            if (transferableItems.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="4">Kỹ thuật viên này không nợ vật tư nào.</td></tr>';
+                 return;
+            }
+
+            transferableItems.forEach(item => {
+                const row = document.createElement('tr');
+                // Lưu ý data-label khớp với CSS và thead
+                row.innerHTML = `
+                    <td data-label="Tên vật tư">${item.name || ''}</td>
+                    <td data-label="Mã vật tư">${item.code || ''}</td>
+                    <td data-label="Đang nợ" style="text-align: center;">${item.quantity}</td>
+                    <td data-label="Số lượng chuyển">
+                        <input type="number" class="transfer-quantity-input" min="0" max="${item.quantity}" value="0" data-code="${item.code}" data-name="${item.name}">
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        })
+        .catch(err => {
+            tbody.innerHTML = `<tr><td colspan="4" class="error">Lỗi tải vật tư: ${err.message}</td></tr>`;
+        });
+}
+
+/**
+ * Gửi yêu cầu chuyển vật tư
+ */
+function submitTransfer() {
+    const fromEmail = document.getElementById('transferFromTech').value;
+    const toEmail = document.getElementById('transferToTech').value;
+    const transferDate = document.getElementById('transferDate').value;
+    const itemsToTransfer = [];
+    let validationError = false; // Cờ để dừng nếu có lỗi
+
+    if (!fromEmail || !toEmail || !transferDate) {
+        showError('transferErrorMessage', 'Vui lòng chọn người chuyển, người nhận và ngày chuyển.');
+        return;
+    }
+    if (fromEmail === toEmail) {
+        showError('transferErrorMessage', 'Người chuyển và người nhận phải khác nhau.');
+        return;
+    }
+
+    const inputs = document.querySelectorAll('#transferItemsBody .transfer-quantity-input');
+    inputs.forEach(input => {
+        // Nếu đã có lỗi trước đó, không xử lý tiếp input này
+        if (validationError) return;
+
+        const quantity = parseInt(input.value, 10) || 0;
+        const max = parseInt(input.max, 10) || 0;
+        const code = input.dataset.code;
+        const name = input.dataset.name;
+
+        if (quantity < 0 || quantity > max) {
+            showError('transferErrorMessage', `Số lượng chuyển không hợp lệ cho vật tư ${code}. Phải từ 0 đến ${max}.`);
+            validationError = true; // Đặt cờ lỗi
+            return; // Dừng xử lý input này
+        }
+
+        if (quantity > 0) {
+            itemsToTransfer.push({ code, name, quantity });
+        }
+    });
+
+    // Nếu có lỗi validation, dừng hàm
+    if (validationError) {
+        return;
+    }
+
+    if (itemsToTransfer.length === 0) {
+         showError('transferErrorMessage', 'Vui lòng nhập số lượng cho ít nhất một vật tư để chuyển.');
+         return;
+    }
+
+    const data = {
+        fromEmail: fromEmail,
+        toEmail: toEmail,
+        date: transferDate,
+        items: itemsToTransfer
+    };
+
+    // Xóa thông báo lỗi cũ trước khi gửi
+    showError('transferErrorMessage', '');
+    showSuccess('transferSuccessMessage', '');
+    document.getElementById('transferSpinner').style.display = 'block';
+
+    callApi('/manager/transferItems', data)
+        .then(() => {
+            showSuccess('transferSuccessMessage', 'Chuyển vật tư thành công!');
+            // Reset form
+            document.getElementById('transferFromTech').value = '';
+            document.getElementById('transferToTech').value = '';
+            document.getElementById('transferDate').value = '';
+            document.getElementById('transferItemsBody').innerHTML = '<tr><td colspan="4">Vui lòng chọn Kỹ thuật viên chuyển</td></tr>';
+            // Tải lại dashboard của KTV đang chọn (nếu là A hoặc B) để cập nhật Tổng quan
+            const currentSelectedTech = document.getElementById('technicianEmail').value;
+            if (currentSelectedTech === fromEmail || currentSelectedTech === toEmail) {
+                loadTechnicianData();
+            }
+        })
+        .catch(err => {
+            showError('transferErrorMessage', 'Lỗi chuyển vật tư: ' + err.message);
+        })
+        .finally(() => {
+            document.getElementById('transferSpinner').style.display = 'none';
         });
 }
 // DOM ready

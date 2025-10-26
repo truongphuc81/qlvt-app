@@ -351,7 +351,51 @@
       <div id="excelSuccessMessage" class="success" style="display:none;"></div>
       <div id="excelErrorMessage" class="error" style="display:none;"></div>
     </div>
+    
+    <div id="transferForm" class="form-section">
+      <h3>Chuyển vật tư giữa Kỹ thuật viên</h3>
 
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
+        <div style="flex: 1; min-width: 250px;">
+          <label for="transferFromTech">Từ Kỹ thuật viên:</label><br>
+          <select id="transferFromTech" onchange="loadTransferableItems()">
+            <option value="">-- Chọn người chuyển --</option>
+            </select>
+        </div>
+        <div style="flex: 1; min-width: 250px;">
+          <label for="transferToTech">Đến Kỹ thuật viên:</label><br>
+          <select id="transferToTech">
+            <option value="">-- Chọn người nhận --</option>
+            </select>
+        </div>
+      </div>
+
+      <h4>Vật tư có thể chuyển (của người chuyển)</h4>
+      <table id="transferItemsTable">
+        <thead>
+          <tr>
+            <th>Tên vật tư</th>
+            <th>Mã vật tư</th>
+            <th>Đang nợ</th>
+            <th>Số lượng chuyển</th>
+          </tr>
+        </thead>
+        <tbody id="transferItemsBody">
+          <tr><td colspan="4">Vui lòng chọn Kỹ thuật viên chuyển</td></tr>
+        </tbody>
+      </table>
+
+      <label for="transferDate">Ngày chuyển:</label><br>
+      <input type="text" id="transferDate" placeholder="DD/MM/YYYY" required><br> <button id="submitTransferButton" onclick="submitTransfer()">Xác nhận chuyển</button>
+
+      <div id="transferSpinner" style="display:none; text-align:center;">
+        <div class="spinner"></div><p>Đang xử lý...</p>
+      </div>
+      <div id="transferSuccessMessage" class="success" style="display:none;"></div>
+      <div id="transferErrorMessage" class="error" style="display:none;"></div>
+    </div>
+    <div id="managerBorrowForm" class="form-section">
+      
     </div> <script src="app.js"></script>
 </body>
 </html>

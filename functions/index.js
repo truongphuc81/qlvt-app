@@ -15,7 +15,15 @@ const SPREADSHEET_ID = '1vzhV7X-mBEG8tIqYg-JTTCMkbEYX9RDJbYczZIaOTK0';
 // 1. KHỞI TẠO FIREBASE ADMIN SDK
 admin.initializeApp();
 const db = admin.firestore(); // Firestore Client
-
+let dbInstance = null; // Biến lưu trữ kết nối Firestore
+const getDb = () => {
+    if (!dbInstance) {
+        console.log("Initializing Firestore instance..."); // Thêm log
+        dbInstance = admin.firestore(); // Tạo kết nối nếu chưa có
+    }
+    return dbInstance; // Trả về kết nối đã có hoặc vừa tạo
+};
+// === KẾT THÚC HÀM getDb ===
 // 2. KHỞI TẠO GOOGLE SHEETS API CLIENT
 const auth = new google.auth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/cloud-platform']
@@ -217,7 +225,15 @@ privateRouter.post('/manager/pendingCounts', apiWrapper(async ({ db }) => {
     return dataProcessor.getPendingCounts({ db });
 }));
 
-// GẮN ROUTER PRIVATE
+// DÁN ROUTE MỚI NÀY VÀO
+// File: functions/index.js
+
+    // 4s. Chuyển vật tư (Quản lý) - TẠM THỜI ĐƠN GIẢN HÓA ĐỂ TEST
+    privateRouter.post('/manager/transferItems', apiWrapper(async ({ body }) => { // Bỏ bớt params không dùng
+        console.log('[DEBUG ROUTER ***SIMPLE TEST***] /manager/transferItems was definitely called!'); // Log cực kỳ đơn giản
+        // Không gọi dataProcessor nữa
+        return { ok: true, message: "Simple test handler executed." }; // Trả về thành công đơn giản
+    }));
 app.use('/api', privateRouter); 
 
 
