@@ -93,17 +93,18 @@
 
     <div class="form-section">
       <h3>Tổng quan mặt hàng đã mượn</h3>
-      <table id="overviewTable">
-        <thead> <tr>
-            <th>Tên vật tư</th>
-            <th>Đang mượn</th>
-            <th>Tổng sử dụng</th>
-            <th>Số lượng cần trả</th>
-            <th>Số sổ</th>
-          </tr>
-        </thead>
-        <tbody id="overviewBody"></tbody>
-      </table>
+        <table id="overviewTable">
+          <thead>
+            <tr>
+              <th>Tên vật tư</th>
+              <th class="text-end">Tổng mượn</th>
+              <th class="text-end">Tổng sử dụng</th>
+              <th class="text-end">Đã trả</th>
+              <th class="text-end">Còn lại</th>
+            </tr>
+          </thead>
+          <tbody id="overviewBody"></tbody>
+        </table>
       <div id="overviewSpinner" style="display:none;text-align:center;">
          <div class="spinner"></div><p>Đang tải...</p>
       </div>
@@ -297,9 +298,13 @@
     <div id="managerOverviewSection" class="form-section">
       <h3>Tổng quan mặt hàng đã mượn của kỹ thuật viên</h3>
       <table id="managerOverviewTable">
-        <thead> <tr>
-            <th>Tên vật tư</th><th>Mã vật tư</th><th>Đang mượn</th>
-            <th>Tổng sử dụng</th><th>Số lượng cần trả</th><th>Chi tiết số sổ</th>
+        <thead> 
+          <tr>
+            <th>Tên vật tư</th>
+            <th>Mã vật tư</th>
+            <th>Tổng mượn</th>
+            <th>Tổng sử dụng</th>
+            <th>Đã trả</th> <th>Còn lại</th> <th>Chi tiết số sổ</th>
           </tr>
         </thead>
         <tbody id="managerOverviewBody"></tbody>

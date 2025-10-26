@@ -499,83 +499,86 @@ function displayBorrowHistory(history){
 // ===== Logic hiển thị Tổng quan (Giữ nguyên) =====
 
 
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM displayBorrowedItems BẰNG HÀM NÀY:
+
 function displayBorrowedItems(items, isManagerView){
     var overviewBody = isManagerView ? document.getElementById('managerOverviewBody') : document.getElementById('overviewBody');
     var returnBody   = document.getElementById('borrowedItemsBody'); // Bảng của KTV
     var reconciledBody = document.getElementById('reconciledTicketsBody'); // Bảng KTV (Đã đối chiếu)
+    
     // Xóa nội dung cũ
     overviewBody.innerHTML='';
     if (!isManagerView) {
         returnBody.innerHTML='';
-        if (reconciledBody) reconciledBody.innerHTML = ''; // <-- THÊM DÒNG NÀY
+        if (reconciledBody) reconciledBody.innerHTML = ''; 
     }
     
-    // Kiểm tra nếu không có dữ liệu
-    // if (!items||!items.length){
-    //   overviewBody.innerHTML='<tr><td colspan="6">Không có vật tư đã mượn</td></tr>';
-    //   if (!isManagerView) returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>'; // 4 cột
-    //   if (isManagerView) managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
-    //   return;
-    // }
+    let itemsShownInOverview = 0; // Thêm biến đếm
 
     // --- HIỂN THỊ BẢNG TỔNG QUAN ---
     items.forEach(function(item){
-      var remaining = (item.quantity - item.totalReturned) - item.totalUsed;
+      var remaining = item.remaining || 0; 
 
-      // Chỉ hiển thị trên Tổng quan nếu KTV vẫn còn nợ HOẶC còn sổ chưa đối chiếu
-      if (item.quantity > 0 || item.totalUsed > 0) {
+      // === THAY ĐỔI QUAN TRỌNG: ĐIỀU KIỆN LỌC ===
+      // Chỉ hiển thị nếu:
+      // 1. Số lượng còn lại > 0
+      // 2. HOẶC Vẫn còn sổ "Chưa đối chiếu" (ngay cả khi số còn lại = 0)
+      if (remaining > 0 || (item.unreconciledUsageDetails && item.unreconciledUsageDetails.length > 0)) {
+          
+          itemsShownInOverview++; // Tăng biến đếm
           var row=document.createElement('tr');
           let rowHtml = '';
 
-          // *** BẮT ĐẦU THAY ĐỔI LOGIC ***
           if (isManagerView) {
-              // --- Giao diện Quản lý (Giữ nguyên 6 cột) ---
+              // --- Giao diện Quản lý (7 CỘT) ---
               var unreFull = (item.unreconciledUsageDetails||[]).map(function(u){
-                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>'; // Giữ note
+                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>';
               }).join('<br>') || 'Chưa có';
 
               rowHtml =
                 '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Giữ Code
-                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
+                '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
+                '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
                 '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-                '<td data-label="Chi tiết số sổ">'+unreFull+'</td>'; // Giữ label cũ
+                '<td data-label="Đã trả">'+item.totalReturned+'</td>'+ 
+                '<td data-label="Còn lại">'+remaining+'</td>'+ 
+                '<td data-label="Chi tiết số sổ">'+unreFull+'</td>';
+          
           } else {
-              // --- Giao diện Kỹ thuật viên (Còn 5 cột) ---
-               var unreSimple = (item.unreconciledUsageDetails||[]).map(function(u){
-                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+'</span>'; // Bỏ note
-              }).join('<br>') || 'Chưa có';
-
+              // --- Giao diện Kỹ thuật viên (5 CỘT) ---
               rowHtml =
                 '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                // '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Bỏ Code
-                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
+                '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
                 '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-                '<td data-label="Số sổ">'+unreSimple+'</td>'; // Đổi label, dùng unreSimple
+                '<td data-label="Đã trả">'+item.totalReturned+'</td>'+
+                '<td data-label="Còn lại">'+remaining+'</td>';
           }
-          // *** KẾT THÚC THAY ĐỔI LOGIC ***
 
           row.innerHTML = rowHtml;
           overviewBody.appendChild(row);
       }
+      // === KẾT THÚC THAY ĐỔI ĐIỀU KIỆN LỌC ===
     });
 
+    // Thêm thông báo nếu không có vật tư nào hiển thị
+    if (itemsShownInOverview === 0) {
+        const colSpan = isManagerView ? 7 : 5;
+        overviewBody.innerHTML = `<tr><td colspan="${colSpan}">Không có vật tư nào đang nợ.</td></tr>`;
+    }
+
     
-    // --- HIỂN THỊ BẢNG ĐỐI CHIẾU ---
+    // --- HIỂN THỊ BẢNG ĐỐI CHIẾU (Logic này giữ nguyên, không thay đổi) ---
 
     if (!isManagerView){
-        // *** LOGIC GOM NHÓM (CÓ SẮP XẾP) ***
-        const tickets = {}; // Nơi gom nhóm
-        const reconciledTickets = {}; // Đã đối chiếu (MỚI)
-        // 1. Tái cấu trúc dữ liệu: Gom vật tư theo Sổ
+        const tickets = {}; 
+        const reconciledTickets = {}; 
+        
         items.forEach(function(item) {
             (item.unreconciledUsageDetails || []).forEach(function(detail) {
                 if (!tickets[detail.ticket]) {
                     tickets[detail.ticket] = {
                         ticket: detail.ticket,
-                        // Trích xuất số sổ để sắp xếp
                         ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
                         items: [] 
                     };
@@ -586,8 +589,8 @@ function displayBorrowedItems(items, isManagerView){
                     quantity: detail.quantity
                 });
             });
-            // *** THÊM KHỐI NÀY: Gom ĐÃ đối chiếu ***
-            (item.reconciledUsageDetails || []).forEach(function(detail) { //)"]
+            
+            (item.reconciledUsageDetails || []).forEach(function(detail) { 
                 if (!reconciledTickets[detail.ticket]) {
                     reconciledTickets[detail.ticket] = {
                         ticket: detail.ticket,
@@ -599,26 +602,19 @@ function displayBorrowedItems(items, isManagerView){
             });
         });
 
-        // 2. SẮP XẾP MẢNG CÁC SỔ
         const sortedTickets = Object.values(tickets).sort(function(a, b) {
             return a.ticketNumber - b.ticketNumber;
         });
 
-        // 3. Render dữ liệu đã gom nhóm VÀ sắp xếp
         sortedTickets.forEach(function(ticket) {
             var rr = document.createElement('tr');
-            
-            // Tách Tên vật tư ra 1 chuỗi
             var itemsNameHtml = ticket.items.map(function(it) {
                 return (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')';
             }).join('<br>');
-            
-            // Tách Số lượng ra 1 chuỗi
             var itemsQtyHtml = ticket.items.map(function(it) {
                 return it.quantity;
             }).join('<br>');
             
-            // Render 4 cột
             rr.innerHTML =
                 '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
                 '<td data-label="Tên vật tư">' + itemsNameHtml + '</td>' +
@@ -627,12 +623,11 @@ function displayBorrowedItems(items, isManagerView){
             
             returnBody.appendChild(rr);
         });
-        // 4. SẮP XẾP MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
+
         const sortedReconciled = Object.values(reconciledTickets).sort(function(a, b) {
-            return b.ticketNumber - a.ticketNumber; // Sắp xếp giảm dần (mới nhất lên trên)
+            return b.ticketNumber - a.ticketNumber; 
         });
 
-        // 5. RENDER MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
         if (reconciledBody) {
             sortedReconciled.forEach(function(ticket) {
                 var rRow = document.createElement('tr');
@@ -653,33 +648,7 @@ function displayBorrowedItems(items, isManagerView){
         if (reconciledBody && Object.keys(reconciledTickets).length === 0) {
              reconciledBody.innerHTML='<tr><td colspan="3">Chưa có sổ đã đối chiếu</td></tr>';
         }
-
     }
-    //else { // if (isManagerView)
-    //     // *** LOGIC CŨ: GIỮ NGUYÊN CHO QUẢN LÝ (CHI TIẾT TỪNG VẬT TƯ) ***
-    //     let hasUnreconciled = false;
-    //     items.forEach(function(item){
-    //         (item.unreconciledUsageDetails||[]).forEach(function(detail){
-    //             hasUnreconciled = true;
-    //             var remaining = item.quantity - item.totalUsed;
-    //             var mr=document.createElement('tr');
-    //             mr.innerHTML =
-    //                 '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-    //                 '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-    //                 '<td data-label="Số lượng sử dụng">'+detail.quantity+'</td>'+
-    //                 '<td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" value="0"></td>'+
-    //                 '<td data-label="Số lượng còn lại">'+remaining+'</td>'+
-    //                 '<td data-label="Số sổ">'+detail.ticket+'</td>'+
-    //                 '<td data-label="Ghi chú">'+(detail.note||'-')+'</td>'+
-    //                 '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="'+detail.ticket+'"></td>';
-    //             managerReturnBody.appendChild(mr);
-    //         });
-    //     });
-        
-    //     if (!hasUnreconciled) {
-    //         managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
-    //     }
-    // }
 }
 
 

@@ -491,11 +491,11 @@ tr:nth-child(even) {
     display: none;
   }
   /* --- ĐỊNH NGHĨA DATA LABELS (Chỉ dùng cho Card View) --- */
-  body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
-  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng sử dụng"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Cần trả"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Số sổ"; } /* Đúng */
+body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; }
+  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Đã trả"; }
+  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Còn lại"; }
   body.card-view-mobile #borrowHistoryTable td:nth-child(1):before { content: "Thời gian"; }
   body.card-view-mobile #borrowHistoryTable td:nth-child(2):before { content: "Nội dung mượn"; }
   body.card-view-mobile #returnHistoryTable td:nth-child(1):before { content: "Thời gian"; }
@@ -509,7 +509,9 @@ tr:nth-child(even) {
   body.card-view-mobile #managerOverviewTable td:nth-child(2):before { content: "Mã vật tư"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(3):before { content: "Tổng mượn"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(4):before { content: "Tổng sử dụng"; }
-  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Cần trả"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Đã trả"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(6):before { content: "Còn lại"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(7):before { content: "Chi tiết số sổ"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(1):before { content: "Số bắt đầu"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(2):before { content: "Số kết thúc"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(3):before { content: "Xóa"; }
