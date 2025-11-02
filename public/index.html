@@ -149,14 +149,15 @@
       <h3 class="toggle-header">Đối chiếu sổ 3 liên </h3>
       <div id="reconcileContent" class="toggle-content" style="display: none;"> <h4>Số sổ chưa đối chiếu</h4>
         <table id="borrowedItemsTable">
-          <thead> <tr>
-              <th>Số sổ</th>
-              <th>Tên vật tư</th>
-              <th>Số lượng</th>
-              <th>Xác nhận</th>
-            </tr></thead>
-          <tbody id="borrowedItemsBody"></tbody>
-        </table>
+      <thead> 
+        <tr>
+          <th>Số sổ</th>
+          <th>Vật tư & SL</th>
+          <th>Xác nhận</th>
+        </tr>
+      </thead>
+      <tbody id="borrowedItemsBody"></tbody>
+    </table>
         <button id="submitReturnButton" onclick="submitReturnForm()">Xác nhận đối chiếu</button>
         <button onclick="showErrorReportForm()">Báo cáo sai sót</button>
         <div id="returnSpinner" style="display:none;text-align:center;">...</div>
@@ -166,11 +167,14 @@
         <div id="reconciledTicketsSection" style="margin-top: 30px;">
           <h4 style="color: var(--success-color);">Sổ 3 liên đã đối chiếu</h4>
           <table id="reconciledTicketsTable">
-            <thead> <th>Số sổ</th>
-              <th>Tên vật tư</th>
-              <th>Số lượng</th></thead>
-            <tbody id="reconciledTicketsBody"></tbody>
-          </table>
+        <thead> 
+          <tr>
+            <th>Số sổ</th>
+            <th>Vật tư & SL</th>
+          </tr>
+        </thead>
+        <tbody id="reconciledTicketsBody"></tbody>
+      </table>
           <button id="loadMoreReconciled" class="load-more-button" onclick="loadMoreReconciledTickets()" style="display:none; margin-top: 10px;">Tải thêm</button>
         </div>
       </div>

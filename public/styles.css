@@ -473,12 +473,18 @@ tr:nth-child(even) {
     width: 20px;
     margin: 0;
   }
-  /* Căn phải ô checkbox */
+  /* Căn phải ô checkbox
   body.card-view-mobile #borrowedItemsTable td:nth-child(4) {
     text-align: right;
+  } */
+   body.card-view-mobile #borrowedItemsTable td:nth-child(3) {
+    text-align: right;
   }
-  /* Sửa cột căn giữa */
-  body.card-view-mobile #borrowedItemsTable td:nth-child(3),
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3) {
+      padding-left: 10px;
+      padding-right: 10px;
+  }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(4) { display: none; }
   body.card-view-mobile #reconciledTicketsTable td:nth-child(3) {
     text-align: center;
     padding-left: 10px; /* Reset padding 45% */
@@ -490,6 +496,7 @@ tr:nth-child(even) {
   body.card-view-mobile #reconciledTicketsTable td:nth-child(3):before {
     display: none;
   }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3) { display: none; }
   /* --- ĐỊNH NGHĨA DATA LABELS (Chỉ dùng cho Card View) --- */
 body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
   body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; }
@@ -500,11 +507,11 @@ body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên v�
   body.card-view-mobile #borrowHistoryTable td:nth-child(2):before { content: "Nội dung mượn"; }
   body.card-view-mobile #returnHistoryTable td:nth-child(1):before { content: "Thời gian"; }
   body.card-view-mobile #returnHistoryTable td:nth-child(2):before { content: "Nội dung trả"; }
-  body.card-view-mobile #borrowedItemsTable td:nth-child(1):before { content: "Số sổ"; }
-  body.card-view-mobile #borrowedItemsTable td:nth-child(2):before { content: "Tên vật tư"; }
-  body.card-view-mobile #borrowedItemsTable td:nth-child(4):before { content: "Xác nhận"; }
+ body.card-view-mobile #borrowedItemsTable td:nth-child(1):before { content: "Số sổ"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(2):before { content: "Vật tư & SL"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3):before { content: "Xác nhận"; }
   body.card-view-mobile #reconciledTicketsTable td:nth-child(1):before { content: "Số sổ"; }
-  body.card-view-mobile #reconciledTicketsTable td:nth-child(2):before { content: "Tên vật tư"; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(2):before { content: "Vật tư & SL"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(1):before { content: "Tên vật tư"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(2):before { content: "Mã vật tư"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(3):before { content: "Tổng mượn"; }
@@ -913,4 +920,11 @@ h2 {
 .load-more-button:disabled {
   background-color: #ccc !important;
   cursor: not-allowed;
+}
+.item-quantity-in-card {
+  font-weight: 600; /* Làm đậm số lượng */
+  color: var(--primary-color);
+}
+.dark-mode .item-quantity-in-card {
+  color: #58a6ff;
 }

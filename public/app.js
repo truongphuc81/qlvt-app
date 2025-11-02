@@ -588,8 +588,7 @@ function loadBorrowedItems() {
 function displayBorrowedItems(items, isManagerView){
     var overviewBody = isManagerView ? document.getElementById('managerOverviewBody') : document.getElementById('overviewBody');
     var returnBody   = document.getElementById('borrowedItemsBody'); // Bảng của KTV
-    // Bảng Đã đối chiếu (sẽ được render riêng)
-    var reconciledBody = document.getElementById('reconciledTicketsBody'); 
+    var reconciledBody = document.getElementById('reconciledTicketsBody'); // Bảng KTV (Đã đối chiếu)
     
     // Xóa nội dung cũ
     overviewBody.innerHTML='';
@@ -599,23 +598,18 @@ function displayBorrowedItems(items, isManagerView){
     }
     
     let itemsShownInOverview = 0; 
-    const tickets = {}; // Cache cho Sổ CHƯA đối chiếu
+    const tickets = {}; 
+    const reconciledTickets = {}; 
     
-    // Reset cache của sổ ĐÃ đối chiếu (Rất quan trọng)
-    allReconciledTicketsCache = []; 
-
-    // --- LẶP QUA DỮ LIỆU TỔNG QUAN ---
+    // --- LẶP QUA DỮ LIỆU TỔNG QUAN (Logic này giữ nguyên) ---
     items.forEach(function(item){
       var remaining = item.remaining || 0; 
 
-      // Logic hiển thị Tổng quan (Giữ nguyên)
       if (remaining > 0 || (item.unreconciledUsageDetails && item.unreconciledUsageDetails.length > 0)) {
           itemsShownInOverview++;
-          // ... (code render 'overviewBody' giữ nguyên) ...
           var row=document.createElement('tr');
           let rowHtml = '';
           if (isManagerView) {
-              // ... (HTML cho Quản lý) ...
               var unreFull = (item.unreconciledUsageDetails||[]).map(function(u){ return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>'; }).join('<br>') || 'Chưa có';
               rowHtml = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
                         '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
@@ -625,7 +619,6 @@ function displayBorrowedItems(items, isManagerView){
                         '<td data-label="Còn lại">'+remaining+'</td>'+ 
                         '<td data-label="Chi tiết số sổ">'+unreFull+'</td>';
           } else {
-              // ... (HTML cho KTV) ...
               rowHtml = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
                         '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
                         '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
@@ -636,9 +629,8 @@ function displayBorrowedItems(items, isManagerView){
           overviewBody.appendChild(row);
       }
       
-      // Logic gom nhóm Sổ (CHƯA VÀ ĐÃ ĐỐI CHIẾU)
+      // --- Logic gom nhóm Sổ (Giữ nguyên) ---
       if (!isManagerView){
-          // Gom sổ CHƯA đối chiếu (Giữ nguyên)
           (item.unreconciledUsageDetails || []).forEach(function(detail) {
               if (!tickets[detail.ticket]) {
                   tickets[detail.ticket] = {
@@ -650,13 +642,9 @@ function displayBorrowedItems(items, isManagerView){
               tickets[detail.ticket].items.push({ name: item.name, code: item.code, quantity: detail.quantity });
           });
           
-          // === THAY ĐỔI: LƯU VÀO CACHE ===
-          // Gom sổ ĐÃ đối chiếu và LƯU VÀO CACHE (allReconciledTicketsCache)
           (item.reconciledUsageDetails || []).forEach(function(detail) { 
-              // Ghi chú: Logic gom nhóm này hơi kỳ, lẽ ra backend nên trả về 
-              // danh sách sổ đã gom nhóm. Nhưng ta giữ nguyên logic cũ.
               let ticketKey = detail.ticket || `unknown-${item.code}`;
-              let existingTicket = allReconciledTicketsCache.find(t => t.ticket === ticketKey);
+              let existingTicket = reconciledTickets[ticketKey];
               
               if (!existingTicket) {
                    existingTicket = {
@@ -664,44 +652,52 @@ function displayBorrowedItems(items, isManagerView){
                         ticketNumber: parseInt((ticketKey || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
                         items: [] 
                     };
-                    allReconciledTicketsCache.push(existingTicket);
+                    reconciledTickets[ticketKey] = existingTicket;
               }
               existingTicket.items.push({ name: item.name, code: item.code, quantity: detail.quantity });
           });
-          // === KẾT THÚC THAY ĐỔI ===
       }
     }); // Hết vòng lặp items.forEach
 
-    // Thêm thông báo nếu không có vật tư nào (Giữ nguyên)
     if (itemsShownInOverview === 0) {
         const colSpan = isManagerView ? 7 : 5;
         overviewBody.innerHTML = `<tr><td colspan="${colSpan}">Không có vật tư nào đang nợ.</td></tr>`;
     }
-
     
     // --- RENDER 2 BẢNG SỔ (CHỈ CHO KTV) ---
     if (!isManagerView){
-        // 1. Render Sổ CHƯA đối chiếu (Giữ nguyên)
+        
+        // === SỬA BẢNG 1: SỔ CHƯA ĐỐI CHIẾU ===
         const sortedTickets = Object.values(tickets).sort((a, b) => a.ticketNumber - b.ticketNumber);
         sortedTickets.forEach(function(ticket) {
             var rr = document.createElement('tr');
-            var itemsNameHtml = ticket.items.map(it => (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')').join('<br>');
-            var itemsQtyHtml = ticket.items.map(it => it.quantity).join('<br>');
+            
+            // TẠO HTML KẾT HỢP
+            var combinedHtml = ticket.items.map(function(it) {
+                // === SỬA ĐỔI Ở ĐÂY ===
+                var name = (it.name || 'N/A'); // <-- Đã xóa mã code
+                // === KẾT THÚC SỬA ĐỔI ===
+                var qty = it.quantity;
+                return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
+            }).join('<br>'); 
+            
+            // HTML MỚI (3 CỘT)
             rr.innerHTML =
                 '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
-                '<td data-label="Tên vật tư">' + itemsNameHtml + '</td>' +
-                '<td data-label="Số lượng sử dụng" style="text-align: center;">' + itemsQtyHtml + '</td>' +
-                '<td data-label="Xác nhận đối chiếu"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
+                '<td data-label="Vật tư & SL">' + combinedHtml + '</td>' + 
+                '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>'; 
+            
             returnBody.appendChild(rr);
         });
         if (sortedTickets.length === 0) {
-             returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>';
+             returnBody.innerHTML='<tr><td colspan="3">Chưa có sổ cần đối chiếu</td></tr>';
         }
 
-        // 2. Render Sổ ĐÃ đối chiếu (TRANG 1)
-        // Sắp xếp cache Đã đối chiếu
-        allReconciledTicketsCache.sort((a, b) => b.ticketNumber - a.ticketNumber); // Sắp xếp giảm dần
-        reconciledTicketsCurrentPage = 1; // Reset về trang 1
+        // === SỬA BẢNG 2: SỔ ĐÃ ĐỐI CHIẾU ===
+        const sortedReconciled = Object.values(reconciledTickets).sort((a, b) => b.ticketNumber - a.ticketNumber); 
+        
+        allReconciledTicketsCache = sortedReconciled; 
+        reconciledTicketsCurrentPage = 1;
         renderReconciledTicketsTable(); // Gọi hàm render mới
     }
 }
@@ -2779,48 +2775,56 @@ function loadMoreAuditorHistory() {
 /**
  * [KTV] Render bảng Sổ Đã Đối Chiếu (từ cache) - ĐÃ SỬA LỖI
  */
+/**
+ * [KTV] Render bảng Sổ Đã Đối Chiếu (từ cache) - ĐÃ SỬA LỖI
+ */
 function renderReconciledTicketsTable() {
     const tbody = document.getElementById('reconciledTicketsBody');
-    const loadMoreBtn = document.getElementById('loadMoreReconciled'); // Vẫn lấy nút
-    
-    // SỬA LỖI: Chỉ kiểm tra tbody. Nút "Tải thêm" là tùy chọn.
+    const loadMoreBtn = document.getElementById('loadMoreReconciled');
     if (!tbody) {
         console.error("Lỗi render: Không tìm thấy 'reconciledTicketsBody'");
         return; 
     }
     
-    tbody.innerHTML = ''; // Xóa nội dung cũ
+    tbody.innerHTML = ''; 
 
-    // Tính toán dữ liệu cho trang hiện tại
     const itemsToShow = allReconciledTicketsCache.slice(0, reconciledTicketsCurrentPage * HISTORY_PAGE_SIZE);
 
     if (itemsToShow.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="3">Chưa có sổ đã đối chiếu</td></tr>';
-        // Thêm kiểm tra "if (loadMoreBtn)"
-        if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Ẩn nút nếu không có gì
+        tbody.innerHTML = '<tr><td colspan="2">Chưa có sổ đã đối chiếu</td></tr>'; 
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none';
         return;
     }
 
     itemsToShow.forEach(function(ticket) {
         var rRow = document.createElement('tr');
-        var rItemsNameHtml = ticket.items.map(it => (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')').join('<br>');
-        var rItemsQtyHtml = ticket.items.map(it => it.quantity).join('<br>');
         
+        // === SỬA ĐỔI Ở ĐÂY ===
+        // TẠO HTML KẾT HỢP
+        var combinedHtml = ticket.items.map(function(it) {
+            // === SỬA ĐỔI Ở ĐÂY ===
+            var name = (it.name || 'N/A'); // <-- Đã xóa mã code
+            // === KẾT THÚC SỬA ĐỔI ===
+            var qty = it.quantity;
+            return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
+        }).join('<br>');
+        
+        // HTML MỚI (2 CỘT)
         rRow.innerHTML =
             '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
-            '<td data-label="Tên vật tư">' + rItemsNameHtml + '</td>' +
-            '<td data-label="Số lượng sử dụng" style="text-align: center;">' + rItemsQtyHtml + '</td>';
+            '<td data-label="Vật tư & SL">' + combinedHtml + '</td>'; // CỘT 2 (Kết hợp)
+        // === KẾT THÚC SỬA ĐỔI ===
+            
         tbody.appendChild(rRow);
     });
     
-    // Ẩn/hiện nút "Tải thêm" (Thêm kiểm tra "if (loadMoreBtn)")
     if (loadMoreBtn) {
         if (itemsToShow.length < allReconciledTicketsCache.length) {
             loadMoreBtn.style.display = 'block';
             loadMoreBtn.disabled = false;
             loadMoreBtn.innerText = 'Tải thêm';
         } else {
-            loadMoreBtn.style.display = 'none'; // Đã hết
+            loadMoreBtn.style.display = 'none'; 
         }
     }
 }
