@@ -491,11 +491,11 @@ tr:nth-child(even) {
     display: none;
   }
   /* --- ĐỊNH NGHĨA DATA LABELS (Chỉ dùng cho Card View) --- */
-  body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
-  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng sử dụng"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Cần trả"; } /* Đúng */
-  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Số sổ"; } /* Đúng */
+body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; }
+  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Đã trả"; }
+  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Còn lại"; }
   body.card-view-mobile #borrowHistoryTable td:nth-child(1):before { content: "Thời gian"; }
   body.card-view-mobile #borrowHistoryTable td:nth-child(2):before { content: "Nội dung mượn"; }
   body.card-view-mobile #returnHistoryTable td:nth-child(1):before { content: "Thời gian"; }
@@ -509,7 +509,9 @@ tr:nth-child(even) {
   body.card-view-mobile #managerOverviewTable td:nth-child(2):before { content: "Mã vật tư"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(3):before { content: "Tổng mượn"; }
   body.card-view-mobile #managerOverviewTable td:nth-child(4):before { content: "Tổng sử dụng"; }
-  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Cần trả"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Đã trả"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(6):before { content: "Còn lại"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(7):before { content: "Chi tiết số sổ"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(1):before { content: "Số bắt đầu"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(2):before { content: "Số kết thúc"; }
   body.card-view-mobile #ticketRangesTable td:nth-child(3):before { content: "Xóa"; }
@@ -638,4 +640,277 @@ tr:nth-child(even) {
 @media (max-width: 480px) {
     /* Điều chỉnh padding cho bảng transfer trên màn hình rất nhỏ nếu cần */
     #transferItemsTable td { padding: 8px 6px; }
+}
+h2 {
+  text-align: center; /* Căn giữa chữ */
+}
+
+/* 2. Thu nhỏ VÀ CĂN GIỮA logo trên máy tính */
+#app-logo {
+  display: block; /* Bắt buộc phải có để margin: auto hoạt động */
+  max-width: 120px; /* Kích thước mới cho máy tính */
+  height: auto;
+  margin: 0 auto 20px; /* Căn giữa (trên 0, trái/phải tự động, dưới 20px) */
+}
+
+/* 3. Thu nhỏ logo trên di động (vẫn giữ căn giữa) */
+@media (max-width: 768px) {
+  #app-logo {
+    max-width: 100px; /* Kích thước mới cho di động */
+    margin-bottom: 15px;
+  }
+}
+
+/* File: styles.css */
+/* === DÁN VÀO CUỐI FILE === */
+
+/* Định dạng bảng Lịch sử thời gian thực */
+#realtimeHistoryTable td {
+  vertical-align: top;
+}
+
+#realtimeHistoryTable td ul {
+  margin-left: 20px;
+  margin-top: 5px;
+  padding-left: 0;
+  list-style-type: '— '; /* Thêm gạch đầu dòng */
+}
+#realtimeHistoryTable td li {
+  font-size: 14px;
+  font-style: italic;
+  padding-left: 5px;
+}
+
+/* Căn giữa bộ lọc */
+#historyFilterType {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+/* Căn chỉnh bộ lọc lịch sử */
+#historyFilterType,
+#historyFilterTech {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+* Định dạng bảng Lịch sử KTV (Mới) */
+#ktvHistoryTable td {
+  vertical-align: top;
+}
+#ktvHistoryTable td ul {
+  margin-left: 20px;
+  margin-top: 5px;
+  padding-left: 0;
+  list-style-type: '— ';
+}
+#ktvHistoryTable td li {
+  font-size: 14px;
+  font-style: italic;
+  padding-left: 5px;
+}
+#ktvHistoryFilterType {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+/* Kiểu cho nút Tab KTV (Chung) */
+.ktv-tab-button {
+  padding: 8px 16px;
+  margin-right: 5px;
+  border: 1px solid var(--border-color);
+  background-color: var(--background-color);
+  color: var(--secondary-color);
+  cursor: pointer;
+  border-radius: 4px 4px 0 0; /* Bo góc trên */
+  font-size: 15px;
+  transition: all 0.2s ease-in-out; /* Transition cho mượt */
+  position: relative; /* Cần cho z-index và top */
+  z-index: 1; /* Nút không active nằm dưới */
+  opacity: 0.7; /* Làm mờ nút không active */
+  border-bottom: 1px solid var(--border-color); /* Giữ viền dưới */
+}
+
+/* Kiểu cho nút Tab KTV đang active */
+.ktv-tab-button.active {
+  background-color: var(--card-background);
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--card-background); /* Che viền dưới của div chứa tabs */
+  font-weight: bold;
+  opacity: 1; /* Rõ nét */
+  z-index: 3; /* Nổi lên trên */
+  top: 1px; /* Dịch lên 1px để che viền */
+}
+
+/* Hover effect (làm rõ hơn khi di chuột qua nút không active) */
+.ktv-tab-button:not(.active):hover {
+  opacity: 0.9;
+  background-color: #e9ecef; /* Màu nền sáng hơn một chút */
+}
+
+/* Dark mode adjustments */
+.dark-mode .ktv-tab-button {
+  background-color: #2a2a2a;
+  color: #aaa;
+}
+.dark-mode .ktv-tab-button.active {
+  background-color: var(--card-background);
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--card-background);
+}
+.dark-mode .ktv-tab-button:not(.active):hover {
+  background-color: #3a3a3a;
+  opacity: 0.9;
+}
+/* Kiểu cho header có thể click */
+.toggle-header {
+  cursor: pointer;
+  background-color: var(--primary-color); /* Nền xanh */
+  color: white; /* Chữ trắng */
+  padding: 10px 15px; /* Tăng padding */
+  margin: -24px -24px 15px -24px; /* Căn lề âm để tràn ra form-section */
+  border-radius: 12px 12px 0 0; /* Bo góc trên */
+  transition: background-color 0.2s;
+  position: relative; /* Cho vị trí mũi tên */
+  display: flex; /* Cho căn chỉnh mũi tên */
+  align-items: center; /* Căn giữa dọc mũi tên */
+}
+
+/* Bỏ margin âm cho header đầu tiên */
+#mainPage .toggle-section:first-of-type > .toggle-header {
+    margin-top: -24px;
+}
+/* Thêm margin top cho các section sau */
+.toggle-section + .toggle-section,
+.toggle-section + .form-section:not(#errorReportForm) {
+    margin-top: 24px;
+}
+
+
+.toggle-header:hover {
+  background-color: #0056b3; /* Đậm hơn khi hover */
+  color: white; /* Giữ chữ trắng */
+}
+
+/* Kiểu cho nội dung ẩn/hiện */
+.toggle-content {
+  padding-top: 5px; /* Thêm chút khoảng cách trên */
+}
+
+/* Căn chỉnh mũi tên (Ngay sau text) */
+.toggle-header::after {
+  content: ' ▶'; /* Mũi tên mặc định (đóng) */
+  font-size: 0.8em;
+  margin-left: 8px; /* Khoảng cách với text */
+  /* float: right; ĐÃ XÓA */
+  transition: transform 0.2s ease-in-out;
+}
+.toggle-header.active::after {
+  content: ' ▼'; /* Mũi tên khi mở */
+}
+
+/* Dark mode (Giữ nguyên nền xanh) */
+.dark-mode .toggle-header {
+   background-color: var(--primary-color);
+   color: white;
+}
+.dark-mode .toggle-header:hover {
+   background-color: #0056b3;
+}
+/* Bảng KTV trả hàng */
+#ktvReturnItemsTable .ktv-return-input {
+  width: 80px;
+  max-width: 100px;
+  padding: 8px;
+  text-align: center;
+}
+#ktvReturnItemsTable td:nth-child(3) { /* Cột "Đang nợ" */
+  text-align: center;
+  font-weight: bold;
+}
+
+/* Data labels cho bảng mới trên di động */
+@media (max-width: 768px) {
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(4):before { content: "Số lượng trả"; }
+
+  /* Căn giữa cột "Đang nợ" trong card view */
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3):before {
+    display: none;
+  }
+}
+@media (max-width: 768px) {
+  body.card-view-mobile #unusedItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #unusedItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #unusedItemsTable td:nth-child(3):before { content: "Đang nợ"; } /* <<< SỬA LABEL */
+  body.card-view-mobile #unusedItemsTable td:nth-child(4):before { content: "Số lượng trả"; }
+}
+/* Đánh dấu vật tư KTV yêu cầu trả */
+#unusedItemsTable tr.requested-return td {
+    background-color: #e9f5ff; /* Màu nền xanh nhạt */
+}
+#unusedItemsTable tr.requested-return input.quantity-return-input {
+    border: 2px solid var(--primary-color); /* Viền xanh */
+}
+.dark-mode #unusedItemsTable tr.requested-return td {
+    background-color: #2a3b4d;
+}
+/* Bảng danh sách trả (mới) của Quản lý */
+#managerReturnListTable {
+  margin-top: 15px;
+  border: 1px dashed var(--primary-color);
+}
+#managerReturnListTable th {
+  background-color: #f0f8ff;
+  color: var(--primary-color);
+  font-size: 13px;
+}
+.dark-mode #managerReturnListTable th {
+  background-color: #003366;
+  color: #cceeff;
+}
+
+/* Tô sáng hàng KTV yêu cầu trả (khi duyệt note) */
+#unusedItemsTable tr.requested-return {
+    background-color: #fff3cd; /* Màu vàng nhạt */
+}
+.dark-mode #unusedItemsTable tr.requested-return {
+    background-color: #533f00;
+}
+/* Animation cho hàng mới thêm vào bảng tạm */
+@keyframes highlight-row {
+  0% { background-color: var(--primary-color); color: white; }
+  100% { background-color: var(--card-background); color: var(--text-color); }
+}
+
+.dark-mode @keyframes highlight-row {
+  0% { background-color: #007bff; color: white; }
+  100% { background-color: var(--card-background); color: #e0e0e0; }
+}
+
+/* Class để kích hoạt animation */
+.row-highlight {
+  /* Chạy animation tên highlight-row, 1.5 giây, 1 lần */
+  animation: highlight-row 1.5s ease-out;
+}
+.load-more-button {
+  /* Kế thừa kiểu 'button' chính */
+  margin-top: 15px;
+  background-color: var(--secondary-color) !important; /* Màu xám, ít nổi bật hơn */
+  width: 100%;
+  max-width: 300px; /* Giới hạn chiều rộng */
+  display: block; /* Hiển thị dạng block */
+  margin-left: auto;
+  margin-right: auto;
+}
+.load-more-button:hover {
+  background-color: #5a6268 !important;
+}
+.load-more-button:disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
 }

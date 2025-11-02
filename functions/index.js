@@ -8,7 +8,7 @@ const cors = require('cors');
 
 // Import logic nghiệp vụ
 const dataProcessor = require('./data-processor');
-
+console.log('!!! INDEX.JS - LATEST VERSION RUNNING !!!');
 // Khai báo ID Sheets
 const SPREADSHEET_ID = '1vzhV7X-mBEG8tIqYg-JTTCMkbEYX9RDJbYczZIaOTK0'; 
 
@@ -33,7 +33,15 @@ const sheets = google.sheets({ version: 'v4', auth }); // Khởi tạo Sheets Cl
 
 // 3. THIẾT LẬP EXPRESS APP VÀ MIDDLEWARE
 const app = express();
-app.use(cors({ origin: true }));
+app.use(cors({
+  origin: [
+    'https://khodotnet.store',
+    'https://quan-ly-vat-tu-backend.web.app',
+    'quan-ly-vat-tu-backend.firebaseapp.com',
+    'http://localhost:5000',
+    'http://localhost:5173'
+  ]
+}));
 app.use(express.json());
 
 
@@ -71,28 +79,48 @@ const authenticate = async (req, res, next) => {
 // =======================================================
 // 4. ĐỊNH TUYẾN API ENDPOINTS
 // =======================================================
-const apiWrapper = (handler) => async (req, res) => {
+// File: functions/index.js (Sửa hàm apiWrapper)
+const apiWrapper = (handler) => async (req, res, next) => {
     try {
-        const result = await handler({
-            sheets, 
-            spreadsheetId: SPREADSHEET_ID, 
-            db,      
+        // <<< THÊM DÒNG LOG NÀY >>>
+        console.log(`[apiWrapper ENTRY] Request received for path: ${req.path}, Method: ${req.method}`); 
+
+        const context = { // Build context
+            db: db, 
+            sheets: sheets, 
+            spreadsheetId: SPREADSHEET_ID,
             user: req.user, 
             body: req.body,
             query: req.query,
-        });
-
-        res.status(200).send({ ok: true, data: result });
+            params: req.params
+        };
+        // Log trước khi gọi handler
+        console.log(`[apiWrapper PRE-HANDLER] Context built for: ${req.path}`); 
+        const result = await handler(context);
+        // Log sau khi handler trả về
+        console.log(`[apiWrapper POST-HANDLER] Handler finished for: ${req.path}`); 
+        res.json(result || { ok: true }); // Default success response
     } catch (error) {
-        console.error('API Handler Error:', error.message, error.stack);
-        res.status(500).send({ ok: false, error: error.message || 'Lỗi server không xác định.' });
+        console.error(`[!!! apiWrapper ERROR !!!] Path: ${req.path} - Error: ${error.message}`, error); // Log lỗi chi tiết hơn
+        res.status(500).json({ error: error.message || 'An unexpected error occurred.' });
     }
 };
 
 
 // --- ROUTER 1: PUBLIC AUTH ROUTES ---
 const authRouter = express.Router();
+authRouter.post('/checkRoles', apiWrapper(async ({ sheets, spreadsheetId, body }) => {
+    const email = body.email;
+    const name = body.name; // Có thể cần để đăng ký KTV mới
 
+    // Gọi hàm kiểm tra mới trong data-processor
+    return dataProcessor.checkUserRoles({
+        sheets,
+        spreadsheetId,
+        email: email,
+        name: name // Truyền name để có thể tự đăng ký KTV nếu chưa có
+    });
+}));
 // 4n. Xác thực và Đăng ký KTV mới (PHẢI CÔNG KHAI)
 authRouter.post('/verifyAndRegister', apiWrapper(async ({ sheets, spreadsheetId, body }) => { 
     return dataProcessor.verifyAndRegisterUser({ 
@@ -199,9 +227,9 @@ privateRouter.post('/manager/processExcelData', apiWrapper(async ({ sheets, spre
     return dataProcessor.processExcelData({ sheets, spreadsheetId, data: body.data });
 }));
 
-// 4m. Lưu Dữ liệu Excel đã Xử lý
-privateRouter.post('/manager/saveExcelData', apiWrapper(async ({ sheets, spreadsheetId, body }) => {
-    return dataProcessor.saveExcelData({ sheets, spreadsheetId, data: body.data });
+// 4m. Lưu Dữ liệu Excel đã Xử lý (ĐÃ SỬA)
+privateRouter.post('/manager/saveExcelData', apiWrapper(async ({ sheets, spreadsheetId, db, body }) => { // <-- THÊM 'db' VÀO ĐÂY
+    return dataProcessor.saveExcelData({ sheets, spreadsheetId, db, data: body.data }); // <-- VÀ THÊM 'db' VÀO ĐÂY
 }));
 
 // 4n. Từ chối Note Trả hàng (Quản lý)
@@ -211,7 +239,7 @@ privateRouter.post('/manager/rejectReturnNote', apiWrapper(async ({ db, body }) 
 
 // 4o. Chuyển vật tư (Quản lý)
 privateRouter.post('/manager/transferItems', apiWrapper(async ({ sheets, spreadsheetId, db, body }) => {
-   // ... old code ...
+  return dataProcessor.managerTransferItems({ sheets, spreadsheetId, db, data: body });
 }));
 
 // PASTE NEW ROUTE HERE
@@ -228,12 +256,7 @@ privateRouter.post('/manager/pendingCounts', apiWrapper(async ({ db }) => {
 // DÁN ROUTE MỚI NÀY VÀO
 // File: functions/index.js
 
-    // 4s. Chuyển vật tư (Quản lý) - TẠM THỜI ĐƠN GIẢN HÓA ĐỂ TEST
-    privateRouter.post('/manager/transferItems', apiWrapper(async ({ body }) => { // Bỏ bớt params không dùng
-        console.log('[DEBUG ROUTER ***SIMPLE TEST***] /manager/transferItems was definitely called!'); // Log cực kỳ đơn giản
-        // Không gọi dataProcessor nữa
-        return { ok: true, message: "Simple test handler executed." }; // Trả về thành công đơn giản
-    }));
+    
 app.use('/api', privateRouter); 
 
 

@@ -1,184 +1,1003 @@
-// functions/data-processor.js (FIXED - Logic Firestore)
+// functions/data-processor.js (ĐÃ REFACTOR HOÀN TOÀN SANG FIRESTORE)
 
 const utils = require('./utils');
-const { google } = require('googleapis');
-const admin = require('firebase-admin'); 
+const admin = require('firebase-admin');
 
-// Hằng số cho Collection IDs
+// Hằng số Collection IDs
 const PENDING_NOTES_COLLECTION = 'pending_notes';
-const USAGE_TICKETS_COLLECTION = 'usage_tickets';
 const PENDING_RETURN_NOTES_COLLECTION = 'pending_return_notes';
-
-
-
-// =======================================================
-// HELPER TRUY CẬP SHEETS
-// =======================================================
-
-// Hàm này được sử dụng để đọc tất cả các Sheets cần thiết chỉ trong một lần gọi API
-// Hàm này được sử dụng để đọc tất cả các Sheets cần thiết chỉ trong một lần gọi API
-// functions/data-processor.js (FIXED - Trả về các biến đã tính toán)
-
-// functions/data-processor.js (FIXED - Đảm bảo sheets client tồn tại)
-
-// ... (logic của các hàm khác) ...
-
-// =======================================================
-// HELPER TRUY CẬP SHEETS
-// =======================================================
-
-// Hàm này được sử dụng để đọc tất cả các Sheets cần thiết chỉ trong một lần gọi API
-// File: functions/data-processor.js
-
-/**
- * Đọc dữ liệu thô cần thiết từ các Sheet
- */
-async function readAllSheetsData({ sheets, spreadsheetId, email }) {
-    // Luôn cần Item Code Map
-    const itemCodeMap = new Map();
-    // Luôn cần Ticket Ranges Map
-    const ticketRangesMap = [];
-
-    // Khởi tạo các mảng dữ liệu mặc định là rỗng
-    let history = [];
-    let comparisonData = [];
-    let pendingNotes = []; // Khởi tạo pendingNotes ở đây
-
-    try { // Bắt đầu khối try lớn bao quanh toàn bộ hàm
-
-        // 1. Đọc Danh sách Vật tư -> Map Code -> Tên
-        try {
-            const itemsResult = await sheets.spreadsheets.values.get({
-                spreadsheetId,
-                range: 'Danh sách vật tư!A2:B', // Chỉ đọc Mã (A) và Tên (B)
-            });
-            (itemsResult.data.values || []).forEach(row => {
-                if (row[0]) itemCodeMap.set(utils.normalizeCode(row[0]), row[1] || row[0]);
-            });
-            console.log(`[DEBUG readAllSheetsData] Loaded ${itemCodeMap.size} items.`);
-        } catch (err) {
-            console.error("!!! ERROR reading Item List sheet:", err.message);
-            // Có thể tiếp tục mà không có item map, tên sẽ là mã code
-        }
-
-        // 2. Đọc Lịch sử Mượn/Trả (nếu cần email hoặc đang xử lý dashboard)
-        if (email) { // Chỉ đọc lịch sử nếu có email cụ thể được cung cấp
-           try {
-                const historyResult = await sheets.spreadsheets.values.get({
-                    spreadsheetId,
-                    range: 'Lịch sử Mượn Trả Vật Tư!A2:J', // Đọc 10 cột A-J
-                });
-                history = (historyResult.data.values || []).filter(row => row.length > 2 && utils.normalizeCode(row[2]) === utils.normalizeCode(email)); // Lọc theo email
-                console.log(`[DEBUG readAllSheetsData] Read ${history.length} history rows for ${email}.`);
-            } catch (err) {
-                console.error(`!!! ERROR reading History sheet for ${email}:`, err.message);
-                history = []; // Trả về mảng rỗng nếu lỗi
-            }
-        }
-
-
-        // 3. Đọc dữ liệu Đối chiếu sổ 3 liên (nếu cần email hoặc đang xử lý dashboard)
-        if (email) { // Chỉ đọc đối chiếu nếu có email
-            try {
-                const comparisonResult = await sheets.spreadsheets.values.get({
-                    spreadsheetId,
-                    range: 'Đối chiếu sổ 3 liên!A2:H', // Đọc các cột A-H
-                });
-                comparisonData = (comparisonResult.data.values || []).filter(row => row.length > 5 && utils.normalizeCode(row[5]) === utils.normalizeCode(email)); // Lọc theo email (Cột F)
-                console.log(`[DEBUG readAllSheetsData] Read ${comparisonData.length} rows from Comparison sheet for ${email}.`);
-            } catch (err) {
-                console.error(`!!! ERROR reading Comparison sheet for ${email}:`, err.message);
-                comparisonData = []; // Đảm bảo trả về mảng rỗng nếu lỗi
-            }
-        }
-
-
-        // 4. Đọc Dải số sổ (Luôn cần khi xử lý Excel hoặc dashboard)
-         try {
-             const rangesResult = await sheets.spreadsheets.values.get({
-                 spreadsheetId,
-                 range: 'TicketRanges!A2:C', // Đọc Email(A), Start(B), End(C)
-             });
-             (rangesResult.data.values || []).forEach(row => {
-                 const emailR = row[0] || '';
-                 const start = Number(row[1]) || 0;
-                 const end = Number(row[2]) || 0;
-                 if (emailR && start > 0 && end >= start) {
-                     ticketRangesMap.push({ email: emailR, start, end });
-                 }
-             });
-             console.log(`[DEBUG readAllSheetsData] Loaded ${ticketRangesMap.length} ticket ranges.`);
-         } catch (err) {
-             console.error("!!! ERROR reading TicketRanges sheet:", err.message);
-             // Có thể tiếp tục nhưng việc tìm email qua số sổ sẽ thất bại
-         }
-
-
-        // 5. Đọc Pending Notes từ Firestore (nếu cần email)
-        // Lưu ý: Phần này bị comment trong code bạn gửi, giữ nguyên trạng thái comment
-        /*
-        if (email) {
-            try {
-                const db = getDb();
-                console.log(`[DEBUG] Querying Firestore for email: ${email}`); // Log trước khi query
-                const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
-                    .where('email', '==', utils.normalizeCode(email))
-                    .where('isFulfilled', '==', false)
-                    .orderBy('createdAt','desc') // FIX: Buộc sử dụng trường createdAt (đã xác nhận tồn tại)
-                    .get();
-
-                pendingNotes = pendingSnapshot.docs.map(doc => doc.data());
-                console.log(`[DEBUG] Found ${pendingNotes.length} pending notes for ${email} in Firestore.`); // Log sau khi query
-            } catch (firestoreError) {
-                console.error("!!! FIRESTORE ERROR reading pending notes:", firestoreError);
-                pendingNotes = []; // Trả về mảng rỗng nếu lỗi Firestore
-            }
-        }
-        */
-
-        // Trả về tất cả dữ liệu đã đọc (hoặc mảng rỗng nếu có lỗi)
-        return {
-            itemCodeMap,
-            history,
-            comparisonData, // Luôn là một mảng
-            ticketRangesMap,
-            pendingNotes // Sẽ là [] nếu không đọc Firestore
-        };
-
-    } catch (error) { // Khối catch lớn bao quanh toàn bộ hàm
-        console.error('Error in readAllSheetsData:', error);
-        // THÊM DÒNG RETURN NÀY để đảm bảo hàm luôn trả về cấu trúc đúng
-        return { itemCodeMap: new Map(), history: [], comparisonData: [], ticketRangesMap: [], pendingNotes: [] };
+const HISTORY_COLLECTION = 'history_transactions'; // MỚI
+const USAGE_TICKETS_COLLECTION = 'usage_tickets'; // MỚI
+let itemCodeMapCache = null;
+let ticketRangesMapCache = null;
+let coreCacheTimestamp = 0;
+const CACHE_DURATION = 600000; // 10 phút (600,000 ms)
+// === KẾT THÚC THÊM CACHE ===
+function chunkArray(array, size) {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunks.push(array.slice(i, i + size));
     }
-} // Đóng hàm readAllSheetsData
-// =======================================================
-// 5. CHECK MANAGER ROLE
-// =======================================================
-async function checkManager({ sheets, spreadsheetId, email }) {
-    const normEmail = utils.normalizeCode(email);
-    
-    const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'Danh sách quản lý!A:A', // Đọc cột email quản lý
-    });
-
-    const managerList = response.data.values || [];
-    
-    // Tìm email trong danh sách quản lý
-    const isManager = managerList.some(row => utils.normalizeCode(row[0]) === normEmail);
-    
-    return isManager;
+    return chunks;
 }
 // =======================================================
-// HÀM QUẢN LÝ (getTechnicians, getItemList)
+// HELPER TRUY CẬP SHEETS (CHỈ DÙNG CHO DỮ LIỆU ÍT THAY ĐỔI)
 // =======================================================
+
+/**
+ * Chỉ đọc các sheet Danh mục (ít thay đổi), không đọc Lịch sử/Đối chiếu.
+ * Đây là các hàm nên được cache trong tương lai.
+ */
+async function _readCoreSheetDataFromApi({ sheets, spreadsheetId }) {
+    const itemCodeMap = new Map();
+    const ticketRangesMap = [];
+
+    try {
+        // 1. Đọc Danh sách Vật tư
+        const itemsResult = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Danh sách vật tư!A2:B',
+        });
+        (itemsResult.data.values || []).forEach(row => {
+            if (row[0]) itemCodeMap.set(utils.normalizeCode(row[0]), row[1] || row[0]);
+        });
+    } catch (err) {
+        console.warn("Lỗi đọc sheet Danh sách vật tư:", err.message);
+    }
+
+    try {
+        // 2. Đọc Dải số sổ
+        const rangesResult = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'TicketRanges!A2:C',
+        });
+        (rangesResult.data.values || []).forEach(row => {
+            const emailR = row[0] || '';
+            const start = Number(row[1]) || 0;
+            const end = Number(row[2]) || 0;
+            if (emailR && start > 0 && end >= start) {
+                ticketRangesMap.push({ email: emailR, start, end });
+            }
+        });
+    } catch (err) {
+        console.warn("Lỗi đọc sheet TicketRanges:", err.message);
+    }
+
+    return { itemCodeMap, ticketRangesMap };
+}
+/**
+ * [Hàm mới] Lấy dữ liệu lõi (Vật tư, Dải số) từ Cache hoặc API
+ */
+async function getCoreSheetData({ sheets, spreadsheetId }) {
+    const now = Date.now();
+    
+    // Kiểm tra cache (cũ hơn 10 phút hoặc chưa có)
+    if (!itemCodeMapCache || !ticketRangesMapCache || (now - coreCacheTimestamp > CACHE_DURATION)) {
+        console.log('[Cache] Đang làm mới cache dữ liệu lõi (Vật tư, Dải số)...');
+        
+        // Gọi API
+        const { itemCodeMap, ticketRangesMap } = await _readCoreSheetDataFromApi({ sheets, spreadsheetId });
+        
+        // Lưu vào cache
+        itemCodeMapCache = itemCodeMap;
+        ticketRangesMapCache = ticketRangesMap;
+        coreCacheTimestamp = now;
+        
+        console.log(`[Cache] Làm mới thành công. ${itemCodeMapCache.size} vật tư, ${ticketRangesMapCache.length} dải số.`);
+    } else {
+        console.log('[Cache] Sử dụng cache dữ liệu lõi.');
+    }
+    
+    return { itemCodeMap: itemCodeMapCache, ticketRangesMap: ticketRangesMapCache };
+}
+// =======================================================
+// HELPER GHI DỮ LIỆU (DUAL WRITE)
+// =======================================================
+
+/**
+ * (Async) Ghi Lịch sử vào Google Sheet (Dùng làm backup)
+ * Hàm này không cần await, chạy ngầm.
+ */
+function writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc }) {
+    const rows = [];
+    const { timestamp, type, email, date, note, pendingNoteId, items } = transactionDoc;
+    
+    if (items && items.length > 0) {
+        items.forEach(it => {
+            rows.push([
+                timestamp, type, email, date,
+                utils.normalizeCode(it.code), it.name, Number(it.quantity) || 0,
+                note, 'FIRESTORE_TX', pendingNoteId || ''
+            ]);
+        });
+    } else {
+        // Ghi note-only
+        rows.push([
+            timestamp, type, email, date,
+            '', '', 0,
+            note, 'FIRESTORE_NOTE', pendingNoteId || timestamp
+        ]);
+    }
+
+    if (rows.length > 0) {
+        sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'Lịch sử Mượn Trả Vật Tư!A:J',
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values: rows },
+        }).catch(err => {
+            console.error("!!! LỖI GHI BACKUP HISTORY SHEET:", err.message);
+        });
+    }
+}
+
+/**
+ * (Async) Ghi Dữ liệu Excel vào Google Sheet (Dùng làm backup)
+ */
+function writeUsageTicketsToSheet_({ sheets, spreadsheetId, data }) {
+    const rowsToAppend = data.map(r => [
+        r.date || '',
+        r.itemCode || '',
+        r.itemName || '',
+        r.ticket,
+        Number(r.quantity) || 0,
+        r.email || '',
+        r.note || '',
+        r.status || 'Chưa đối chiếu'
+    ]);
+    
+    if (rowsToAppend.length > 0) {
+         sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: 'Đối chiếu sổ 3 liên!A:H',
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            resource: { values: rowsToAppend },
+        }).catch(err => {
+            console.error("!!! LỖI GHI BACKUP USAGE SHEET:", err.message);
+        });
+    }
+}
+
+/**
+ * (Async) Cập nhật trạng thái đối chiếu trên Google Sheet (Backup)
+ */
+async function updateUsageTicketStatusInSheet_({ sheets, spreadsheetId, tickets, email }) {
+    // Logic này chậm và phức tạp, nhưng cần thiết cho backup
+    try {
+        const sheetName = 'Đối chiếu sổ 3 liên';
+        const readResult = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${sheetName}!A:H`, // Đọc A-H
+        });
+        
+        const values = readResult.data.values || [];
+        const updateRequests = [];
+        const ticketsToUpdate = new Set(tickets.map(t => (t || '').toString().trim()));
+        const normEmail = utils.normalizeCode(email);
+
+        for (let i = 1; i < values.length; i++) { // Bỏ qua header
+            const row = values[i];
+            const ticketInSheet = (row[3] || '').toString().trim(); // Cột D = Số sổ
+            const emailInSheet = utils.normalizeCode(row[5] || ''); // Cột F = Email
+            const statusInSheet = (row[7] || '').toString().trim(); // Cột H = Trạng thái
+            const rowIndex = i + 1; // 1-based
+
+            if (ticketsToUpdate.has(ticketInSheet) && 
+                emailInSheet === normEmail && 
+                statusInSheet.toLowerCase() === 'chưa đối chiếu') {
+                
+                updateRequests.push({
+                    range: `${sheetName}!H${rowIndex}`,
+                    values: [['Đã đối chiếu']]
+                });
+            }
+        }
+
+        if (updateRequests.length > 0) {
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId,
+                requestBody: {
+                    valueInputOption: 'USER_ENTERED',
+                    data: updateRequests
+                }
+            });
+        }
+    } catch (sheetError) {
+        console.error("!!! LỖI CẬP NHẬT BACKUP USAGE SHEET:", sheetError.message);
+    }
+}
+
+// =======================================================
+// 1. DASHBOARD DATA (Đọc 100% từ Firestore)
+// =======================================================
+async function getTechnicianDashboardData({ sheets, spreadsheetId, db, email, isManager }) {
+    console.log(`[Firestore Dashboard] Đang tải dashboard cho: ${email}`);
+    const normEmail = utils.normalizeCode(email).toLowerCase();
+    
+    // Đọc core data (tên VT) từ Sheet (Nên cache)
+    // const { itemCodeMap } = await readCoreSheetData({ sheets, spreadsheetId });
+    // Tạm thời bỏ qua itemCodeMap để tập trung vào Firestore
+    const { itemCodeMap } = await getCoreSheetData({ sheets, spreadsheetId });
+
+    const byCode = {};
+
+    // A. Lấy Lịch sử Mượn/Trả từ Firestore
+    try {
+        const historySnapshot = await db.collection(HISTORY_COLLECTION)
+            .where('email', '==', normEmail)
+            .get();
+
+        historySnapshot.forEach(doc => {
+            const data = doc.data();
+            const items = data.items || [];
+
+            items.forEach(item => {
+                // === THÊM KIỂM TRA TÍNH HỢP LỆ CỦA ITEM ===
+                if (!item || typeof item !== 'object') {
+                    console.warn(`[getTechnicianDashboardData] Bỏ qua item không hợp lệ trong history document ${doc.id}:`, item);
+                    return; // Bỏ qua phần tử item này và đi tiếp
+                }
+                // === KẾT THÚC KIỂM TRA ===
+
+                const code = utils.normalizeCode(item.code);
+
+                // === THÊM KIỂM TRA CODE ===
+                 if (!code) {
+                    console.warn(`[getTechnicianDashboardData] Bỏ qua item thiếu hoặc mã không hợp lệ trong history document ${doc.id}:`, item);
+                    return; // Bỏ qua item nếu mã không hợp lệ
+                }
+                // === KẾT THÚC KIỂM TRA ===
+
+
+                if (!byCode[code]) {
+                    byCode[code] = {
+                        code,
+                        // Đảm bảo item.name cũng được kiểm tra (dù lỗi không báo ở đây)
+                        name: item.name || itemCodeMap.get(code) || code,
+                        quantity: 0, totalUsed: 0, totalReturned: 0,
+                        unreconciledUsageDetails: [], reconciledUsageDetails: []
+                    };
+                }
+                // === KIỂM TRA VÀ LẤY QUANTITY AN TOÀN ===
+                // Lấy quantity, nếu không có hoặc không phải số thì mặc định là 0
+                const itemQuantity = Number(item.quantity) || 0;
+                // === KẾT THÚC KIỂM TRA ===
+
+
+                if (data.type === 'Mượn') {
+                    byCode[code].quantity += itemQuantity; // Dùng biến đã kiểm tra
+                } else if (data.type === 'Trả' && data.status !== 'Pending') {
+                    byCode[code].totalReturned += itemQuantity; // Dùng biến đã kiểm tra
+                }
+            }); // Kết thúc items.forEach
+        }); // Kết thúc historySnapshot.forEach
+    } catch (e) { // Catch này giờ đã đúng vị trí
+         console.error("Lỗi đọc Firestore HISTORY_COLLECTION:", e);
+         throw new Error("Lỗi tải dữ liệu lịch sử.");
+    }
+
+    // B. Lấy dữ liệu Đối chiếu sổ (Usage Tickets) từ Firestore
+    try {
+        const usageSnapshot = await db.collection(USAGE_TICKETS_COLLECTION)
+            .where('email', '==', normEmail)
+            .get();
+            
+        usageSnapshot.forEach(doc => {
+            const data = doc.data();
+            const itemCode = utils.normalizeCode(data.itemCode);
+            const quantityUsed = Number(data.quantity) || 0;
+            
+            if (!itemCode || quantityUsed <= 0) return;
+
+            if (!byCode[itemCode]) {
+                byCode[itemCode] = { 
+                    code: itemCode, 
+                    name: data.itemName || itemCodeMap.get(itemCode) || itemCode, 
+                    quantity: 0, totalUsed: 0, totalReturned: 0, 
+                    unreconciledUsageDetails: [], reconciledUsageDetails: [] 
+                };
+            }
+            
+            const detail = { 
+                ticket: data.ticket, 
+                quantity: quantityUsed, 
+                note: data.note || '' 
+            };
+            
+            if (data.status === 'Chưa đối chiếu') {
+                byCode[itemCode].unreconciledUsageDetails.push(detail);
+                byCode[itemCode].totalUsed += quantityUsed;
+            } else if (data.status === 'Đã đối chiếu') {
+                byCode[itemCode].reconciledUsageDetails.push(detail);
+                byCode[itemCode].totalUsed += quantityUsed;
+            }
+        });
+    } catch (e) {
+         console.error("Lỗi đọc Firestore USAGE_TICKETS_COLLECTION:", e);
+         throw new Error("Lỗi tải dữ liệu đối chiếu.");
+    }
+    
+    // C. Tính toán và lọc
+    const items = Object.values(byCode).map(data => {
+        const remaining = (data.quantity - data.totalReturned) - data.totalUsed;
+        return { ...data, remaining };
+    }).filter(a =>
+        a.quantity > 0 ||
+        a.totalReturned > 0 ||
+        a.totalUsed > 0 ||
+        (a.unreconciledUsageDetails && a.unreconciledUsageDetails.length > 0) ||
+        (a.reconciledUsageDetails && a.reconciledUsageDetails.length > 0)
+    );
+
+    // D. Lấy Pending Notes (Logic này giữ nguyên vì đã dùng Firestore)
+    let pendingNotes = [];
+    try {
+        const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+            .where('email', '==', normEmail)
+            .where('isFulfilled', '==', false)
+            .get();
+        pendingNotes = pendingSnapshot.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error("Lỗi đọc PENDING_NOTES_COLLECTION:", e);
+    }
+
+    let pendingReturnNotes = [];
+    try {
+        const pendingReturnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
+            .where('email', '==', normEmail)
+            .where('isFulfilled', '==', false)
+            .where('status', 'not-in', ['Rejected'])
+            .get();
+        pendingReturnNotes = pendingReturnSnapshot.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error("Lỗi đọc PENDING_RETURN_NOTES_COLLECTION:", e);
+    }
+
+    return { items, pendingNotes, pendingReturnNotes };
+}
+/**
+ * Helper kiểm tra email có trong danh sách Kiểm duyệt viên không
+ */
+async function checkAuditorRole_({ sheets, spreadsheetId, email }) {
+    const normEmail = utils.normalizeCode(email);
+    const sheetName = 'Danh sách kiểm duyệt viên'; // Tên sheet mới
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${sheetName}!A:A`, // Chỉ đọc cột A
+        });
+        const auditorList = response.data.values || [];
+        return auditorList.some(row => utils.normalizeCode(row[0]) === normEmail);
+    } catch (err) {
+        // Nếu sheet không tồn tại hoặc lỗi, coi như không phải Auditor
+        console.warn(`Lỗi đọc sheet "${sheetName}":`, err.message);
+        return false;
+    }
+}
+// =======================================================
+// 2. LỊCH SỬ (Đọc 100% từ Firestore)
+// =======================================================
+
+async function getBorrowHistory({ db, email, dateStr = null, isLast5Days = false, currentPage, pageSize }) {
+    const normEmail = utils.normalizeCode(email);
+    
+    // 1. Tạo query cơ bản
+    let query = db.collection(HISTORY_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('type', '==', 'Mượn')
+        .orderBy('timestamp', 'desc');
+
+    // 2. Lọc theo ngày (nếu có)
+    if (dateStr) {
+        query = query.where('date', '==', dateStr);
+    }
+    if (isLast5Days) {
+        const fiveDaysAgo = new Date();
+        fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+        query = query.where('timestamp', '>=', fiveDaysAgo.toISOString());
+    }
+
+    // 3. Phân trang (Tạm thời bỏ qua để lấy tổng số)
+    // Cần 2 query: 1 để đếm, 1 để lấy data
+    const totalSnapshot = await query.get();
+    const totalItems = totalSnapshot.size;
+    const totalPages = Math.ceil(totalItems / pageSize);
+
+    // 4. Lấy dữ liệu trang hiện tại
+    const pageQuery = query
+        .limit(pageSize)
+        .offset((currentPage - 1) * pageSize);
+        
+    const historySnapshot = await pageQuery.get();
+
+    // 5. Chuyển đổi dữ liệu cho frontend
+    const history = historySnapshot.docs.map(doc => {
+        const data = doc.data();
+        
+        // Chuyển đổi mảng items[] thành object itemsEntered{}
+        const itemsEntered = {};
+        if (data.items) {
+            data.items.forEach(item => {
+                itemsEntered[utils.normalizeCode(item.code)] = {
+                    code: item.code,
+                    name: item.name,
+                    quantity: item.quantity
+                };
+            });
+        }
+        
+        return {
+            timestamp: data.timestamp,
+            date: data.date,
+            note: data.note,
+            status: data.status,
+            reason: data.rejectionReason || null,
+            itemsEntered: itemsEntered
+        };
+    });
+    
+    return { history, totalPages };
+}
+/**
+ * Kiểm tra vai trò Manager và Auditor cho user, tự đăng ký KTV nếu chưa có.
+ */
+async function checkUserRoles({ sheets, spreadsheetId, email, name }) {
+    const normEmail = utils.normalizeCode(email);
+    const techSheetName = 'Danh sách kỹ thuật viên';
+    let isRegisteredTechnician = false;
+
+    // 1. Kiểm tra Manager và Auditor song song
+    const [isMng, isAud] = await Promise.all([
+        checkManager({ sheets, spreadsheetId, email }),
+        checkAuditorRole_({ sheets, spreadsheetId, email })
+    ]);
+
+    // 2. Kiểm tra và tự đăng ký KTV (nếu chưa phải Manager/Auditor)
+    // Chỉ cần đăng ký nếu họ không phải là Manager hoặc Auditor?
+    // Hoặc luôn đăng ký nếu chưa có trong danh sách KTV? -> Chọn luôn đăng ký
+    try {
+        const techsResult = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${techSheetName}!A:A`,
+        });
+        const currentEmails = (techsResult.data.values || []).map(row => utils.normalizeCode(row[0]));
+        isRegisteredTechnician = currentEmails.includes(normEmail);
+
+        if (!isRegisteredTechnician) {
+            console.log(`Đăng ký KTV mới: ${email}`);
+            const newRow = [[email, name || email, new Date().toISOString()]];
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `${techSheetName}!A:C`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                resource: { values: newRow },
+            });
+        }
+    } catch (techError) {
+         console.error("Lỗi kiểm tra/đăng ký KTV:", techError.message);
+         // Vẫn tiếp tục trả về vai trò nếu lỗi đăng ký
+    }
+
+    // 3. Trả về kết quả
+    return {
+        email: email,
+        name: name,
+        isManager: isMng,
+        isAuditor: isAud // Trả về kết quả kiểm tra Auditor
+    };
+}
+async function getReturnHistory({ db, email, currentPage, pageSize }) {
+    const normEmail = utils.normalizeCode(email);
+    
+    // Tương tự getBorrowHistory, nhưng 'type' == 'Trả'
+    let query = db.collection(HISTORY_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('type', '==', 'Trả')
+        .orderBy('timestamp', 'desc');
+
+    const totalSnapshot = await query.get();
+    const totalItems = totalSnapshot.size;
+    const totalPages = Math.ceil(totalItems / pageSize);
+
+    const pageQuery = query
+        .limit(pageSize)
+        .offset((currentPage - 1) * pageSize);
+        
+    const historySnapshot = await pageQuery.get();
+
+    const history = historySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const itemsEntered = {};
+        if (data.items) {
+            data.items.forEach(item => {
+                itemsEntered[utils.normalizeCode(item.code)] = {
+                    code: item.code,
+                    name: item.name,
+                    quantity: item.quantity
+                };
+            });
+        }
+        return {
+            timestamp: data.timestamp,
+            date: data.date,
+            note: data.note,
+            status: data.status,
+            reason: data.rejectionReason || null,
+            itemsEntered: itemsEntered
+        };
+    });
+    
+    return { history, totalPages };
+}
+
+
+// =======================================================
+// 3. SUBMIT TRANSACTION (Ghi vào Firestore & Sheets)
+// =======================================================
+async function submitTransaction({ sheets, spreadsheetId, db, data }) {
+    console.log("[submitTransaction] Received data:", JSON.stringify(data, null, 2)); // Log dữ liệu đầu vào
+
+    const ts = data.timestamp ? new Date(data.timestamp).toISOString() : new Date().toISOString();
+    const batch = db.batch();
+    let transactionDoc; // Khai báo ở phạm vi rộng hơn
+
+    // --- LOGIC MƯỢN (Đã có log từ trước, giữ nguyên) ---
+    if (data.type === 'Mượn') {
+        console.log("[submitTransaction] Processing 'Mượn' transaction...");
+        const items = data.items || [];
+        const note = data.note || '';
+        const pendingNoteId = data.borrowTimestamp || '';
+        const currentTs = ts;
+
+        const isKtvSubmitNote = !pendingNoteId && data.mode !== 'DIRECT' && items.length === 0;
+        const isManagerConfirmNote = !!pendingNoteId && items.length > 0;
+        const isManagerDirect = data.mode === 'DIRECT' && items.length > 0;
+
+        console.log(`[submitTransaction Mượn] Conditions: isKtvSubmitNote=${isKtvSubmitNote}, isManagerConfirmNote=${isManagerConfirmNote}, isManagerDirect=${isManagerDirect}`);
+
+        if (isKtvSubmitNote) {
+            console.log("[submitTransaction Mượn] Branch: KTV Submit Note - Setting status: Pending"); // Log nhánh và status
+            const selfNoteId = currentTs;
+            const pendingNoteRefById = db.collection(PENDING_NOTES_COLLECTION).doc(selfNoteId);
+            batch.set(pendingNoteRefById, { timestamp: selfNoteId, type: 'Mượn', email: data.email, date: data.date, note: note, isFulfilled: false, status: 'Pending', createdAt: new Date().toISOString() });
+            const historyNoteDoc = { timestamp: selfNoteId, email: data.email, type: 'Mượn', date: data.date, note: note, items: [], status: 'Pending', pendingNoteId: selfNoteId };
+            const historyRef = db.collection(HISTORY_COLLECTION).doc(selfNoteId);
+            batch.set(historyRef, historyNoteDoc);
+            transactionDoc = historyNoteDoc;
+
+        } else if (isManagerConfirmNote) {
+            console.log("[submitTransaction Mượn] Branch: Manager Confirm Note - Setting status: Fulfilled"); // Log nhánh và status
+            const historyDocIdToUpdate = pendingNoteId;
+            const historyRefToUpdate = db.collection(HISTORY_COLLECTION).doc(historyDocIdToUpdate);
+            const pendingNoteRef = db.collection(PENDING_NOTES_COLLECTION).doc(pendingNoteId);
+            let technicianNote = '';
+            try { const pendingDocSnap = await pendingNoteRef.get(); if (pendingDocSnap.exists) { technicianNote = pendingDocSnap.data().note || ''; } } catch (e) { console.error(`Error fetching pending note ${pendingNoteId}:`, e); }
+            const finalNote = note || technicianNote;
+            const updateData = { items, status: 'Fulfilled', note: finalNote, fulfilledTimestamp: currentTs };
+            batch.update(historyRefToUpdate, updateData);
+             console.log(`[submitTransaction Mượn] Queued history update for ${historyDocIdToUpdate}`); // Log update history
+            await fulfillPendingNote_({ db, email: data.email, tsISO: pendingNoteId, batch });
+             transactionDoc = { timestamp: historyDocIdToUpdate, email: data.email, type: 'Mượn', date: data.date, note: updateData.note, items: updateData.items, status: 'Fulfilled', pendingNoteId: pendingNoteId };
+
+        } else if (isManagerDirect) {
+            console.log("[submitTransaction Mượn] Branch: Manager Direct Borrow - Setting status: Fulfilled"); // Log nhánh và status
+            const directBorrowDoc = { timestamp: currentTs, email: data.email, type: 'Mượn', date: data.date, note: note, items: items, status: 'Fulfilled', pendingNoteId: '' };
+            const historyRef = db.collection(HISTORY_COLLECTION).doc(currentTs);
+            batch.set(historyRef, directBorrowDoc);
+            transactionDoc = directBorrowDoc;
+        } else {
+             console.error("!!! [submitTransaction Mượn] LỖI LOGIC: Không khớp nhánh nào!");
+             throw new Error("Lỗi logic xử lý yêu cầu mượn.");
+        }
+
+        await batch.commit();
+        console.log("[submitTransaction Mượn] Batch committed.");
+
+        if (transactionDoc) {
+            writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc });
+        }
+
+    // --- LOGIC TRẢ (Đã thêm Log và Xóa Lỗi Lặp) ---
+    } else if (data.type === 'Trả') {
+        console.log("[submitTransaction] Processing 'Trả' transaction...");
+        const tickets = data.tickets || [];
+        const itemsR = data.items || [];
+        const note = data.note || '';
+        const currentTs = ts;
+
+        // XÁC ĐỊNH LOGIC MỚI
+        const isKtvReconcile = tickets.length > 0;
+        const isManagerDirectReturn = data.mode === 'MANAGER_DIRECT' && itemsR.length > 0; // QL Trả Trực tiếp
+        const isManagerConfirmNote = !!data.returnTimestamp && itemsR.length > 0; // QL Duyệt Note
+        // KTV Gửi Note (Nếu không phải 3 trường hợp kia)
+        const isKtvSubmitPendingReturn = !isKtvReconcile && !isManagerConfirmNote && !isManagerDirectReturn && (itemsR.length > 0 || !!note);
+
+        console.log(`[submitTransaction Trả] Conditions: KtvReconcile=${isKtvReconcile}, MngConfirmNote=${isManagerConfirmNote}, KtvSubmitPending=${isKtvSubmitPendingReturn}, MngDirectReturn=${isManagerDirectReturn}`);
+
+        if (isKtvSubmitPendingReturn) {
+            // 1. KTV Gửi (Tạo Pending)
+            console.log("[submitTransaction Trả] Branch: KTV Submit Pending Return - Setting status: Pending");
+            const selfNoteId = currentTs;
+            // KTV gửi 'quantityReturned', backend lưu 'quantity'
+            const historyItems = (itemsR || []).map(it => ({ code: it.code, name: it.name, quantity: it.quantityReturned || it.quantity || 0 }));
+            
+            const pendingNoteRef = db.collection(PENDING_RETURN_NOTES_COLLECTION).doc(selfNoteId);
+            batch.set(pendingNoteRef, { timestamp: selfNoteId, type: 'Trả', email: data.email, date: data.date, note: note, items: historyItems, isFulfilled: false, status: 'Pending', createdAt: new Date().toISOString() });
+            
+            transactionDoc = { timestamp: selfNoteId, email: data.email, type: 'Trả', date: data.date, note: note, items: historyItems, status: 'Pending', pendingNoteId: selfNoteId };
+            const historyRef = db.collection(HISTORY_COLLECTION).doc(selfNoteId);
+            batch.set(historyRef, transactionDoc);
+            
+            await batch.commit();
+
+        } else if (isKtvReconcile) {
+            // 2. KTV Đối chiếu (ĐÃ SỬA LỖI CHIA LÔ > 30)
+            console.log("[submitTransaction Trả] Branch: KTV Reconcile");
+            const normEmail = utils.normalizeCode(data.email);
+            const allTicketsToUpdate = (tickets || []).map(t => (t || '').toString().trim());
+            
+            // Chia danh sách vé thành các lô 30 (giới hạn của Firestore)
+            const CHUNK_SIZE = 30;
+            const ticketChunks = chunkArray(allTicketsToUpdate, CHUNK_SIZE);
+            
+            let totalUpdated = 0;
+
+            console.log(`[KTV Reconcile] Tổng ${allTicketsToUpdate.length} vé, chia thành ${ticketChunks.length} lô.`);
+
+            // Xử lý từng lô
+            for (const ticketChunk of ticketChunks) {
+                console.log(`[KTV Reconcile] Đang xử lý lô ${ticketChunk.length} vé...`);
+                
+                // Tạo một batch MỚI cho mỗi lô
+                const chunkBatch = db.batch(); 
+                
+                // Truy vấn chỉ cho lô này (an toàn <= 30)
+                const usageQuery = await db.collection(USAGE_TICKETS_COLLECTION)
+                    .where('email', '==', normEmail)
+                    .where('ticket', 'in', ticketChunk) // <-- An toàn
+                    .where('status', '==', 'Chưa đối chiếu')
+                    .get();
+
+                if (!usageQuery.empty) {
+                    usageQuery.forEach(doc => {
+                        chunkBatch.update(doc.ref, { status: 'Đã đối chiếu' });
+                    });
+                    
+                    // Commit batch của lô này
+                    await chunkBatch.commit(); 
+                    totalUpdated += usageQuery.size;
+                }
+            } // Kết thúc vòng lặp
+
+            if (totalUpdated === 0) {
+                throw new Error("Không tìm thấy số sổ nào hợp lệ để đối chiếu.");
+            }
+
+            // Ghi backup vào Sheet (chỉ gọi 1 lần với TẤT CẢ vé)
+            updateUsageTicketStatusInSheet_({ sheets, spreadsheetId, tickets: allTicketsToUpdate, email: normEmail });
+            
+            // Trả về tổng số vé đã cập nhật
+            return { ok: true, updated: totalUpdated }; // Kết thúc sớm
+
+        } else if (isManagerConfirmNote) {
+            // 3. QL Duyệt note (Tạo Fulfilled, Cập nhật)
+            console.log("[submitTransaction Trả] Branch: Manager Confirm Note - Setting status: Fulfilled");
+            const historyDocIdToUpdate = data.returnTimestamp;
+            const historyRefToUpdate = db.collection(HISTORY_COLLECTION).doc(historyDocIdToUpdate);
+            const pendingNoteRef = db.collection(PENDING_RETURN_NOTES_COLLECTION).doc(historyDocIdToUpdate);
+
+            let technicianNote = '';
+            try {
+                const pendingDocSnap = await pendingNoteRef.get();
+                if (pendingDocSnap.exists) technicianNote = pendingDocSnap.data().note || '';
+            } catch (e) { console.error(`Error fetching pending return note ${historyDocIdToUpdate}:`, e); }
+
+            const finalNote = note || technicianNote; // Note của KTV (vì QL không nhập note lúc duyệt)
+            // QL duyệt 'quantityReturned', backend lưu 'quantity'
+            const updateItems = itemsR.map(it => ({ code: it.code, name: it.name, quantity: it.quantityReturned || it.quantity || 0 }));
+            
+            const updateData = { items: updateItems, status: 'Fulfilled', note: finalNote, fulfilledTimestamp: currentTs };
+            batch.update(historyRefToUpdate, updateData);
+
+            await fulfillPendingReturnNote_({ db, email: data.email, tsISO: historyDocIdToUpdate, batch });
+
+            transactionDoc = { timestamp: historyDocIdToUpdate, email: data.email, type: 'Trả', date: data.date, note: updateData.note, items: updateData.items, status: 'Fulfilled', pendingNoteId: historyDocIdToUpdate };
+            await batch.commit();
+
+        } else if (isManagerDirectReturn) {
+            // 4. QL TRẢ TRỰC TIẾP (Tạo Fulfilled, Mới)
+            console.log("[submitTransaction Trả] Branch: Manager Direct Return - Setting status: Fulfilled");
+            // QL trả trực tiếp 'quantityReturned', backend lưu 'quantity'
+            const historyItems = (itemsR || []).map(it => ({ code: it.code, name: it.name, quantity: it.quantityReturned || it.quantity || 0 }));
+            
+            transactionDoc = { 
+                timestamp: currentTs, 
+                email: data.email, 
+                type: 'Trả', 
+                date: data.date,
+                note: note, 
+                items: historyItems, 
+                status: 'Fulfilled',
+                pendingNoteId: ''
+            };
+            const historyRef = db.collection(HISTORY_COLLECTION).doc(currentTs);
+            batch.set(historyRef, transactionDoc);
+            await batch.commit();
+            
+        } else {
+             console.error("!!! [submitTransaction Trả] LỖI LOGIC: Không khớp với nhánh nào!");
+        }
+
+        if (transactionDoc) {
+            writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc });
+        }
+
+    } else {
+        console.error("!!! [submitTransaction] LỖI: Loại giao dịch không hợp lệ:", data.type);
+         throw new Error("Loại giao dịch không hợp lệ.");
+    }
+
+    return true; // Return mặc định
+}
+
+// =======================================================
+// 4. XỬ LÝ EXCEL (Ghi vào Firestore & Sheets)
+// =======================================================
+// File: functions/data-processor.js
+// THAY THẾ TOÀN BỘ HÀM CŨ BẰNG HÀM NÀY:
+
+/**
+ * Lưu dữ liệu Excel đã xử lý vào sheet 'Đối chiếu sổ 3 liên', xử lý trùng lặp.
+ * (ĐÃ SỬA LỖI BATCH > 500)
+ */
+async function saveExcelData({ sheets, spreadsheetId, db, data }) {
+    if (!data || data.length === 0) {
+        throw new Error('Không có dữ liệu hợp lệ để lưu.');
+    }
+
+    let totalNew = 0;
+    let totalUpdated = 0;
+    const batchSize = 450; // Giữ an toàn (giới hạn là 500)
+
+    // 1. Chia dữ liệu Excel thành các lô 450
+    const dataChunks = chunkArray(data, batchSize);
+
+    // 2. Xử lý từng lô một
+    for (const chunk of dataChunks) {
+        let newCount = 0;
+        let updateCount = 0;
+        const batch = db.batch();
+        const promises = [];
+        
+        // 3. Đọc dữ liệu (Query) cho lô hiện tại
+        chunk.forEach(r => {
+            const ticket = r.ticket || '';
+            const itemCode = utils.normalizeCode(r.itemCode || '');
+            if (ticket && itemCode) {
+                promises.push(
+                    db.collection(USAGE_TICKETS_COLLECTION)
+                        .where('ticket', '==', ticket)
+                        .where('itemCode', '==', itemCode)
+                        .limit(1)
+                        .get()
+                );
+            }
+        });
+
+        const snapshots = await Promise.all(promises);
+
+        // 4. Chuẩn bị batch ghi (set/update) cho lô hiện tại
+        snapshots.forEach((snapshot, index) => {
+            const r = chunk[index]; // Dữ liệu Excel của lô này
+            const docData = {
+                date: r.date || '',
+                itemCode: utils.normalizeCode(r.itemCode || ''),
+                itemName: r.itemName || '',
+                ticket: r.ticket || '',
+                quantity: Number(r.quantity) || 0,
+                email: r.email || '',
+                note: r.note || '',
+                status: 'Chưa đối chiếu'
+            };
+
+            if (snapshot.empty) {
+                // Thêm mới
+                const newRef = db.collection(USAGE_TICKETS_COLLECTION).doc();
+                batch.set(newRef, docData);
+                newCount++;
+            } else {
+                // Cập nhật
+                const existingDoc = snapshot.docs[0];
+                if (existingDoc.data().status === 'Chưa đối chiếu') {
+                    batch.update(existingDoc.ref, docData);
+                    updateCount++;
+                }
+            }
+        });
+
+        // 5. Commit batch ghi cho lô hiện tại
+        if (newCount > 0 || updateCount > 0) {
+            await batch.commit();
+        }
+
+        // 6. Ghi backup vào Google Sheets (Async)
+        const newDataToBackup = chunk.filter((r, index) => snapshots[index].empty);
+        if (newDataToBackup.length > 0) {
+            writeUsageTicketsToSheet_({ sheets, spreadsheetId, data: newDataToBackup });
+        }
+        
+        totalNew += newCount;
+        totalUpdated += updateCount;
+    } // Hết vòng lặp (chuyển sang lô tiếp theo)
+
+    return { ok: true, message: `Lưu thành công. Thêm mới ${totalNew} dòng, cập nhật ${totalUpdated} dòng.` };
+}
+
+
+// =======================================================
+// 5. CÁC HÀM QUẢN LÝ (Helper)
+// =======================================================
+
+/**
+ * Đánh dấu Pending BORROW Note là Fulfilled
+ */
+async function fulfillPendingNote_({ db, email, tsISO, batch }) {
+    const normEmail = utils.normalizeCode(email);
+
+    // Sửa: Tìm document trong pending_notes bằng ID (chính là tsISO)
+    const docRef = db.collection(PENDING_NOTES_COLLECTION).doc(tsISO);
+
+    // Lấy doc để kiểm tra có tồn tại và chưa fulfilled không (tránh ghi đè lỗi)
+    const docSnap = await docRef.get(); // Cần await ở đây vì dùng get() ngoài batch
+
+    if (docSnap.exists && docSnap.data().isFulfilled === false && docSnap.data().email === normEmail) {
+        // Nếu tồn tại, đúng email, và chưa fulfilled -> Cập nhật bằng batch
+        batch.update(docRef, {
+            isFulfilled: true,
+            status: 'Fulfilled', // Đặt trạng thái là Fulfilled
+            fulfilledAt: new Date().toISOString()
+        });
+        console.log(`[fulfillPendingNote_] Queued update for pending note: ${tsISO}`);
+    } else if (!docSnap.exists) {
+         console.warn(`[fulfillPendingNote_] Pending note with ID ${tsISO} not found.`);
+    } else if (docSnap.data().isFulfilled === true) {
+         console.warn(`[fulfillPendingNote_] Pending note ${tsISO} was already fulfilled.`);
+    } else if (docSnap.data().email !== normEmail) {
+         console.warn(`[fulfillPendingNote_] Email mismatch for pending note ${tsISO}. Expected ${normEmail}, found ${docSnap.data().email}`);
+    }
+}
+
+/**
+ * Đánh dấu Pending RETURN Note là Fulfilled
+ */
+async function fulfillPendingReturnNote_({ db, email, tsISO, batch }) {
+    const normEmail = utils.normalizeCode(email);
+    const docRef = db.collection(PENDING_RETURN_NOTES_COLLECTION).doc(tsISO);
+
+    // Vẫn cần đọc trước batch để kiểm tra
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists && docSnap.data().isFulfilled === false && docSnap.data().email === normEmail) {
+        batch.update(docRef, {
+            isFulfilled: true,
+            status: 'Fulfilled',
+            fulfilledAt: new Date().toISOString()
+        });
+        console.log(`[fulfillPendingReturnNote_] Queued update for pending return note: ${tsISO} to Fulfilled.`); // Log hành động
+    } else {
+         if (!docSnap.exists) { console.warn(`[fulfillPendingReturnNote_] Not updating: Pending return note ${tsISO} not found.`); }
+         else if (docSnap.data().isFulfilled === true) { console.warn(`[fulfillPendingReturnNote_] Not updating: Pending return note ${tsISO} already fulfilled.`); }
+         else if (docSnap.data().email !== normEmail) { console.warn(`[fulfillPendingReturnNote_] Not updating: Email mismatch for pending return note ${tsISO}.`); }
+         else { console.warn(`[fulfillPendingReturnNote_] Not updating note ${tsISO} for unknown reason.`); } // Log trường hợp khác
+    }
+}
+
+/**
+ * Từ chối Pending BORROW Note (VÀ cập nhật history)
+ */
+async function rejectPendingBorrowNote_({ db, email, tsISO, reason }) {
+    const normEmail = utils.normalizeCode(email);
+    const batch = db.batch();
+
+    // 1. Cập nhật PENDING_NOTES_COLLECTION
+    const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('timestamp', '==', tsISO)
+        .where('isFulfilled', '==', false)
+        .limit(1)
+        .get();
+
+    if (pendingSnapshot.empty) {
+         throw new Error('Không tìm thấy note mượn hàng đang chờ.');
+    }
+    
+    const pendingDocRef = pendingSnapshot.docs[0].ref;
+    batch.update(pendingDocRef, {
+        isFulfilled: true,
+        status: 'Rejected',
+        rejectionReason: reason,
+        fulfilledAt: new Date().toISOString()
+    });
+
+    // 2. Cập nhật HISTORY_COLLECTION
+    const historySnapshot = await db.collection(HISTORY_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('timestamp', '==', tsISO) // Hoặc dùng pendingNoteId
+        .limit(1)
+        .get();
+        
+    if (!historySnapshot.empty) {
+        const historyDocRef = historySnapshot.docs[0].ref;
+        batch.update(historyDocRef, {
+            status: 'Rejected',
+            rejectionReason: reason
+        });
+    }
+    
+    await batch.commit();
+    return true;
+}
+
+/**
+ * Từ chối Pending RETURN Note (VÀ cập nhật history)
+ */
+async function rejectPendingReturnNote_({ db, email, tsISO, reason }) {
+    const normEmail = utils.normalizeCode(email);
+    const batch = db.batch();
+
+    // 1. Cập nhật PENDING_RETURN_NOTES_COLLECTION
+    const pendingSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('timestamp', '==', tsISO)
+        .where('isFulfilled', '==', false)
+        .limit(1)
+        .get();
+
+    if (pendingSnapshot.empty) {
+         throw new Error('Không tìm thấy note trả hàng đang chờ.');
+    }
+    
+    const pendingDocRef = pendingSnapshot.docs[0].ref;
+    batch.update(pendingDocRef, {
+        isFulfilled: true,
+        status: 'Rejected',
+        rejectionReason: reason,
+        fulfilledAt: new Date().toISOString()
+    });
+
+    // 2. Cập nhật HISTORY_COLLECTION
+    const historySnapshot = await db.collection(HISTORY_COLLECTION)
+        .where('email', '==', normEmail)
+        .where('timestamp', '==', tsISO)
+        .limit(1)
+        .get();
+        
+    if (!historySnapshot.empty) {
+        const historyDocRef = historySnapshot.docs[0].ref;
+        batch.update(historyDocRef, {
+            status: 'Rejected',
+            rejectionReason: reason
+        });
+    }
+    
+    await batch.commit();
+    return true;
+}
+
+// =======================================================
+// 6. CÁC HÀM CÒN LẠI (Ít thay đổi)
+// =======================================================
+
+// Đọc từ Sheet (Vì ít thay đổi)
 async function getTechnicians({ sheets, spreadsheetId }) {
     const sheetName = 'Danh sách kỹ thuật viên';
     const result = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `${sheetName}!A2:B`,
     });
-    
     return (result.data.values || [])
         .filter(row => row[0])
         .map(row => ({
@@ -187,13 +1006,13 @@ async function getTechnicians({ sheets, spreadsheetId }) {
         }));
 }
 
+// Đọc từ Sheet (Vì ít thay đổi)
 async function getItemList({ sheets, spreadsheetId }) {
     const sheetName = 'Danh sách vật tư';
     const result = await sheets.spreadsheets.values.get({
         spreadsheetId,
         range: `${sheetName}!A2:B`,
     });
-    
     return (result.data.values || [])
         .filter(row => row[0])
         .map(row => ({
@@ -202,743 +1021,87 @@ async function getItemList({ sheets, spreadsheetId }) {
         }));
 }
 
-// =======================================================
-// 4. QUẢN LÝ DẢI SỔ (Ticket Ranges)
-// =======================================================
-
-// Lấy dải số sổ cho KTV cụ thể
+// Đọc từ Sheet
 async function getTicketRanges({ sheets, spreadsheetId, email }) {
-    const { ticketRangesMap } = await readAllSheetsData({ sheets, spreadsheetId, email });
+    const { ticketRangesMap } = await getCoreSheetData({ sheets, spreadsheetId });
     const normEmail = utils.normalizeCode(email);
     
-    // Tái tạo logic lọc và gộp dải số như Apps Script cũ
-    const filteredRanges = ticketRangesMap
+    return ticketRangesMap
         .filter(r => r.email === normEmail)
         .map(r => ({ start: r.start, end: r.end }))
         .sort((a, b) => a.start - b.start);
-        
-    // Logic gộp dải số (Merging Logic - Tái tạo từ Apps Script)
-    const merged = [];
-    for (const range of filteredRanges) {
-        if (!merged.length || range.start > merged[merged.length - 1].end + 1) {
-            merged.push({ start: range.start, end: range.end });
-        } else {
-            merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, range.end);
-        }
-    }
-    return merged;
 }
 
-// Lưu/Cập nhật dải số sổ
+// Ghi vào Sheet (Phức tạp, giữ nguyên)
+// File: functions/data-processor.js
+// THAY THẾ TOÀN BỘ HÀM CŨ BẰNG HÀM NÀY:
+
 async function saveTicketRanges({ sheets, spreadsheetId, email, ranges }) {
-    // NOTE: Trong môi trường Node.js, đây là logic phức tạp nhất
-    // vì Sheets API không có hàm xóa dòng theo điều kiện đơn giản.
-    
-    // GIẢ ĐỊNH: Ta sẽ đọc, tìm vị trí dòng, và sử dụng Sheets.BatchUpdate để xóa dòng, sau đó Append.
+    const sheetName = 'TicketRanges'; // Tên Sheet
+    const normEmail = utils.normalizeCode(email);
+    const newTimestamp = new Date().toISOString();
 
-    // Bước 1: (CẦN CODE THỰC THI) Xóa toàn bộ dải số cũ của KTV này
-    // ... (Thực hiện Sheets.BatchUpdate deleteDimension request) ...
-    
-    // Bước 2: Ghi các dải số mới
-    if (ranges && ranges.length > 0) {
-        const rows = ranges.map(r => [email, r.start, r.end, new Date().toISOString(), new Date().toISOString()]);
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'TicketRanges!A:E', 
-            valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
-            resource: { values: rows },
-        });
-    }
-    return true;
-}
-
-
-// =======================================================
-// 1. DASHBOARD DATA (getTechnicianDashboardData)
-// =======================================================
-async function getTechnicianDashboardData({ sheets, spreadsheetId, db, email, isManager }) {
-    console.log(`[DEBUG Dashboard ${email}] Function CALLED.`);
-    const normEmail = utils.normalizeCode(email).toLowerCase();
-    
-    // START DEBUG LOG: Ghi lại email đang được sử dụng để truy vấn
-    console.log(`[DEBUG] Querying Firestore for email: ${normEmail}`);
-    
-    // Đọc tất cả các Sheets cần thiết (KHÔNG BAO GỒM PendingBorrowNotes SHEET)
-    const { itemCodeMap, history, comparisonData, ticketRangesMap } = await readAllSheetsData({ sheets, spreadsheetId, email: normEmail });
-
-    // <<< LOG 1: Dữ liệu sử dụng thô đọc được >>>
-    console.log(`[DEBUG Dashboard ${normEmail}] Raw Comparison Data:`, JSON.stringify(comparisonData, null, 2));
-
-    // A. Xử lý logic Mượn/Trả cơ bản (Tái tạo getBorrowedItems)
-    const byCode = {};
-    const totalReconciledUsed = {}; 
-    
-    // Lọc và tính toán từ History
-    history.forEach(row => {
-        const rowEmail = utils.normalizeCode(row[2]);
-        if (normEmail && rowEmail !== normEmail) return;
-
-        const type = (row[1] || '').toString().trim();
-        const code = utils.normalizeCode(row[4] || '');
-        const qty = Number(row[6]) || 0;
-        
-        if (!code) return;
-
-        if (!byCode[code]) {
-            byCode[code] = { code, name: itemCodeMap.get(code) || '', quantity: 0, totalUsed: 0, totalReturned: 0, unreconciledUsageDetails: [], reconciledUsageDetails: [] };
-        }
-        
-        if (type === 'Mượn') {
-            byCode[code].quantity += qty;
-        } else if (type === 'Trả') {
-            byCode[code].totalReturned += qty;
-        }
-    });
-
-    // B. Xử lý dữ liệu Đối chiếu (comparisonData)
-    comparisonData.forEach(row => {
-        const itemCode = utils.normalizeCode(row[1] || ''); // Mã VT
-        const ticket = row[3] || ''; // Số sổ
-        const quantityUsed = Number(row[4]) || 0; // SL sử dụng
-        const status = row[7] || 'Chưa đối chiếu'; // Trạng thái
-        const note = row[6] || ''; // Ghi chú
-
-        if (!itemCode || quantityUsed <= 0 || !ticket) return;
-
-        // Đảm bảo có mục này trong byCode (tạo nếu chưa có)
-        if (!byCode[itemCode]) {
-            // Nếu vật tư này không có trong lịch sử Mượn/Trả, tạm thời tạo với quantity=0
-             byCode[itemCode] = { name: itemCodeMap.get(itemCode) || row[2], quantity: 0, totalUsed: 0, unreconciledUsageDetails: [], reconciledUsageDetails: [] };
-             console.log(`[DEBUG Dashboard ${normEmail}] Initialized byCode for ${itemCode} from comparison data.`); // Log thêm
-        }
-
-        // Phân loại vào unreconciled hoặc reconciled
-        const detail = { ticket, quantity: quantityUsed, note };
-        if (status === 'Chưa đối chiếu') {
-            byCode[itemCode].unreconciledUsageDetails.push(detail);
-            byCode[itemCode].totalUsed += quantityUsed; // Cộng vào tổng sử dụng
-        } else if (status === 'Đã đối chiếu') {
-            byCode[itemCode].reconciledUsageDetails.push(detail);
-            // ĐÃ ĐỐI CHIẾU VẪN PHẢI CỘNG VÀO totalUsed ĐỂ KHẤU TRỪ ĐÚNG
-            byCode[itemCode].totalUsed += quantityUsed;
-        }
-    });
-
-    // <<< LOG 2: Dữ liệu sau khi tổng hợp sử dụng >>>
-    console.log(`[DEBUG Dashboard ${normEmail}] Aggregated byCode Data (after comparison):`, JSON.stringify(byCode, null, 2));
-
-    // C. Kết hợp và tính toán
-    const items = Object.keys(byCode).map(code => {
-        const data = byCode[code];
-        const remaining = data.quantity - data.totalUsed; // Số lượng còn lại
-        return {
-            code: code,
-            name: data.name,
-            quantity: data.quantity, // Tổng mượn còn nợ
-            totalUsed: data.totalUsed, // Tổng đã dùng (cả đối chiếu và chưa)
-            remaining: remaining, // Số cần trả về kho
-            unreconciledUsageDetails: data.unreconciledUsageDetails,
-            reconciledUsageDetails: data.reconciledUsageDetails
-        };
-    }).filter(a =>
-        a.quantity > 0 ||                 // 1. Vẫn còn nợ
-        (a.unreconciledUsageDetails && a.unreconciledUsageDetails.length > 0) || // 2. Vẫn còn sổ CHƯA đối chiếu (Sửa lại logic filter)
-        (a.reconciledUsageDetails && a.reconciledUsageDetails.length > 0) // 3. HOẶC có lịch sử ĐÃ đối chiếu
-    );
-
-    // <<< LOG 3: Dữ liệu cuối cùng trả về client >>>
-    console.log(`[DEBUG Dashboard ${normEmail}] Final items data:`, JSON.stringify(items, null, 2));
-    /// D. Xử lý Pending Notes (Truy vấn FIRESTORE)
-    let pendingNotes = []; // Khởi tạo mảng rỗng ở đây
-    try { // Thêm try...catch cho Firestore query
-        //const db = getDb();
-        console.log(`[DEBUG Dashboard ${normEmail}] Querying Firestore PENDING_NOTES...`); // Log trước query
-
-        // D.1. Lấy Pending Borrow Notes
-        const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
-            .where('email', '==', normEmail)
-            .where('isFulfilled', '==', false)
-            // .orderBy('createdAt', 'desc') // Giữ comment nếu index chưa hoạt động
-            .get();
-
-        // Log kết quả snapshot
-        console.log(`[DEBUG Dashboard ${normEmail}] Firestore PENDING_NOTES snapshot size: ${pendingSnapshot.size}`);
-
-        // Kiểm tra snapshot.docs trước khi map
-        if (pendingSnapshot && pendingSnapshot.docs) {
-            const pendingNotesRaw = pendingSnapshot.docs.map(doc => {
-                return doc.data();
-            });
-
-            // Log dữ liệu raw
-            console.log(`[DEBUG Dashboard ${normEmail}] Firestore PENDING_NOTES Raw Data:`, JSON.stringify(pendingNotesRaw, null, 2));
-
-            // Đảm bảo pendingNotesRaw là mảng trước khi forEach
-            if (Array.isArray(pendingNotesRaw)) {
-                // Xử lý dữ liệu raw thành định dạng cần thiết
-                pendingNotes = pendingNotesRaw.map(data => { // Dùng map thay vì forEach để tạo mảng mới
-                    return {
-                        timestamp: data.timestamp, // Giữ nguyên để khớp với client
-                        note: data.note,
-                        date: data.date,
-                        // Không cần thêm status/reason ở đây vì client không dùng
-                    };
-                });
-                 console.log(`[DEBUG Dashboard ${normEmail}] Processed pendingNotes:`, JSON.stringify(pendingNotes, null, 2));
-            } else {
-                console.error(`[!!ERROR!! Dashboard ${normEmail}] pendingNotesRaw is not an array!`, pendingNotesRaw);
-                pendingNotes = []; // Reset thành mảng rỗng nếu có lỗi
-            }
-        } else {
-             console.warn(`[WARN Dashboard ${normEmail}] Firestore PENDING_NOTES snapshot.docs is invalid.`);
-             pendingNotes = []; // Reset thành mảng rỗng
-        }
-
-    } catch (firestoreError) {
-         console.error(`[!!ERROR!! Dashboard ${normEmail}] Error querying Firestore PENDING_NOTES:`, firestoreError);
-         pendingNotes = []; // Reset thành mảng rỗng nếu có lỗi
-    }
-
-
-    // D.2. LẤY PENDING RETURN NOTES (Tương tự, đảm bảo có try...catch và kiểm tra)
-    let pendingReturnNotes = [];
     try {
-        //const db = getDb(); // Lấy lại db nếu cần
-        console.log(`[DEBUG Dashboard ${normEmail}] Querying Firestore PENDING_RETURN_NOTES...`);
-
-        const pendingReturnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
-            .where('email', '==', normEmail)
-            .where('isFulfilled', '==', false)
-            .where('status', 'not-in', ['Rejected']) // Giữ lại not-in
-            .get();
-
-         console.log(`[DEBUG Dashboard ${normEmail}] Firestore PENDING_RETURN_NOTES snapshot size: ${pendingReturnSnapshot.size}`);
-
-         if (pendingReturnSnapshot && pendingReturnSnapshot.docs) {
-            const pendingReturnNotesRaw = pendingReturnSnapshot.docs.map(doc => {
-                return doc.data();
-            });
-
-            console.log(`[DEBUG Dashboard ${normEmail}] Firestore PENDING_RETURN_NOTES Raw Data:`, JSON.stringify(pendingReturnNotesRaw, null, 2));
-
-            if (Array.isArray(pendingReturnNotesRaw)) {
-                pendingReturnNotes = pendingReturnNotesRaw.map(data => {
-                    return {
-                        timestamp: data.timestamp,
-                        note: data.note,
-                        date: data.date,
-                    };
-                });
-                 console.log(`[DEBUG Dashboard ${normEmail}] Processed pendingReturnNotes:`, JSON.stringify(pendingReturnNotes, null, 2));
-            } else {
-                 console.error(`[!!ERROR!! Dashboard ${normEmail}] pendingReturnNotesRaw is not an array!`, pendingReturnNotesRaw);
-                 pendingReturnNotes = [];
-            }
-         } else {
-              console.warn(`[WARN Dashboard ${normEmail}] Firestore PENDING_RETURN_NOTES snapshot.docs is invalid.`);
-              pendingReturnNotes = [];
-         }
-
-    } catch (firestoreError) {
-         console.error(`[!!ERROR!! Dashboard ${normEmail}] Error querying Firestore PENDING_RETURN_NOTES:`, firestoreError);
-         pendingReturnNotes = [];
-    }
-
-    // Trả về kết quả cuối cùng
-    return {
-        items: items,
-        pendingNotes: pendingNotes, // Luôn là một mảng
-        pendingReturnNotes: pendingReturnNotes, // Luôn là một mảng
-    };
-}
-
-
-// =======================================================
-// 2. LỊCH SỬ (getBorrowHistory)
-// =======================================================
-// File: data-processor.js (REPLACE this function)
-
-// File: data-processor.js (THAY THẾ HÀM NÀY)
-
-async function getBorrowHistory({ sheets, spreadsheetId, db, email, dateStr = null, isLast5Days = false, currentPage, pageSize }) {
-    const { itemCodeMap, history } = await readAllSheetsData({ sheets, spreadsheetId, email });
-    const normEmail = utils.normalizeCode(email);
-
-    // 1. Lấy trạng thái từ Firestore (Logic được làm rõ hơn)
-    const statusMap = new Map();
-    const snapshot = await db.collection(PENDING_NOTES_COLLECTION) // Đọc collection note MƯỢN
-        .where('email', '==', normEmail)
-        .get();
-
-    snapshot.forEach(doc => {
-        const data = doc.data();
-        const timestamp = data.timestamp; // Key là timestamp của note
-        if (!timestamp) return; // Bỏ qua nếu không có timestamp
-
-        if (data.status === 'Rejected') {
-            statusMap.set(timestamp, { status: 'Rejected', reason: data.rejectionReason || 'Không rõ' });
-        } else if (data.isFulfilled === false) { // Nếu chưa fulfilled và không phải Rejected -> là Pending
-            statusMap.set(timestamp, { status: 'Pending' });
-        } else { // isFulfilled === true
-             // Nếu đã fulfilled mà không có trạng thái đặc biệt, coi là Fulfilled
-             // Chỉ gán nếu chưa có trạng thái khác (Pending/Rejected) được gán trước đó
-             if (!statusMap.has(timestamp)) {
-                statusMap.set(timestamp, { status: 'Fulfilled' });
-             }
-        }
-    });
-
-    // --- Phần xử lý dữ liệu từ Google Sheet ---
-    const now = new Date();
-    const fiveDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
-    const buckets = {}; // Dùng để gom nhóm các dòng lịch sử liên quan đến cùng một note/giao dịch
-    const reversedHistory = history.reverse(); // Đảo ngược để xử lý từ mới đến cũ
-
-    reversedHistory.forEach(row => {
-        const ts = row[0]; // Timestamp từ Sheet
-        const type = row[1] || '';
-        const eml = utils.normalizeCode(row[2]);
-        const ngay = row[3] || '';
-        const code = utils.normalizeCode(row[4] || '');
-        const qty = Number(row[6]) || 0;
-        const note = row[7] || '';
-        const pendingNoteId = row[9] || ''; // ID liên kết đến note trong Firestore (quan trọng)
-
-        // Chỉ lấy giao dịch 'Mượn' của đúng KTV
-        if (type !== 'Mượn') return;
-        if (normEmail && eml !== normEmail) return;
-
-        const tsDate = (ts instanceof Date) ? ts : new Date(ts);
-        if (isNaN(tsDate.getTime())) return;
-
-        // Lọc theo ngày (nếu có)
-        if (dateStr && ngay !== dateStr) return;
-        if (isLast5Days) {
-            const rowDay = new Date(tsDate.getFullYear(), tsDate.getMonth(), tsDate.getDate());
-            if (rowDay < fiveDaysAgo) return;
-        }
-
-        // Key để gom nhóm: Ưu tiên ID note, nếu không có thì dùng timestamp của giao dịch
-        const key = pendingNoteId || tsDate.toISOString();
-
-        // Lấy trạng thái từ Map DỰA VÀO pendingNoteId (nếu có)
-        // Chỉ những dòng có pendingNoteId mới có thể có trạng thái Pending/Rejected
-        const statusInfo = pendingNoteId ? statusMap.get(pendingNoteId) : null;
-
-        // Nếu chưa có bucket cho key này, tạo mới
-        if (!buckets[key]) {
-             buckets[key] = {
-                 timestamp: tsDate.toISOString(), // Giữ timestamp gốc của giao dịch
-                 date: ngay,
-                 note: note, // Ghi chú từ dòng đầu tiên tìm thấy
-                 itemsEntered: {}, // Danh sách vật tư
-                 // Gán status nếu tìm thấy thông tin từ Firestore.
-                 // Nếu không có ID note (giao dịch trực tiếp), mặc định là Fulfilled.
-                 // Nếu có ID note mà không tìm thấy statusInfo (lỗi?), tạm để là null.
-                 status: statusInfo ? statusInfo.status : (pendingNoteId ? null : 'Fulfilled'),
-                 reason: statusInfo ? statusInfo.reason : null
-             };
-        } else {
-             // Nếu bucket đã tồn tại, cập nhật nếu cần
-             // Ưu tiên giữ lại note dài nhất (thường là note gốc KTV gửi)
-             if (note && (!buckets[key].note || note.length > buckets[key].note.length)) {
-                buckets[key].note = note;
-             }
-             // Cập nhật trạng thái nếu trước đó chưa tìm thấy
-             if (statusInfo && !buckets[key].status) {
-                 buckets[key].status = statusInfo.status;
-                 buckets[key].reason = statusInfo.reason;
-             }
-        }
-
-        // Thêm vật tư vào bucket (chỉ khi có mã và số lượng)
-        if (code && qty > 0) {
-            const m = buckets[key].itemsEntered;
-            if (!m[code]) m[code] = { code: code, name: itemCodeMap.get(code) || row[5], quantity: 0 };
-            m[code].quantity += qty;
-        }
-    });
-
-    // Chuyển buckets thành mảng và lọc
-    const arr = Object.keys(buckets).map(k => buckets[k]);
-    // Giữ lại: Pending/Rejected HOẶC (Fulfilled VÀ có vật tư hoặc có note gốc)
-    const finalArr = arr.filter(b => (b.status !== 'Fulfilled') || (b.status === 'Fulfilled' && (Object.keys(b.itemsEntered).length > 0 || b.note)));
-
-    // Sắp xếp lại theo thời gian giảm dần (mới nhất lên trước)
-    finalArr.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    // Xử lý phân trang
-    const totalItems = finalArr.length;
-    const totalPages = Math.ceil(totalItems / pageSize);
-    const start = (currentPage - 1) * pageSize;
-    const historyPage = finalArr.slice(start, start + pageSize);
-
-    return { history: historyPage, totalPages: totalPages };
-}
-
-
-async function getReturnHistory({ sheets, spreadsheetId, db, email, currentPage, pageSize }) {
-    const { itemCodeMap, history } = await readAllSheetsData({ sheets, spreadsheetId, email });
-    const normEmail = utils.normalizeCode(email);
-    
-    // 1. Lấy trạng thái từ Firestore (MỚI)
-    const statusMap = new Map();
-    // Đọc collection note trả hàng
-    const snapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
-        .where('email', '==', normEmail)
-        .get();
-        
-    snapshot.forEach(doc => {
-        const data = doc.data();
-        // Gán trạng thái dựa trên dữ liệu Firestore
-        if (data.status === 'Rejected') {
-            statusMap.set(data.timestamp, { status: 'Rejected', reason: data.rejectionReason || 'Không rõ' });
-        } else if (data.isFulfilled === false) {
-            statusMap.set(data.timestamp, { status: 'Pending' });
-        } else {
-            statusMap.set(data.timestamp, { status: 'Fulfilled' });
-        }
-    });
-
-    const buckets = {};
-    const reversedHistory = history.reverse();
-    
-    reversedHistory.forEach(row => {
-        const ts = row[0];
-        const type = row[1] || '';
-        const eml = utils.normalizeCode(row[2]);
-        const ngay = row[3] || '';
-        const code = utils.normalizeCode(row[4] || '');
-        const qty = Number(row[6]) || 0;
-        const note = row[7] || '';
-        const pendingNoteId = row[9] || ''; // ID của note trả hàng
-
-        if (type !== 'Trả') return; 
-        if (normEmail && eml !== normEmail) return;
-
-        // BỎ LỌC: không bỏ qua note rỗng
-        // if (!code || qty <= 0) return; // <-- ĐÃ XÓA DÒNG NÀY
-
-        const tsDate = (ts instanceof Date) ? ts : new Date(ts);
-        if (isNaN(tsDate.getTime())) return;
-
-        const key = pendingNoteId || tsDate.toISOString();
-        
-        // Lấy trạng thái từ Map
-        const statusInfo = statusMap.get(pendingNoteId);
-
-        if (!buckets[key]) {
-            buckets[key] = { 
-                timestamp: tsDate.toISOString(), 
-                date: ngay, 
-                note: note, 
-                itemsEntered: {},
-                status: statusInfo ? statusInfo.status : null, // Thêm status
-                reason: statusInfo ? statusInfo.reason : null  // Thêm lý do
-            }; 
-        }
-
-        // Chỉ thêm vật tư nếu có (dành cho note đã duyệt)
-        if (code && qty > 0) {
-            const m = buckets[key].itemsEntered;
-            if (!m[code]) m[code] = { code: code, name: itemCodeMap.get(code) || row[5], quantity: 0 };
-            m[code].quantity += qty;
-        }
-    });
-
-    const arr = Object.keys(buckets).map(k => buckets[k]);
-    // Lọc ra: chỉ giữ lại (Pending/Rejected) HOẶC (Fulfilled VÀ có vật tư)
-    const finalArr = arr.filter(b => (b.status !== 'Fulfilled') || (b.status === 'Fulfilled' && Object.keys(b.itemsEntered).length > 0));
-
-    // Xử lý phân trang
-    const totalItems = finalArr.length;
-    const totalPages = Math.ceil(totalItems / pageSize);
-    const start = (currentPage - 1) * pageSize;
-    const historyPage = finalArr.slice(start, start + pageSize);
-    
-    return { history: historyPage, totalPages: totalPages };
-}
-
-// =======================================================
-// 3. SUBMIT TRANSACTION (submitTransaction)
-// =======================================================
-async function submitTransaction({ sheets, spreadsheetId, data }) {
-    const db = getDb(); // Lấy db an toàn
-    const COL_COUNT_HIST = 10;
-    const rows = [];
-    const lowerEmail = utils.normalizeCode(data.email);
-
-    // --- LOGIC MƯỢN (KTV & MANAGER) ---
-    if (data.type === 'Mượn') {
-        const ts = data.timestamp ? new Date(data.timestamp) : new Date();
-        const pendingNoteId = data.borrowTimestamp || ''; 
-        const selfNoteId = ts.toISOString(); 
-        const items = data.items || [];
-        const note = data.note || '';
-        const srcTag = (data.mode === 'DIRECT') ? 'DIRECT' : (data.borrowTimestamp ? 'NOTE' : 'WEBAPP');
-        
-        const shouldCreatePendingNote = !data.borrowTimestamp && data.mode !== 'DIRECT' && note && items.length === 0;
-
-        // 1. Ghi items vào Lịch sử (Sheets API)
-        items.forEach(it => {
-            rows.push([ ts, 'Mượn', data.email, data.date, utils.normalizeCode(it.code), it.name, Number(it.quantity) || 0, note, srcTag, pendingNoteId ]); 
-        });
-        
-        // 2. Ghi Note-only vào Lịch sử (Sheets API)
-        if (items.length === 0 && note) {
-            rows.push([ ts, 'Mượn', data.email, data.date, '', '', 0, note, srcTag, selfNoteId ]);
-        }
-        
-        // 3. LƯU VÀO PendingBorrowNotes (FIRESTORE)
-        if (shouldCreatePendingNote) {
-            await db.collection(PENDING_NOTES_COLLECTION).add({ // SỬ DỤNG DB AN TOÀN
-                timestamp: selfNoteId,
-                type: 'Mượn', 
-                email: data.email, 
-                date: data.date, 
-                note: note, 
-                isFulfilled: false,
-                status: 'Pending',
-                createdAt: new Date().toISOString()
-            });
-        }
-
-        // 4. Nếu quản lý mượn theo lệnh chờ => Fulfilled pending
-        if (data.borrowTimestamp) {
-            await fulfillPendingNote_({ email: data.email, tsISO: pendingNoteId }); 
-        }
-        
-    } else if (data.type === 'Trả') { // --- LOGIC TRẢ/ĐỐI CHIẾU ---
-        const tickets = data.tickets || []; // Dùng cho đối chiếu Sổ
-        const itemsR = data.items || []; // Dùng cho trả không sử dụng
-        const note = data.note || '';
-        const ts = data.timestamp ? new Date(data.timestamp) : new Date();
-        const selfNoteId = ts.toISOString(); 
-
-        // XÁC ĐỊNH LOGIC: KTV Gửi note, Manager xác nhận trả, hay KTV đối chiếu
-        const isKtvReturnNote = itemsR.length === 0 && tickets.length === 0 && !!note;
-        const isManagerConfirmReturn = itemsR.length > 0 && !!data.date;
-        const isKtvReconcile = tickets.length > 0;
-
-        // 1. KTV GỬI NOTE TRẢ (MỚI)
-        if (isKtvReturnNote) {
-            await db.collection(PENDING_RETURN_NOTES_COLLECTION).add({
-                timestamp: selfNoteId,
-                type: 'Trả', 
-                email: data.email, 
-                date: data.date, 
-                note: note, 
-                isFulfilled: false,
-                status: 'Pending',
-                createdAt: new Date().toISOString()
-            });
-            // Ghi 1 dòng note vào Lịch sử (giống Mượn)
-             rows.push([ ts, 'Trả', data.email, data.date, '', '', 0, note, 'NOTE', selfNoteId ]);
-        }
-        
-        // 2. KTV XÁC NHẬN ĐỐI CHIẾU SỔ (LOGIC CŨ)
-        else if (isKtvReconcile) {
-            if (tickets.length > 0) {
-                const sheetName = 'Đối chiếu sổ 3 liên';
-                
-                // 1. Đọc toàn bộ sheet 'Đối chiếu sổ 3 liên'
-                const readResult = await sheets.spreadsheets.values.get({
-                    spreadsheetId,
-                    range: `${sheetName}!A:H`, // Đọc cột E (Sổ) và H (Trạng thái)
-                });
-                
-                const values = readResult.data.values || [];
-                const updateRequests = [];
-                // Dùng Set để tra cứu các sổ cần update nhanh hơn
-                const ticketsToUpdate = new Set(tickets); 
-
-                // 2. Lặp qua từng hàng (bỏ qua header hàng 0)
-                for (let i = 1; i < values.length; i++) {
-                    const row = values[i];
-                    if (row.length < 8) continue; // Bỏ qua hàng trống
-
-                    const ticketInSheet = row[4] || ''; // Cột E = Số sổ (index 4)
-                    const statusInSheet = row[7] || ''; // Cột H = Trạng thái (index 7)
-
-                    // 3. Nếu sổ này nằm trong danh sách KTV chọn VÀ nó 'Chưa đối chiếu'
-                    if (ticketsToUpdate.has(ticketInSheet) && statusInSheet === 'Chưa đối chiếu') {
-                        const rowIndex = i + 1; // row index (1-based) cho Google Sheets
-                        
-                        // 4. Thêm yêu cầu cập nhật cho ô H (Trạng thái)
-                        updateRequests.push({
-                            range: `${sheetName}!H${rowIndex}`, // VD: 'Đối chiếu sổ 3 liên!H111'
-                            values: [['Đã đối chiếu']]
-                        });
-                    }
-                }
-
-                // 5. Gửi batch update lên Google Sheets nếu có
-                if (updateRequests.length > 0) {
-                    await sheets.spreadsheets.values.batchUpdate({
-                        spreadsheetId,
-                        resource: {
-                            valueInputOption: 'USER_ENTERED',
-                            data: updateRequests
-                        }
-                    });
-                }
-            }
-        }
-        
-        // 3. QUẢN LÝ XÁC NHẬN TRẢ KHÔNG SỬ DỤNG (CẬP NHẬT)
-        else if (isManagerConfirmReturn) {
-            itemsR.forEach(it => {
-                rows.push([ new Date(), 'Trả', data.email, data.date, utils.normalizeCode(it.code), it.name, Number(it.quantityReturned) || 0, data.note || 'Trả vật tư không sử dụng', 'WEBAPP', '' ]);
-            });
-
-            // Nếu Quản lý xác nhận dựa trên Note, fulfill note đó
-            if (data.returnTimestamp) {
-                await fulfillPendingReturnNote_({ email: data.email, tsISO: data.returnTimestamp }); 
-            }
-        }
-    }
-    // GHI DỮ LIỆU LỊCH SỬ VÀO SHEET (10 CỘT)
-    if (rows.length > 0) {
-        await sheets.spreadsheets.values.append({
+        // 1. ĐỌC TẤT CẢ DỮ LIỆU CŨ (trừ header)
+        const readResult = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Lịch sử Mượn Trả Vật Tư!A:J', 
-            valueInputOption: 'USER_ENTERED',
-            insertDataOption: 'INSERT_ROWS',
-            resource: { values: rows },
+            range: `${sheetName}!A2:E`, // Đọc 5 cột A-E, từ dòng 2
         });
+        const allValues = readResult.data.values || [];
+
+        // 2. LỌC: Giữ lại tất cả dải số KHÔNG thuộc về KTV này
+        const otherUserRows = allValues.filter(row => {
+            const rowEmail = utils.normalizeCode(row[0] || '');
+            return rowEmail && rowEmail !== normEmail;
+        });
+
+        // 3. TẠO: Tạo các hàng mới cho KTV này (từ mảng 'ranges' đã sửa)
+        const currentUserRows = (ranges || []).map(r => [
+            email, 
+            r.start, 
+            r.end, 
+            newTimestamp, // Ngày tạo
+            newTimestamp  // Ngày cập nhật
+        ]);
+
+        // 4. GỘP LẠI: Dữ liệu của người khác + Dữ liệu mới của KTV này
+        const finalData = [
+            ...otherUserRows,
+            ...currentUserRows
+        ];
+
+        // 5. XÓA SẠCH DỮ LIỆU CŨ (từ A2 trở đi)
+        await sheets.spreadsheets.values.clear({
+            spreadsheetId,
+            range: `${sheetName}!A2:E`, // Xóa sạch từ dòng 2
+        });
+
+        // 6. GHI LẠI DỮ LIỆU MỚI (chỉ ghi nếu có)
+        if (finalData.length > 0) {
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: `${sheetName}!A2`, // Ghi đè bắt đầu từ A2
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: finalData
+                },
+            });
+        }
+
+        return { ok: true, message: `Lưu ${currentUserRows.length} dải số thành công.` };
+
+    } catch (err) {
+        console.error("Lỗi nghiêm trọng khi saveTicketRanges:", err);
+        throw new Error("Lỗi khi cập nhật Google Sheet: " + err.message);
     }
-    return true;
 }
 
-/**
- * Đánh dấu Pending RETURN Note là Fulfilled
- */
-async function fulfillPendingReturnNote_({ email, tsISO }) { 
-    const db = getDb();
-    const normEmail = utils.normalizeCode(email);
-    
-    const snapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
-        .where('email', '==', normEmail)
-        .where('timestamp', '==', tsISO) 
-        .where('isFulfilled', '==', false) 
-        .limit(1)
-        .get();
-
-    if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        await docRef.update({
-            isFulfilled: true,
-            fulfilledAt: new Date().toISOString()
-        });
-        return true;
-    }
-    return false;
-}
-
-/**
- * Đánh dấu Pending RETURN Note là Rejected
- */
-async function rejectPendingReturnNote_({ email, tsISO, reason }) { 
-    const db = getDb();
-    const normEmail = utils.normalizeCode(email);
-    
-    const snapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
-        .where('email', '==', normEmail)
-        .where('timestamp', '==', tsISO) 
-        .where('isFulfilled', '==', false) //
-        .limit(1)
-        .get();
-
-    if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        await docRef.update({
-            isFulfilled: true, // Đánh dấu là đã xử lý
-            status: 'Rejected', // Trạng thái mới
-            rejectionReason: reason,
-            fulfilledAt: new Date().toISOString()
-        });
-        return true;
-    }
-    return false;
-}
-
-/**
- * Đánh dấu Pending BORROW Note là Rejected
- */
-async function rejectPendingBorrowNote_({ email, tsISO, reason }) {
-    const db = getDb();
-    const normEmail = utils.normalizeCode(email);
-
-    const snapshot = await db.collection(PENDING_NOTES_COLLECTION) // Use the BORROW notes collection
-        .where('email', '==', normEmail)
-        .where('timestamp', '==', tsISO)
-        .where('isFulfilled', '==', false)
-        .limit(1)
-        .get();
-
-    if (!snapshot.empty) {
-        const docRef = snapshot.docs[0].ref;
-        await docRef.update({
-            isFulfilled: true, // Mark as processed
-            status: 'Rejected', // Set new status
-            rejectionReason: reason,
-            fulfilledAt: new Date().toISOString()
-        });
-        return true;
-    }
-    return false;
-}
-// functions/data-processor.js (fulfillPendingNote_ đã sửa lỗi - Tăng cường an toàn)
-
-// =======================================================
-// HÀM PHỤ TRỢ MỚI: Dùng cho việc tìm và cập nhật Firestore
-// =======================================================
-/**
- * Đánh dấu Pending Note là Fulfilled bằng cách tìm kiếm theo timestamp.
- */
-
-async function fulfillPendingNote_({ email, tsISO }) { 
-    const db = getDb(); // Lấy db an toàn
-    const normEmail = utils.normalizeCode(email);
-    
-    // 1. Tìm tài liệu (Document) theo Timestamp và Email
-    const snapshot = await db.collection(PENDING_NOTES_COLLECTION)
-        .where('email', '==', normEmail)
-        .where('timestamp', '==', tsISO) 
-        .where('isFulfilled', '==', false) 
-        .limit(1)
-        .get();
-
-    if (!snapshot.empty) {
-        // 2. Cập nhật tài liệu 
-        const docRef = snapshot.docs[0].ref;
-        await docRef.update({
-            isFulfilled: true,
-            fulfilledAt: new Date().toISOString()
-        });
-        return true;
-    }
-    return false;
-}
-
-// =======================================================
-// 4. CÁC HÀM QUẢN LÝ (getTicketRanges, saveTicketRanges, etc.)
-// =======================================================
-// ... (Các hàm khác: getTicketRanges, getTechnicians, getItemList, v.v.) ...
-
+// Ghi vào Sheet
 async function submitErrorReport({ sheets, spreadsheetId, data }) {
-    const rows = [
-        [
-            new Date().toISOString(),
-            data.email || '',
-            data.errorType || '',
-            data.description || '',
-            data.relatedTicketOrDate || '',
-            data.suggestedFix || ''
-        ]
-    ];
-    
+    const rows = [[
+        new Date().toISOString(), data.email || '', data.errorType || '',
+        data.description || '', data.relatedTicketOrDate || '', data.suggestedFix || ''
+    ]];
     await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: 'Báo cáo sai sót!A:F', 
@@ -948,48 +1111,31 @@ async function submitErrorReport({ sheets, spreadsheetId, data }) {
     });
     return true;
 }
-// Tái tạo processExcelData (Giả định dữ liệu đã là JSON từ client)
-// functions/data-processor.js (FIXED - Đảm bảo nhận sheets/spreadsheetId)
-// =======================================================
-// 5. XỬ LÝ EXCEL (processExcelData)
-// =======================================================
-// Tái tạo processExcelData (Chuẩn hóa JSON đã gửi từ Client)
+
+// Dùng Sheet (readCoreSheetData)
 async function processExcelData({ sheets, spreadsheetId, data }) {
-    // NOTE: Cần đọc lại TicketRanges vì không được cache trong GCF
-    const { ticketRangesMap } = await readAllSheetsData({ sheets, spreadsheetId, email: null }); 
-    
-    // / <-- THÊM LOG NÀY ĐỂ XEM DỮ LIỆU ĐỌC ĐƯỢC -->
-    console.log('[DEBUG] ticketRangesMap loaded:', JSON.stringify(ticketRangesMap, null, 2));
+    const { ticketRangesMap } = await getCoreSheetData({ sheets, spreadsheetId });
+    // Logic xử lý (normalize) của bạn ở đây là đúng, giữ nguyên
     const processed = (data || []).map(row => {
-        
-        // --- LOGIC CHUYỂN ĐỔI NGÀY THÁNG EXCEL ---
         let parsedDate = row.date;
         if (typeof parsedDate === 'number') {
-            // Excel serial number (ví dụ: 45749) sang Date Object (trừ đi 25569)
-            // và định dạng lại thành DD/MM/YYYY
             const dateObj = new Date((parsedDate - 25569) * 86400 * 1000);
             if (!isNaN(dateObj.getTime())) {
-                parsedDate = utils.fmtDate(dateObj); // Sử dụng helper fmtDate đã có
+                parsedDate = utils.fmtDate(dateObj);
             }
         }
-        // --- KẾT THÚC LOGIC CHUYỂN ĐỔI ---
-
         let ticket = (row.ticket == null) ? '' : String(row.ticket);
         if (ticket && !/^Sổ\s+/i.test(ticket)) ticket = 'Sổ ' + ticket.replace(/^Sổ\s*/i, '').trim();
-        
         let email = row.email || '';
         const numMatch = ticket.match(/\d+/);
-        
-        // Gán email từ Ticket Ranges nếu chưa có
         if (!email && numMatch) {
             const num = parseInt(numMatch[0], 10);
             if (isFinite(num)) {
                 email = utils.getEmailByTicketNumber(num, ticketRangesMap);
             }
         }
-
         return {
-            date: parsedDate || row.date || '', // Sử dụng ngày đã chuẩn hóa
+            date: parsedDate || row.date || '',
             itemCode: utils.normalizeCode(row.itemCode || ''),
             itemName: (row.itemName || '').toString().trim(),
             ticket: ticket,
@@ -1001,181 +1147,21 @@ async function processExcelData({ sheets, spreadsheetId, data }) {
     return processed;
 }
 
-// Tái tạo saveExcelData
-async function saveExcelData({ sheets, spreadsheetId, data }) {
-    if (!data || data.length === 0) {
-        throw new Error('Không có dữ liệu hợp lệ để lưu.');
-    }
-
-    const sheetName = 'Đối chiếu sổ 3 liên';
-    const rangeToRead = `${sheetName}!A:H`; // Đọc các cột A-H
-
-    // 1. Đọc dữ liệu hiện có từ Sheet
-    let existingDataMap = new Map(); // Key: "Ticket_ItemCode", Value: { rowIndex, status }
-    let headerRowSkipped = false;
-    try {
-        const readResult = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: rangeToRead,
-        });
-        const values = readResult.data.values || [];
-
-        // Bỏ qua header (hàng 0), bắt đầu từ hàng 1 (index 0 sau khi bỏ header)
-        for (let i = 1; i < values.length; i++) {
-            const row = values[i];
-            const ticket = row[3] || ''; // Cột D = Số sổ
-            const itemCode = utils.normalizeCode(row[1] || ''); // Cột B = Mã vật tư
-            const status = row[7] || ''; // Cột H = Trạng thái
-
-            if (ticket && itemCode) {
-                const key = `${ticket}_${itemCode}`;
-                const rowIndex = i + 1; // Row index (1-based) trong sheet
-                existingDataMap.set(key, { rowIndex, status });
-            }
-        }
-        headerRowSkipped = true; // Đánh dấu đã xử lý xong việc đọc
-    } catch (err) {
-        console.error("Lỗi đọc sheet 'Đối chiếu sổ 3 liên':", err);
-        throw new Error("Không thể đọc dữ liệu hiện có để kiểm tra trùng lặp.");
-    }
-
-
-    // 2. Phân loại dữ liệu mới (Append hoặc Update)
-    const rowsToAppend = [];
-    const updateRequests = []; // Dùng cho batchUpdate
-
-    data.forEach(r => {
-        // Chuẩn bị dữ liệu hàng mới (giống code cũ)
-        const ticket = r.ticket || '';
-        const itemCode = utils.normalizeCode(r.itemCode || '');
-        if (!ticket || !itemCode) return; // Bỏ qua nếu thiếu ticket hoặc itemCode
-
-        const key = `${ticket}_${itemCode}`;
-        const existingEntry = existingDataMap.get(key);
-
-        // Chuẩn bị dữ liệu cho ô (theo đúng 8 cột A-H)
-        const rowData = [
-            r.date || '',         // A: Ngày
-            r.itemCode || '',     // B: Mã VT
-            r.itemName || '',     // C: Tên VT
-            ticket,               // D: Số sổ
-            Number(r.quantity) || 0, // E: Số lượng
-            r.email || '',        // F: Email KTV
-            r.note || '',         // G: Ghi chú
-            'Chưa đối chiếu'      // H: Trạng thái
-        ];
-
-        if (existingEntry) {
-            // Đã tồn tại
-            if (existingEntry.status === 'Chưa đối chiếu') {
-                // Tồn tại và chưa đối chiếu -> Cập nhật
-                updateRequests.push({
-                    range: `${sheetName}!A${existingEntry.rowIndex}:H${existingEntry.rowIndex}`, // Cập nhật cả hàng A-H
-                    values: [rowData] // Dữ liệu mới
-                });
-            } else {
-                // Tồn tại và ĐÃ đối chiếu -> Bỏ qua
-                console.log(`Skipping update for already reconciled ticket ${ticket}, item ${itemCode}`);
-            }
-        } else {
-            // Chưa tồn tại -> Thêm mới
-            rowsToAppend.push(rowData); // Chỉ thêm dữ liệu hàng
-        }
-    });
-
-    // 3. Thực hiện ghi vào Sheet
-    try {
-        // Thực hiện Append trước (nếu có)
-        if (rowsToAppend.length > 0) {
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: `${sheetName}!A:H`,
-                valueInputOption: 'USER_ENTERED',
-                insertDataOption: 'INSERT_ROWS',
-                resource: { values: rowsToAppend },
-            });
-            console.log(`Appended ${rowsToAppend.length} new rows.`);
-        }
-
-        // Thực hiện BatchUpdate (nếu có)
-        if (updateRequests.length > 0) {
-            await sheets.spreadsheets.values.batchUpdate({
-                spreadsheetId,
-                resource: {
-                    valueInputOption: 'USER_ENTERED',
-                    data: updateRequests
-                }
-            });
-            console.log(`Updated ${updateRequests.length} existing rows.`);
-        }
-
-        return { ok: true, message: `Lưu thành công. Thêm mới ${rowsToAppend.length} dòng, cập nhật ${updateRequests.length} dòng.` };
-
-    } catch (err) {
-        console.error("Lỗi ghi dữ liệu Excel vào Sheet:", err);
-        throw new Error("Xảy ra lỗi khi lưu dữ liệu vào Google Sheet.");
-    }
-}
-
-// Tái tạo consumeBorrowNote (đánh dấu Pending Note là Fulfilled)
-async function consumeBorrowNote({ sheets, spreadsheetId, email, timestamp }) {
-    // Logic này phức tạp: cần tìm dòng trong Pending Notes và cập nhật cột Fulfilled
-    
-    // NOTE: CẦN TÁI TẠO LOGIC TÌM DÒNG VÀ UPDATE TRẠNG THÁI PENDING NOTE
-    // Tạm thời chỉ ghi nhận logic:
-    console.log(`Fulfilling pending note: ${timestamp} for ${email}`);
-    
-    // Hàm findAndGetRows có thể được sử dụng để tìm vị trí dòng (rowNumber)
-    // Sau đó dùng sheets.spreadsheets.values.update để cập nhật cột F (Fulfilled) và G (FulfilledAt)
-    // ...
-    
-    return true;
-}
-/**
- * Tìm dòng trong sheet (1-based index) dựa trên giá trị cột.
- * NOTE: Logic này đọc toàn bộ sheet, chỉ dùng cho các sheet nhỏ (TicketRanges, PendingNotes).
- */
-async function findAndGetRows(sheets, spreadsheetId, sheetName, checkColIndex, checkValues) {
-    const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `${sheetName}!A:Z` // Đọc toàn bộ sheet
-    });
-    
-    const rows = response.data.values || [];
-    const updateRequests = [];
-    const firstDataRow = 2; // Dữ liệu bắt đầu từ dòng 2
-    
-    rows.forEach((row, index) => {
-        const rowNumber = index + firstDataRow;
-        if (row.length > checkColIndex) {
-            const cellValue = row[checkColIndex];
-            if (checkValues.includes(cellValue)) {
-                updateRequests.push({ rowNumber, values: row });
-            }
-        }
-    });
-    return updateRequests;
-}
-// =======================================================
-// 6. XÁC THỰC VÀ ĐĂNG KÝ (verifyAndRegisterUser)
-// =======================================================
+// Dùng Sheet (Đã có, giữ nguyên)
 async function verifyAndRegisterUser({ sheets, spreadsheetId, email, name }) {
     const normEmail = utils.normalizeCode(email);
     const techSheetName = 'Danh sách kỹ thuật viên';
     
-    // 1. Kiểm tra xem user đã là quản lý chưa (Sử dụng hàm đã có)
-    const isManager = await checkManager({ sheets, spreadsheetId, email });
+    const isManager = await checkManager({ sheets, spreadsheetId, email }); // Giữ nguyên checkManager
 
-    // 2. Đọc danh sách KTV hiện tại
     const techsResult = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${techSheetName}!A:A`, // Chỉ đọc cột Email
+        range: `${techSheetName}!A:A`,
     });
     const currentEmails = (techsResult.data.values || []).map(row => utils.normalizeCode(row[0]));
 
-    // 3. Nếu KTV chưa có trong danh sách, thêm vào
     if (!currentEmails.includes(normEmail)) {
-        const newRow = [[email, name, new Date().toISOString()]]; // Cột: Email, Tên, Ngày đăng ký
+        const newRow = [[email, name, new Date().toISOString()]];
         await sheets.spreadsheets.values.append({
             spreadsheetId,
             range: `${techSheetName}!A:C`,
@@ -1184,95 +1170,74 @@ async function verifyAndRegisterUser({ sheets, spreadsheetId, email, name }) {
             resource: { values: newRow },
         });
     }
-
     return { email, name, isManager };
 }
+
+// Dùng Sheet
+async function checkManager({ sheets, spreadsheetId, email }) {
+    const normEmail = utils.normalizeCode(email);
+    const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'Danh sách quản lý!A:A',
+    });
+    const managerList = response.data.values || [];
+    return managerList.some(row => utils.normalizeCode(row[0]) === normEmail);
+}
+
+// Dùng Firestore (Đã refactor ở trên)
 async function rejectReturnNote({ db, data }) {
-    const { email, timestamp, reason } = data;
-    if (!email || !timestamp || !reason) {
-        throw new Error('Thiếu email, timestamp, hoặc lý do từ chối.');
-    }
-    
-    const success = await rejectPendingReturnNote_({
-        email: email,
-        tsISO: timestamp,
-        reason: reason
+    return rejectPendingReturnNote_({
+        db, 
+        email: data.email,
+        tsISO: data.timestamp,
+        reason: data.reason
     });
-    
-    if (!success) {
-        throw new Error('Không tìm thấy note trả hàng đang chờ, hoặc note đã được xử lý.');
-    }
-    return { ok: true, message: 'Note rejected successfully.' };
 }
+
+// Dùng Firestore (Đã refactor ở trên)
 async function rejectBorrowNote({ db, data }) {
-    const { email, timestamp, reason } = data;
-    if (!email || !timestamp || !reason) {
-        throw new Error('Thiếu email, timestamp, hoặc lý do từ chối.');
-    }
-
-    const success = await rejectPendingBorrowNote_({ // Call the correct helper
-        email: email,
-        tsISO: timestamp,
-        reason: reason
+    return rejectPendingBorrowNote_({
+        db, 
+        email: data.email,
+        tsISO: data.timestamp,
+        reason: data.reason
     });
-
-    if (!success) {
-        throw new Error('Không tìm thấy note mượn hàng đang chờ, hoặc note đã được xử lý.');
-    }
-    return { ok: true, message: 'Note rejected successfully.' };
 }
 
-/**
- * Lấy danh sách email KTV có note mượn và trả đang chờ (chưa fulfilled, chưa rejected)
- */
+// Dùng Firestore (Đã có, giữ nguyên)
 async function getPendingCounts({ db }) {
     let pendingBorrowEmails = [];
     let pendingReturnEmails = [];
-
     try {
-        // Lấy note mượn đang chờ
         const borrowSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
             .where('isFulfilled', '==', false)
-            .where('status', 'not-in', ['Rejected']) // Vẫn dùng not-in
-            .get(); // Dùng get() để lấy documents
+            .where('status', 'not-in', ['Rejected'])
+            .get();
+        const borrowEmailsSet = new Set();
+        borrowSnapshot.forEach(doc => doc.data().email && borrowEmailsSet.add(doc.data().email));
+        pendingBorrowEmails = Array.from(borrowEmailsSet);
 
-        const borrowEmailsSet = new Set(); // Dùng Set để tránh trùng lặp email
-        borrowSnapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.email) {
-                borrowEmailsSet.add(data.email);
-            }
-        });
-        pendingBorrowEmails = Array.from(borrowEmailsSet); // Chuyển Set thành Array
-
-        // Lấy note trả đang chờ
         const returnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
             .where('isFulfilled', '==', false)
-            .where('status', 'not-in', ['Rejected']) // Vẫn dùng not-in
-            .get(); // Dùng get()
-
+            .where('status', 'not-in', ['Rejected'])
+            .get();
         const returnEmailsSet = new Set();
-        returnSnapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.email) {
-                returnEmailsSet.add(data.email);
-            }
-        });
+        returnSnapshot.forEach(doc => doc.data().email && returnEmailsSet.add(doc.data().email));
         pendingReturnEmails = Array.from(returnEmailsSet);
 
-        // Trả về danh sách email
         return { pendingBorrowEmails, pendingReturnEmails };
-
     } catch (error) {
         console.error("Error getting pending counts/emails:", error);
-        // Trả về mảng rỗng nếu có lỗi
         return { pendingBorrowEmails: [], pendingReturnEmails: [] };
     }
 }
+
+// File: functions/data-processor.js
+// THAY THẾ TOÀN BỘ HÀM NÀY:
+
 async function managerTransferItems({ sheets, spreadsheetId, db, data }) {
     const { fromEmail, toEmail, date, items } = data;
 
-    console.log('[DEBUG managerTransferItems] Function CALLED with data:', JSON.stringify(data, null, 2)); // <-- LOG 1: Dữ liệu nhận được
     if (!fromEmail || !toEmail || !date || !items || items.length === 0) {
         throw new Error('Thiếu thông tin người chuyển, người nhận, ngày hoặc vật tư.');
     }
@@ -1280,79 +1245,73 @@ async function managerTransferItems({ sheets, spreadsheetId, db, data }) {
         throw new Error('Người chuyển và người nhận phải khác nhau.');
     }
 
-    // 1. Lấy tên KTV từ Sheet (Ưu tiên) hoặc Firestore
+    // === BẮT ĐẦU SỬA CHỮA: LẤY TÊN KTV ===
+    
+    // 1. Lấy tên KTV từ Sheet 'Danh sách kỹ thuật viên'
     let fromName = fromEmail;
     let toName = toEmail;
     try {
-        // Cố gắng đọc từ Sheet trước
         const techResponse = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: 'Danh sách kỹ thuật viên!A2:B', // Email(A), Tên(B)
+            range: 'Danh sách kỹ thuật viên!A2:B', // Đọc cột Email(A) và Tên(B)
         });
         const techs = techResponse.data.values || [];
+        
+        // Dùng Map để tra cứu tên nhanh
         const techMap = new Map(techs.map(row => [utils.normalizeCode(row[0]), row[1] || row[0]]));
+        
+        // Lấy tên, nếu không thấy thì dùng email làm dự phòng
         fromName = techMap.get(utils.normalizeCode(fromEmail)) || fromEmail;
         toName = techMap.get(utils.normalizeCode(toEmail)) || toEmail;
-        //console.log(`[managerTransferItems] Found names from Sheet: ${fromName}, ${toName}`);
-        console.log(`[DEBUG managerTransferItems] Fetched names: From=${fromName}, To=${toName}`); // <-- LOG 2: Tên lấy được
+        
     } catch (sheetError) {
-         console.warn("Không thể lấy tên KTV từ Sheet, thử Firestore:", sheetError.message);
-         // Thử đọc từ Firestore nếu đọc Sheet lỗi (dự phòng)
-         try {
-             const usersRef = db.collection('users'); // Giả sử collection user là 'users'
-             const fromSnap = await usersRef.where('email', '==', fromEmail).limit(1).get();
-             const toSnap = await usersRef.where('email', '==', toEmail).limit(1).get();
-             if (!fromSnap.empty) fromName = fromSnap.docs[0].data().name || fromEmail;
-             if (!toSnap.empty) toName = toSnap.docs[0].data().name || toEmail;
-             console.log(`[managerTransferItems] Found names from Firestore: ${fromName}, ${toName}`);
-         } catch (firestoreError) {
-             console.error("Không thể lấy tên KTV từ Firestore:", firestoreError.message);
-             // Giữ nguyên email nếu cả 2 đều lỗi
-         }
+         // Nếu đọc Sheet lỗi (ví dụ: rate limit), dùng email làm dự phòng
+         console.warn("Không thể lấy tên KTV từ Sheet, sẽ dùng Email:", sheetError.message);
     }
+    // === KẾT THÚC SỬA CHỮA ===
 
-    // 2. Chuẩn bị các hàng để ghi vào lịch sử
-    const rowsToAppend = [];
-    const timestamp = new Date();
+    const timestamp = new Date().toISOString();
+    const batch = db.batch();
 
-    items.forEach(item => {
-        const code = utils.normalizeCode(item.code);
-        const quantity = Number(item.quantity) || 0;
-        if (code && quantity > 0) {
-            rowsToAppend.push([
-                timestamp, 'Trả', fromEmail, date, code, item.name || '', quantity, `Chuyển cho ${toName}`, 'TRANSFER', ''
-            ]);
-            rowsToAppend.push([
-                timestamp, 'Mượn', toEmail, date, code, item.name || '', quantity, `Nhận từ ${fromName}`, 'TRANSFER', ''
-            ]);
-        }
-    });
-    // 3. Ghi vào Google Sheet
-    if (rowsToAppend.length > 0) {
-        try { // <-- THÊM try...catch quanh lệnh append -->
-            console.log('[DEBUG managerTransferItems] Attempting to append to Sheet...'); // <-- LOG 4: Trước khi gọi API
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: 'Lịch sử Mượn Trả Vật Tư!A:J', // Kiểm tra lại range
-                valueInputOption: 'USER_ENTERED',
-                insertDataOption: 'INSERT_ROWS',
-                resource: { values: rowsToAppend },
-            });
-            console.log('[DEBUG managerTransferItems] Append successful.'); // <-- LOG 5: Sau khi gọi API thành công
-        } catch (appendError) { // <-- Bắt lỗi append -->
-             console.error('!!! ERROR appending transfer data to Sheet:', appendError); // <-- LOG 6: Lỗi cụ thể
-             // Ném lại lỗi để frontend biết
-             throw new Error("Lỗi khi ghi dữ liệu chuyển giao vào Google Sheet: " + appendError.message);
-        }
-    } else {
-        // Log nếu không có gì để ghi (ít khả năng xảy ra do đã kiểm tra trước)
-        console.warn('[WARN managerTransferItems] No valid rows to append.');
-        throw new Error('Không có vật tư hợp lệ để chuyển.');
-    }
+    // 2. Tạo doc "Trả" cho người chuyển
+    const returnTx = {
+        timestamp: timestamp, 
+        email: fromEmail, 
+        type: 'Trả', 
+        date: date,
+        note: `Chuyển cho ${toName}`, // <-- Sẽ dùng TÊN
+        items: items, 
+        status: 'Fulfilled',
+        pendingNoteId: ''
+    };
+    const returnRef = db.collection(HISTORY_COLLECTION).doc(); // Tự tạo ID
+    batch.set(returnRef, returnTx);
+    
+    // 3. Tạo doc "Mượn" cho người nhận
+    const borrowTx = {
+        timestamp: timestamp, 
+        email: toEmail, 
+        type: 'Mượn', 
+        date: date,
+        note: `Nhận từ ${fromName}`, // <-- Sẽ dùng TÊN
+        items: items, 
+        status: 'Fulfilled',
+        pendingNoteId: ''
+    };
+    const borrowRef = db.collection(HISTORY_COLLECTION).doc(); // Tự tạo ID
+    batch.set(borrowRef, borrowTx);
+
+    // 4. Ghi vào Firestore
+    await batch.commit();
+
+    // 5. Ghi backup vào Sheets (Async)
+    writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc: returnTx });
+    writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc: borrowTx });
 
     return { ok: true, message: 'Chuyển vật tư thành công.' };
 }
-// ... (Xuất module) ...
+
+// Xuất module
 module.exports = {
     checkManager,
     getTechnicianDashboardData,
@@ -1363,14 +1322,14 @@ module.exports = {
     getTicketRanges,
     saveTicketRanges,
     submitErrorReport,
-    // Các hàm mới bổ sung:
     processExcelData, 
     saveExcelData, 
-    consumeBorrowNote,
+    // consumeBorrowNote, // (Hàm này không còn cần thiết, logic đã gộp vào submitTransaction)
     verifyAndRegisterUser,
     rejectReturnNote,
     getReturnHistory,
     rejectBorrowNote,
     getPendingCounts,
+    checkUserRoles,
     managerTransferItems,
 };

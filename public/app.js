@@ -10,7 +10,20 @@ let isManager = false;
 let processedExcelData = [];
 let techniciansLoaded = false;
 let technicianMap = new Map();
-
+let managerHistoryListener = null; // Listener của Quản lý
+let managerHistoryCache = [];    // Cache của Quản lý
+let ktvHistoryListener = null;     // Listener của KTV (MỚI)
+let ktvHistoryCache = [];      // Cache của KTV (MỚI)
+let selectedReturnNoteItems = null;
+let isAuditor = false; // <-- THÊM DÒNG NÀY
+let auditorHistoryListener = null; // <-- THÊM DÒNG NÀY
+let auditorHistoryCache = [];    // <-- THÊM DÒNG NÀY
+const HISTORY_PAGE_SIZE = 15; // <-- THÊM DÒNG NÀY
+let ktvHistoryLastDoc = null; // <-- THÊM DÒNG NÀY
+let managerHistoryLastDoc = null; // <-- THÊM DÒNG NÀY
+let auditorHistoryLastDoc = null; // <-- THÊM DÒNG NÀY
+let allReconciledTicketsCache = []; // <-- THÊM DÒNG NÀY
+let reconciledTicketsCurrentPage = 1; // <-- THÊM DÒNG NÀY
 // Biến trạng thái toàn cục
 var selectedTickets = [];
 var managerSelectedItems = [];
@@ -20,10 +33,14 @@ var excelData = [];
 var currentPage = 1;
 var pageSize = 10;
 var pendingReturnNotes = [];
-
+var managerReturnItems = [];
 // =======================================================
 // UTILS CHUNG & API CALL WRAPPER
 // =======================================================
+function normalizeCode(code){ 
+    return (code || '').toString().trim().toLowerCase();
+}
+
 function signInWithGoogle() {
     // SỬ DỤNG signInWithPopup THAY VÌ signInWithRedirect
     auth.signInWithPopup(provider)
@@ -46,68 +63,110 @@ function signInWithGoogle() {
 async function callAuthApi(endpoint, data) {
     // Logic fetch tương tự callApi nhưng không cần header Auth ban đầu
     const headers = { 'Content-Type': 'application/json' };
-    const response = await fetch(API_BASE_URL + endpoint, { method: 'POST', headers, body: JSON.stringify(data), });
+    const response = await fetch(API_BASE_URL + endpoint, { 
+        method: 'POST', 
+        headers, 
+        body: JSON.stringify(data),
+    });
     const result = await response.json();
-    if (!response.ok || result.error) throw new Error(result.error || 'Lỗi server.');
-    return result.data;
+    if (!response.ok || result.error) 
+        throw new Error(result.error || 'Lỗi server.');
+    
+    // 🔹 Trả về đúng kiểu dữ liệu dù backend có hoặc không bọc trong {data: ...}
+    return (result && result.data !== undefined) ? result.data : result;
 }
+
+
+
 
 // --- HÀM XỬ LÝ AUTH THÀNH CÔNG (MỚI) ---
 // File: app.js
 
 // File: app.js
 
-function handleAuthSuccess(user) {
-    // Ẩn nút đăng nhập và hiển thị nút Đăng xuất
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM handleAuthSuccess
+
+async function handleAuthSuccess(user) {
+    // Lấy các element
     const authButton = document.getElementById('authButton');
     const signOutButton = document.getElementById('signOutButton');
-    const mainPage = document.getElementById('mainPage');
-    const infoErrorMessage = document.getElementById('infoErrorMessage');
-
-    // *** <<< BƯỚC 1: FIX MỚI - ẨN SPINNER NGAY LẬP TỨC >>> ***
-    // Ẩn spinner ngay khi biết đã đăng nhập, không cần chờ API
     const infoSpinner = document.getElementById('infoSpinner');
-    if (infoSpinner) {
-        infoSpinner.style.display = 'none';
-    }
-    
+    const mainPage = document.getElementById('mainPage');
+    const managerPage = document.getElementById('managerPage');
+    const auditorPage = document.getElementById('auditorPage');
+
+    // 1. Chỉ ẩn nút Auth, hiện nút Sign Out.
+    //    GIỮ NGUYÊN SPINNER (KHÔNG ẨN)
     if (authButton) authButton.style.display = 'none';
     if (signOutButton) signOutButton.style.display = 'inline-block';
-    if (mainPage) mainPage.style.display = 'block'; 
     
-    if (infoErrorMessage) infoErrorMessage.style.display = 'none'; 
-    
+    // Đảm bảo spinner "Đang tải..." của Thông tin chung được BẬT
+    if (infoSpinner) infoSpinner.style.display = 'block'; 
+
+    // Ẩn hết các trang chính (để tránh bị nháy trang KTV)
+    if (mainPage) mainPage.style.display = 'none';
+    if (managerPage) managerPage.style.display = 'none';
+    if (auditorPage) auditorPage.style.display = 'none';
+
     userEmail = user.email;
     technicianName = user.displayName;
-    document.getElementById('userEmail').innerText = userEmail;
-    document.getElementById('technicianName').innerText = technicianName;
 
-    // *** BƯỚC 2: GỌI API (VẪN CÓ THỂ BỊ TREO, NHƯNG UI ĐÃ CHẠY) ***
-    callAuthApi('/auth/verifyAndRegister', { email: userEmail, name: technicianName })
-        .then(res => {
-            isManager = res.isManager;
-            
-            if (isManager && document.getElementById('managerPageButton')) {
+    try {
+        // 2. CHỜ KIỂM TRA VAI TRÒ (Đây là lúc delay 1.5s)
+        //    Spinner "Đang tải..." vẫn đang hiển thị, người dùng sẽ không thấy trang trắng
+        const roles = await callAuthApi('/auth/checkRoles', { email: userEmail, name: technicianName });
+        isManager = roles.isManager || false;
+        isAuditor = roles.isAuditor || false;
+
+        console.log(`Roles: isManager=${isManager}, isAuditor=${isAuditor}`);
+
+        // 3. SAU KHI CÓ KẾT QUẢ, ẨN SPINNER
+        if (infoSpinner) infoSpinner.style.display = 'none'; 
+
+        // 4. HIỂN THỊ TRANG CHÍNH XÁC (Giữ nguyên logic if/else)
+        if (isAuditor) {
+            console.log("Hiển thị trang Auditor.");
+            if (auditorPage) auditorPage.style.display = 'block';
+            if (!techniciansLoaded) loadTechnicians();
+            listenForAuditorHistory();
+
+        } else if (isManager) {
+            console.log("Hiển thị trang KTV (là Manager).");
+            if (mainPage) mainPage.style.display = 'block';
+            document.getElementById('userEmail').innerText = userEmail;
+            document.getElementById('technicianName').innerText = technicianName;
+            if (document.getElementById('managerPageButton')) {
                 document.getElementById('managerPageButton').style.display = 'inline-block';
             }
-            
-            loadBorrowHistoryForLast5Days(); 
             loadSelfDashboard();
-            
-            toggleForm(); 
-            if (isManager) {
-                loadTechnicians();
-                initItemSearch(); 
-            }
-        })
-        .catch(err => {
-            showError('infoErrorMessage', 'Lỗi kiểm tra vai trò: ' + err.message);
-            loadSelfDashboard(); 
-            toggleForm(); 
-        });
+            listenForKtvHistory();
+            if (!techniciansLoaded) loadTechnicians();
+            initItemSearch();
+
+        } else {
+            console.log("Hiển thị trang KTV (thông thường).");
+            if (mainPage) mainPage.style.display = 'block';
+            document.getElementById('userEmail').innerText = userEmail;
+            document.getElementById('technicianName').innerText = technicianName;
+            loadSelfDashboard();
+            listenForKtvHistory();
+        }
+    
+    } catch (err) {
+        // 5. NẾU LỖI, CŨNG ẨN SPINNER VÀ HIỆN TRANG KTV
+        if (infoSpinner) infoSpinner.style.display = 'none'; // <-- ẨN SPINNER KHI LỖI
+
+        console.error("Lỗi kiểm tra vai trò:", err);
+        showError('infoErrorMessage', 'Lỗi kiểm tra vai trò: ' + err.message);
         
-    // *** BƯỚC 3: XÓA KHỐI .finally() Ở ĐÂY ***
-    // (Vì chúng ta đã chuyển logic ẩn spinner lên trên)
+        // Hiển thị trang KTV cơ bản nếu có lỗi
+        if (mainPage) mainPage.style.display = 'block';
+        document.getElementById('userEmail').innerText = userEmail;
+        document.getElementById('technicianName').innerText = technicianName;
+        loadSelfDashboard();
+        listenForKtvHistory();
+    }
 }
 function showSuccess(id,msg){ var e=document.getElementById(id); e.innerText=msg; e.style.display='block'; setTimeout(function(){e.style.display='none';},5000); }
 function showError(id,msg){ var e=document.getElementById(id); e.innerText=msg; e.style.display='block'; setTimeout(function(){e.style.display='none';},5000); }
@@ -121,47 +180,82 @@ async function getFirebaseIdToken() {
     return null; 
 }
 
-async function getFirebaseIdToken() {
-    const user = auth.currentUser;
-    if (user) {
-        return user.getIdToken();
-    }
-    // Nếu không có người dùng, ta không thể lấy token.
-    return null; 
-}
 
 // --- HÀM GỌI API (ĐÃ SỬA) ---
-async function callApi(endpoint, data = {}, method = 'POST') {
-    const idToken = await getFirebaseIdToken(); // Lấy token
-    
-    // Nếu API không phải là Auth/Register và người dùng chưa có token, chặn yêu cầu
-    if (!idToken && !endpoint.startsWith('/auth/')) { 
-        showError('infoErrorMessage', 'Vui lòng đăng nhập để tiếp tục.');
-        throw new Error("User not authenticated.");
-    }
-    
-    const headers = {
-        'Content-Type': 'application/json',
-        // GỬI TOKEN LÊN GCF
-        'Authorization': idToken ? 'Bearer ' + idToken : '', 
-    };
-
-    const response = await fetch(API_BASE_URL + endpoint, {
-        method: method,
-        headers: headers,
-        body: JSON.stringify(data),
-    });
-
-    const result = await response.json();
-    if (!response.ok || result.error) {
-        // Xử lý lỗi 401 nếu token hết hạn/không hợp lệ
-        if (response.status === 401) {
-            alert("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-            // TODO: Triển khai logic đăng xuất/đăng nhập lại ở đây
+async function callApi(endpoint, data) {
+    console.log(`Calling API: ${endpoint}`); // Log khi bắt đầu gọi
+    try {
+        const user = auth.currentUser;
+        let idToken = null;
+        if (user) {
+            try {
+                idToken = await user.getIdToken(true); // Lấy token mới nhất
+            } catch (tokenError) {
+                console.error("Error getting ID token:", tokenError);
+                showError('infoErrorMessage', 'Lỗi xác thực, vui lòng đăng nhập lại.');
+                // Cân nhắc: Có thể signOut ở đây nếu token lỗi nghiêm trọng
+                // firebase.auth().signOut();
+                throw new Error('Không thể lấy token xác thực.'); // Ném lỗi để dừng
+            }
+        } else {
+             // Nếu không có user VÀ endpoint không phải là public => Lỗi
+             if (!['/auth/verifyAndRegister', '/announcement/current'].includes(endpoint)) { // Thêm các endpoint public vào đây nếu có
+                  console.warn(`User not logged in for protected endpoint: ${endpoint}`);
+                  showError('infoErrorMessage', 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.');
+                  firebase.auth().signOut(); // Đăng xuất luôn
+                  throw new Error('Yêu cầu xác thực.');
+             }
+             // Cho phép gọi API public nếu không có user
         }
-        throw new Error(result.error || 'Lỗi server không xác định.');
+
+
+        const headers = {
+            'Content-Type': 'application/json',
+        };
+        if (idToken) {
+            headers['Authorization'] = 'Bearer ' + idToken;
+        }
+
+        const res = await fetch(API_BASE_URL + endpoint, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(data)
+        });
+
+        console.log(`API Response Status for ${endpoint}: ${res.status}`); // Log status code
+
+        // Lấy text response để kiểm tra
+        const text = await res.text();
+        console.log(`API Response Text for ${endpoint}:`, text); // Log text thô
+
+        if (!res.ok) {
+            // Ném lỗi với nội dung text nếu có, hoặc status text
+            throw new Error(text || `Lỗi HTTP! Status: ${res.status}`);
+        }
+
+        // Xử lý response thành công (2xx)
+        if (!text) {
+            // Nếu body rỗng dù status OK -> trả về object rỗng mặc định
+            console.warn(`Empty success response received for endpoint: ${endpoint}`);
+            return {}; // Trả về object rỗng thay vì undefined
+        }
+
+        try {
+            // Parse JSON từ text đã lấy
+            const jsonData = JSON.parse(text);
+            console.log(`API Parsed JSON for ${endpoint}:`, jsonData); // Log JSON đã parse
+            return jsonData;
+        } catch (e) {
+            // Nếu parse lỗi -> báo lỗi JSON không hợp lệ
+            console.error(`Failed to parse JSON for endpoint ${endpoint}:`, text, e);
+            throw new Error('Dữ liệu trả về từ server không hợp lệ.');
+        }
+
+    } catch (error) {
+         console.error(`API Call failed for ${endpoint}:`, error);
+         // Ném lại lỗi để các hàm gọi .catch() có thể xử lý
+         throw error;
     }
-    return result.data; 
 }
 
 
@@ -212,13 +306,13 @@ function initForm(){
     }
     // === KẾT THÚC THÊM KHỐI ===
 
-    document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
+    // document.getElementById('historyDate').addEventListener('change', function(){ currentPage=1; loadBorrowHistory(); });
 
     if (localStorage.getItem('darkMode')==='true') document.body.classList.add('dark-mode');
 }
 
 function attachAuthListener(authButton) {
-    // Hàm này chứa logic onAuthStateChanged Y HỆT như cũ
+    // Hàm này chứa logic onAuthStateChanged
     auth.onAuthStateChanged(user => {
         if (user) {
             // TRƯỜNG HỢP 1: User đã đăng nhập
@@ -243,11 +337,31 @@ function attachAuthListener(authButton) {
             document.getElementById('userEmail').innerText = 'Chưa đăng nhập';
             document.getElementById('technicianName').innerText = 'Chưa đăng nhập';
 
+            // Hủy listener của KTV (nếu có) khi đăng xuất
+            if (ktvHistoryListener) {
+                ktvHistoryListener();
+                ktvHistoryListener = null;
+                console.log("Đã hủy KTV history listener.");
+            }
+            
+            // Hủy listener của Quản lý (nếu có) khi đăng xuất
+            if (managerHistoryListener) {
+                managerHistoryListener();
+                managerHistoryListener = null;
+                console.log("Đã hủy Manager history listener.");
+            }
+            // Hủy listener Auditor (THÊM DÒNG NÀY)
+            if (auditorHistoryListener) {
+                auditorHistoryListener();
+                auditorHistoryListener = null;
+                console.log("Đã hủy Auditor history listener.");
+            }
             // TẮT SPINNER
             document.getElementById('infoSpinner').style.display = 'none'; 
         }
     });
 }
+
 
 function toggleDarkMode(){ document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode',document.body.classList.contains('dark-mode')); }
 // File: app.js (Sửa hàm showManagerPage, khoảng dòng 217)
@@ -255,40 +369,53 @@ function toggleDarkMode(){ document.body.classList.toggle('dark-mode'); localSto
 function showManagerPage(){
     document.getElementById('mainPage').style.display='none';
     document.getElementById('managerPage').style.display='block';
-    if (!techniciansLoaded) loadTechnicians(); // Chỉ tải KTV lần đầu
-
-    // === THÊM DÒNG NÀY ===
-    loadPendingNotifications(); // Luôn tải thông báo khi vào trang QL
+    if (!techniciansLoaded) {
+        loadTechnicians(); 
+    }
+    if (auditorHistoryListener) {
+        auditorHistoryListener();
+        auditorHistoryListener = null;
+        console.log("Đã hủy Auditor history listener khi vào Manager.");
+    }
+    loadPendingNotifications(); 
+    listenForManagerHistory(); // <-- ĐỔI TÊN
 }
-function showMainPage(){ 
-    document.getElementById('managerPage').style.display='none'; 
-    document.getElementById('mainPage').style.display='block'; 
+// File: app.js
+function showMainPage(){
+    document.getElementById('managerPage').style.display='none';
+    document.getElementById('mainPage').style.display='block';
 
-    // === THÊM CÁC DÒNG SAU ĐỂ TẢI LẠI DỮ LIỆU ===
+    loadSelfDashboard();
 
-    // 1. Tải lại bảng Tổng quan và Đối chiếu sổ
-    loadSelfDashboard(); 
+    // DÒNG GÂY LỖI ĐÃ BỊ XÓA (var type = ...)
 
-    // 2. Tải lại bảng Lịch sử (tùy theo tab đang chọn)
-    var type = document.getElementById('transactionType').value;
-    if (type === 'Mượn') {
-        loadBorrowHistoryForLast5Days(); // Tải lại lịch sử mượn
-    } else {
-        loadReturnHistory(); // Tải lại lịch sử trả
+    // Hủy listener của QUẢN LÝ
+    if (managerHistoryListener) {
+        managerHistoryListener();
+        managerHistoryListener = null;
+        console.log("Đã hủy listener lịch sử (Manager).");
+    }
+    // Hủy listener Auditor
+    if (auditorHistoryListener) {
+        auditorHistoryListener();
+        auditorHistoryListener = null;
+        console.log("Đã hủy Auditor history listener khi về Main.");
     }
 }
 
-function toggleForm(){
-    var type=document.getElementById('transactionType').value;
-    document.getElementById('borrowInputForm').style.display = (type==='Mượn')?'block':'none';
-    document.getElementById('borrowHistoryForm').style.display = (type==='Mượn')?'block':'none';
-    document.getElementById('returnForm').style.display = (type==='Trả')?'block':'none';
+// function toggleForm(){
+//     var type=document.getElementById('transactionType').value;
     
-    if (type==='Trả') {
-        loadSelfDashboard();
-        loadReturnHistory();
-    }
-}
+//     document.getElementById('borrowSection').style.display = (type==='Mượn') ? 'block' : 'none';
+//     document.getElementById('returnForm').style.display = (type==='Trả') ? 'block' : 'none';
+    
+//     if (type==='Mượn') {
+//          loadSelfDashboard(); // Tải tổng quan
+//     } else { // type === 'Trả'
+//         // loadKtvReturnItems(); // Tải danh sách vật tư đang nợ
+//         // (Không cần tải lịch sử trả nữa, vì bảng mới luôn hiển thị)
+//     }
+// }
 
 
 // =======================================================
@@ -322,15 +449,15 @@ function loadSelfDashboard(){
 
 function loadManagerDashboard(email) {
     document.getElementById('technicianSpinner').style.display='block';
-    document.getElementById('managerOverviewBody').innerHTML='<tr><td colspan="6">Đang tải...</td></tr>';
+    document.getElementById('managerOverviewBody').innerHTML='<tr><td colspan="7">Đang tải...</td></tr>'; // Sửa colspan
 
     callApi('/dashboard', { technicianEmail: email })
         .then(payload => {
             borrowNotes = payload.pendingNotes || []; 
-            pendingReturnNotes = payload.pendingReturnNotes || []; // <-- THÊM DÒNG NÀY
+            pendingReturnNotes = payload.pendingReturnNotes || []; // Dữ liệu cho dropdown
             
             displayBorrowNotes();
-            displayReturnNotes(pendingReturnNotes); // <-- THÊM DÒNG NÀY
+            displayReturnNotes(pendingReturnNotes); // <-- GỌI HÀM CŨ
             
             displayBorrowedItems(payload.items || [], true);
         })
@@ -348,291 +475,235 @@ function loadBorrowedItems() {
 // LỊCH SỬ (THAY THẾ getBorrowHistory...)
 // =======================================================
 
-function loadBorrowHistoryForLast5Days(){
-    document.getElementById('historySpinner').style.display='block';
-    // FIX: Đảm bảo history luôn có {history: [], totalPages: 0}
-    callApi('/history/byemail', { email: userEmail, isLast5Days: true, currentPage: currentPage, pageSize: pageSize })
-        .then(history => { 
-            displayBorrowHistory(history.history); 
-        })
-        .catch(err => { 
-            showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); 
-            // Nếu lỗi, vẫn phải tắt spinner để không bị treo
-            displayBorrowHistory([]); 
-        })
-        .finally(() => { 
-            document.getElementById('historySpinner').style.display='none'; 
-        });
-}
+// function loadBorrowHistoryForLast5Days(){
+//     document.getElementById('historySpinner').style.display='block';
+//     // FIX: Đảm bảo history luôn có {history: [], totalPages: 0}
+//     callApi('/history/byemail', { email: userEmail, isLast5Days: true, currentPage: currentPage, pageSize: pageSize })
+//         .then(history => { 
+//             displayBorrowHistory(history.history); 
+//         })
+//         .catch(err => { 
+//             showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); 
+//             // Nếu lỗi, vẫn phải tắt spinner để không bị treo
+//             displayBorrowHistory([]); 
+//         })
+//         .finally(() => { 
+//             document.getElementById('historySpinner').style.display='none'; 
+//         });
+// }
 
-function loadBorrowHistory(){
-    var dateInput=document.getElementById('historyDate').value;
-    if (!dateInput){ loadBorrowHistoryForLast5Days(); return; }
+// function loadBorrowHistory(){
+//     var dateInput=document.getElementById('historyDate').value;
+//     if (!dateInput){ loadBorrowHistoryForLast5Days(); return; }
     
-    var p=dateInput.split('-');
-    var date=p[2]+'/'+p[1]+'/'+p[0]; // DD/MM/YYYY
+//     var p=dateInput.split('-');
+//     var date=p[2]+'/'+p[1]+'/'+p[0]; // DD/MM/YYYY
     
-    document.getElementById('historySpinner').style.display='block';
-    callApi('/history/byemail', { email: userEmail, date: date, currentPage: currentPage, pageSize: pageSize })
-        .then(history => { displayBorrowHistory(history.history); })
-        .catch(err => { showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); })
-        .finally(() => { document.getElementById('historySpinner').style.display='none'; });
-}
+//     document.getElementById('historySpinner').style.display='block';
+//     callApi('/history/byemail', { email: userEmail, date: date, currentPage: currentPage, pageSize: pageSize })
+//         .then(history => { displayBorrowHistory(history.history); })
+//         .catch(err => { showError('historyErrorMessage','Lỗi tải lịch sử: '+err.message); })
+//         .finally(() => { document.getElementById('historySpinner').style.display='none'; });
+// }
 
-function loadMoreHistory(){ currentPage++; var d=document.getElementById('historyDate').value; if (d) loadBorrowHistory(); else loadBorrowHistoryForLast5Days(); }
+// function loadMoreHistory(){ currentPage++; var d=document.getElementById('historyDate').value; if (d) loadBorrowHistory(); else loadBorrowHistoryForLast5Days(); }
 
 // File Code.gs: Sửa lỗi hiển thị lịch sử bị tách dòng
-function displayBorrowHistory(history){
-    var tbody=document.getElementById('borrowHistoryBody');
-    // Don't clear immediately if loading more
-    // tbody.innerHTML=''; // <-- REMOVED
+// function displayBorrowHistory(history){
+//     var tbody=document.getElementById('borrowHistoryBody');
+//     // Don't clear immediately if loading more
+//     // tbody.innerHTML=''; // <-- REMOVED
 
-    if (currentPage === 1) { // Clear only if it's the first page
-        tbody.innerHTML = '';
-    }
+//     if (currentPage === 1) { // Clear only if it's the first page
+//         tbody.innerHTML = '';
+//     }
 
-    if (!history||!history.length){
-        if (currentPage === 1) { // Show message only if first page is empty
-             tbody.innerHTML='<tr><td colspan="2">Không có lịch sử mượn hàng</td></tr>';
-        }
-        document.querySelector('#borrowHistoryForm button').style.display = 'none'; // Hide "Load More" if no results
-        return;
-    }
+//     if (!history||!history.length){
+//         if (currentPage === 1) { // Show message only if first page is empty
+//              tbody.innerHTML='<tr><td colspan="2">Không có lịch sử mượn hàng</td></tr>';
+//         }
+//         document.querySelector('#borrowHistoryForm button').style.display = 'none'; // Hide "Load More" if no results
+//         return;
+//     }
 
-    history.forEach(function(entry){
-      var note = entry.note || '';
-      var itemsHtml = '';
-      var hasItems = Object.keys(entry.itemsEntered).length > 0;
+//     history.forEach(function(entry){
+//       var note = entry.note || '';
+//       var itemsHtml = '';
+//       var hasItems = Object.keys(entry.itemsEntered).length > 0;
 
-      // 1. Tạo danh sách vật tư (nếu có) - Bỏ mã vật tư
-      if (hasItems) {
-          itemsHtml = Object.values(entry.itemsEntered).map(function(it){
-              return '— '+it.name+': '+it.quantity; // No item code here
-          }).join('<br>');
-      }
+//       // 1. Tạo danh sách vật tư (nếu có) - Bỏ mã vật tư
+//       if (hasItems) {
+//           itemsHtml = Object.values(entry.itemsEntered).map(function(it){
+//               return '— '+it.name+': '+it.quantity; // No item code here
+//           }).join('<br>');
+//       }
 
-      // 2. Tạo HTML trạng thái (MỚI)
-      var statusHtml = '';
-      if (entry.status === 'Pending') {
-          statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
-      } else if (entry.status === 'Rejected') {
-          var reason = entry.reason ? (': ' + entry.reason) : '';
-          statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
-      }
-      // Implicitly, 'Fulfilled' status has no specific text unless items are present
+//       // 2. Tạo HTML trạng thái (MỚI)
+//       var statusHtml = '';
+//       if (entry.status === 'Pending') {
+//           statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
+//       } else if (entry.status === 'Rejected') {
+//           var reason = entry.reason ? (': ' + entry.reason) : '';
+//           statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
+//       }
+//       // Implicitly, 'Fulfilled' status has no specific text unless items are present
 
-      // 3. Kết hợp note, trạng thái, và vật tư
-      var finalNoteHtml = '';
-      // Thêm gạch ngang nếu bị từ chối và có note
-      var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
+//       // 3. Kết hợp note, trạng thái, và vật tư
+//       var finalNoteHtml = '';
+//       // Thêm gạch ngang nếu bị từ chối và có note
+//       var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
 
-      if (noteDisplay && hasItems) {
-          // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
-          finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
-      } else if (noteDisplay) {
-          // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
-          finalNoteHtml = noteDisplay + statusHtml;
-      } else if (hasItems) {
-          // Chỉ có vật tư (mượn trực tiếp)
-          finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã mượn:</strong><br>' + itemsHtml;
-      }
+//       if (noteDisplay && hasItems) {
+//           // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
+//           finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+//       } else if (noteDisplay) {
+//           // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
+//           finalNoteHtml = noteDisplay + statusHtml;
+//       } else if (hasItems) {
+//           // Chỉ có vật tư (mượn trực tiếp)
+//           finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã mượn:</strong><br>' + itemsHtml;
+//       }
 
-      if (!finalNoteHtml && !statusHtml) finalNoteHtml = 'Không có dữ liệu'; // Fallback
+//       if (!finalNoteHtml && !statusHtml) finalNoteHtml = 'Không có dữ liệu'; // Fallback
 
-      var date=new Date(entry.timestamp).toLocaleString('vi-VN');
-      var tr=document.createElement('tr');
-      tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung mượn">'+finalNoteHtml+'</td>';
-      tbody.appendChild(tr);
-    });
+//       var date=new Date(entry.timestamp).toLocaleString('vi-VN');
+//       var tr=document.createElement('tr');
+//       tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung mượn">'+finalNoteHtml+'</td>';
+//       tbody.appendChild(tr);
+//     });
 
-    // Show or hide "Load More" button based on whether there might be more pages
-    document.querySelector('#borrowHistoryForm button').style.display = history.length < 5 ? 'none' : 'block'; // Adjust '5' if pageSize changes
-}
+//     // Show or hide "Load More" button based on whether there might be more pages
+//     document.querySelector('#borrowHistoryForm button').style.display = history.length < 5 ? 'none' : 'block'; // Adjust '5' if pageSize changes
+// }
 
 // ===== Logic hiển thị Tổng quan (Giữ nguyên) =====
 
 
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM displayBorrowedItems BẰNG HÀM NÀY:
+
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM displayBorrowedItems BẰNG HÀM NÀY:
+
 function displayBorrowedItems(items, isManagerView){
     var overviewBody = isManagerView ? document.getElementById('managerOverviewBody') : document.getElementById('overviewBody');
     var returnBody   = document.getElementById('borrowedItemsBody'); // Bảng của KTV
-    var reconciledBody = document.getElementById('reconciledTicketsBody'); // Bảng KTV (Đã đối chiếu)
+    // Bảng Đã đối chiếu (sẽ được render riêng)
+    var reconciledBody = document.getElementById('reconciledTicketsBody'); 
+    
     // Xóa nội dung cũ
     overviewBody.innerHTML='';
     if (!isManagerView) {
         returnBody.innerHTML='';
-        if (reconciledBody) reconciledBody.innerHTML = ''; // <-- THÊM DÒNG NÀY
+        if (reconciledBody) reconciledBody.innerHTML = ''; 
     }
     
-    // Kiểm tra nếu không có dữ liệu
-    // if (!items||!items.length){
-    //   overviewBody.innerHTML='<tr><td colspan="6">Không có vật tư đã mượn</td></tr>';
-    //   if (!isManagerView) returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>'; // 4 cột
-    //   if (isManagerView) managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
-    //   return;
-    // }
+    let itemsShownInOverview = 0; 
+    const tickets = {}; // Cache cho Sổ CHƯA đối chiếu
+    
+    // Reset cache của sổ ĐÃ đối chiếu (Rất quan trọng)
+    allReconciledTicketsCache = []; 
 
-    // --- HIỂN THỊ BẢNG TỔNG QUAN ---
+    // --- LẶP QUA DỮ LIỆU TỔNG QUAN ---
     items.forEach(function(item){
-      var remaining = item.quantity - item.totalUsed;
+      var remaining = item.remaining || 0; 
 
-      // Chỉ hiển thị trên Tổng quan nếu KTV vẫn còn nợ HOẶC còn sổ chưa đối chiếu
-      if (item.quantity > 0 || item.totalUsed > 0) {
+      // Logic hiển thị Tổng quan (Giữ nguyên)
+      if (remaining > 0 || (item.unreconciledUsageDetails && item.unreconciledUsageDetails.length > 0)) {
+          itemsShownInOverview++;
+          // ... (code render 'overviewBody' giữ nguyên) ...
           var row=document.createElement('tr');
           let rowHtml = '';
-
-          // *** BẮT ĐẦU THAY ĐỔI LOGIC ***
           if (isManagerView) {
-              // --- Giao diện Quản lý (Giữ nguyên 6 cột) ---
-              var unreFull = (item.unreconciledUsageDetails||[]).map(function(u){
-                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>'; // Giữ note
-              }).join('<br>') || 'Chưa có';
-
-              rowHtml =
-                '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Giữ Code
-                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
-                '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-                '<td data-label="Chi tiết số sổ">'+unreFull+'</td>'; // Giữ label cũ
+              // ... (HTML cho Quản lý) ...
+              var unreFull = (item.unreconciledUsageDetails||[]).map(function(u){ return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+' ('+(u.note||'-')+')</span>'; }).join('<br>') || 'Chưa có';
+              rowHtml = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
+                        '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
+                        '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
+                        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+                        '<td data-label="Đã trả">'+item.totalReturned+'</td>'+ 
+                        '<td data-label="Còn lại">'+remaining+'</td>'+ 
+                        '<td data-label="Chi tiết số sổ">'+unreFull+'</td>';
           } else {
-              // --- Giao diện Kỹ thuật viên (Còn 5 cột) ---
-               var unreSimple = (item.unreconciledUsageDetails||[]).map(function(u){
-                return '<span class="unreconciled">Sổ '+u.ticket+': '+u.quantity+'</span>'; // Bỏ note
-              }).join('<br>') || 'Chưa có';
-
-              rowHtml =
-                '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                // '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ // Bỏ Code
-                '<td data-label="Tổng mượn chưa trả">'+item.quantity+'</td>'+
-                '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-                '<td data-label="Số lượng cần trả">'+remaining+'</td>'+
-                '<td data-label="Số sổ">'+unreSimple+'</td>'; // Đổi label, dùng unreSimple
+              // ... (HTML cho KTV) ...
+              rowHtml = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
+                        '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
+                        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+                        '<td data-label="Đã trả">'+item.totalReturned+'</td>'+
+                        '<td data-label="Còn lại">'+remaining+'</td>';
           }
-          // *** KẾT THÚC THAY ĐỔI LOGIC ***
-
           row.innerHTML = rowHtml;
           overviewBody.appendChild(row);
       }
-    });
+      
+      // Logic gom nhóm Sổ (CHƯA VÀ ĐÃ ĐỐI CHIẾU)
+      if (!isManagerView){
+          // Gom sổ CHƯA đối chiếu (Giữ nguyên)
+          (item.unreconciledUsageDetails || []).forEach(function(detail) {
+              if (!tickets[detail.ticket]) {
+                  tickets[detail.ticket] = {
+                      ticket: detail.ticket,
+                      ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
+                      items: [] 
+                  };
+              }
+              tickets[detail.ticket].items.push({ name: item.name, code: item.code, quantity: detail.quantity });
+          });
+          
+          // === THAY ĐỔI: LƯU VÀO CACHE ===
+          // Gom sổ ĐÃ đối chiếu và LƯU VÀO CACHE (allReconciledTicketsCache)
+          (item.reconciledUsageDetails || []).forEach(function(detail) { 
+              // Ghi chú: Logic gom nhóm này hơi kỳ, lẽ ra backend nên trả về 
+              // danh sách sổ đã gom nhóm. Nhưng ta giữ nguyên logic cũ.
+              let ticketKey = detail.ticket || `unknown-${item.code}`;
+              let existingTicket = allReconciledTicketsCache.find(t => t.ticket === ticketKey);
+              
+              if (!existingTicket) {
+                   existingTicket = {
+                        ticket: ticketKey,
+                        ticketNumber: parseInt((ticketKey || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
+                        items: [] 
+                    };
+                    allReconciledTicketsCache.push(existingTicket);
+              }
+              existingTicket.items.push({ name: item.name, code: item.code, quantity: detail.quantity });
+          });
+          // === KẾT THÚC THAY ĐỔI ===
+      }
+    }); // Hết vòng lặp items.forEach
+
+    // Thêm thông báo nếu không có vật tư nào (Giữ nguyên)
+    if (itemsShownInOverview === 0) {
+        const colSpan = isManagerView ? 7 : 5;
+        overviewBody.innerHTML = `<tr><td colspan="${colSpan}">Không có vật tư nào đang nợ.</td></tr>`;
+    }
 
     
-    // --- HIỂN THỊ BẢNG ĐỐI CHIẾU ---
-
+    // --- RENDER 2 BẢNG SỔ (CHỈ CHO KTV) ---
     if (!isManagerView){
-        // *** LOGIC GOM NHÓM (CÓ SẮP XẾP) ***
-        const tickets = {}; // Nơi gom nhóm
-        const reconciledTickets = {}; // Đã đối chiếu (MỚI)
-        // 1. Tái cấu trúc dữ liệu: Gom vật tư theo Sổ
-        items.forEach(function(item) {
-            (item.unreconciledUsageDetails || []).forEach(function(detail) {
-                if (!tickets[detail.ticket]) {
-                    tickets[detail.ticket] = {
-                        ticket: detail.ticket,
-                        // Trích xuất số sổ để sắp xếp
-                        ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
-                        items: [] 
-                    };
-                }
-                tickets[detail.ticket].items.push({
-                    name: item.name,
-                    code: item.code,
-                    quantity: detail.quantity
-                });
-            });
-            // *** THÊM KHỐI NÀY: Gom ĐÃ đối chiếu ***
-            (item.reconciledUsageDetails || []).forEach(function(detail) { //)"]
-                if (!reconciledTickets[detail.ticket]) {
-                    reconciledTickets[detail.ticket] = {
-                        ticket: detail.ticket,
-                        ticketNumber: parseInt((detail.ticket || 'Sổ 0').match(/\d+$/)[0], 10) || 0,
-                        items: [] 
-                    };
-                }
-                reconciledTickets[detail.ticket].items.push({ name: item.name, code: item.code, quantity: detail.quantity });
-            });
-        });
-
-        // 2. SẮP XẾP MẢNG CÁC SỔ
-        const sortedTickets = Object.values(tickets).sort(function(a, b) {
-            return a.ticketNumber - b.ticketNumber;
-        });
-
-        // 3. Render dữ liệu đã gom nhóm VÀ sắp xếp
+        // 1. Render Sổ CHƯA đối chiếu (Giữ nguyên)
+        const sortedTickets = Object.values(tickets).sort((a, b) => a.ticketNumber - b.ticketNumber);
         sortedTickets.forEach(function(ticket) {
             var rr = document.createElement('tr');
-            
-            // Tách Tên vật tư ra 1 chuỗi
-            var itemsNameHtml = ticket.items.map(function(it) {
-                return (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')';
-            }).join('<br>');
-            
-            // Tách Số lượng ra 1 chuỗi
-            var itemsQtyHtml = ticket.items.map(function(it) {
-                return it.quantity;
-            }).join('<br>');
-            
-            // Render 4 cột
+            var itemsNameHtml = ticket.items.map(it => (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')').join('<br>');
+            var itemsQtyHtml = ticket.items.map(it => it.quantity).join('<br>');
             rr.innerHTML =
                 '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
                 '<td data-label="Tên vật tư">' + itemsNameHtml + '</td>' +
                 '<td data-label="Số lượng sử dụng" style="text-align: center;">' + itemsQtyHtml + '</td>' +
                 '<td data-label="Xác nhận đối chiếu"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
-            
             returnBody.appendChild(rr);
         });
-        // 4. SẮP XẾP MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
-        const sortedReconciled = Object.values(reconciledTickets).sort(function(a, b) {
-            return b.ticketNumber - a.ticketNumber; // Sắp xếp giảm dần (mới nhất lên trên)
-        });
-
-        // 5. RENDER MẢNG ĐÃ ĐỐI CHIẾU (MỚI)
-        if (reconciledBody) {
-            sortedReconciled.forEach(function(ticket) {
-                var rRow = document.createElement('tr');
-                var rItemsNameHtml = ticket.items.map(function(it) { return (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')'; }).join('<br>');
-                var rItemsQtyHtml = ticket.items.map(function(it) { return it.quantity; }).join('<br>');
-                
-                rRow.innerHTML =
-                    '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
-                    '<td data-label="Tên vật tư">' + rItemsNameHtml + '</td>' +
-                    '<td data-label="Số lượng sử dụng" style="text-align: center;">' + rItemsQtyHtml + '</td>';
-                reconciledBody.appendChild(rRow);
-            });
-        }
-        
-        if (Object.keys(tickets).length === 0) {
+        if (sortedTickets.length === 0) {
              returnBody.innerHTML='<tr><td colspan="4">Chưa có sổ cần đối chiếu</td></tr>';
         }
-        if (reconciledBody && Object.keys(reconciledTickets).length === 0) {
-             reconciledBody.innerHTML='<tr><td colspan="3">Chưa có sổ đã đối chiếu</td></tr>';
-        }
 
+        // 2. Render Sổ ĐÃ đối chiếu (TRANG 1)
+        // Sắp xếp cache Đã đối chiếu
+        allReconciledTicketsCache.sort((a, b) => b.ticketNumber - a.ticketNumber); // Sắp xếp giảm dần
+        reconciledTicketsCurrentPage = 1; // Reset về trang 1
+        renderReconciledTicketsTable(); // Gọi hàm render mới
     }
-    //else { // if (isManagerView)
-    //     // *** LOGIC CŨ: GIỮ NGUYÊN CHO QUẢN LÝ (CHI TIẾT TỪNG VẬT TƯ) ***
-    //     let hasUnreconciled = false;
-    //     items.forEach(function(item){
-    //         (item.unreconciledUsageDetails||[]).forEach(function(detail){
-    //             hasUnreconciled = true;
-    //             var remaining = item.quantity - item.totalUsed;
-    //             var mr=document.createElement('tr');
-    //             mr.innerHTML =
-    //                 '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-    //                 '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-    //                 '<td data-label="Số lượng sử dụng">'+detail.quantity+'</td>'+
-    //                 '<td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" value="0"></td>'+
-    //                 '<td data-label="Số lượng còn lại">'+remaining+'</td>'+
-    //                 '<td data-label="Số sổ">'+detail.ticket+'</td>'+
-    //                 '<td data-label="Ghi chú">'+(detail.note||'-')+'</td>'+
-    //                 '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="'+detail.ticket+'"></td>';
-    //             managerReturnBody.appendChild(mr);
-    //         });
-    //     });
-        
-    //     if (!hasUnreconciled) {
-    //         managerReturnBody.innerHTML='<tr><td colspan="8">Không có vật tư đã mượn</td></tr>';
-    //     }
-    // }
 }
 
 
@@ -641,8 +712,7 @@ function displayBorrowedItems(items, isManagerView){
 // =======================================================
 
 function submitForm(){
-    var type=document.getElementById('transactionType').value;
-    if (type==='Mượn') submitBorrowForm(); else submitReturnForm();
+    submitReturnForm();
 }
 
 function submitBorrowForm(){
@@ -659,7 +729,7 @@ function submitBorrowForm(){
         .then(() => {
             showSuccess('borrowSuccessMessage','Gửi yêu cầu mượn thành công!');
             document.getElementById('borrowItems').value='';
-            loadBorrowHistoryForLast5Days();
+            // loadBorrowHistoryForLast5Days();
             loadSelfDashboard(); // Cần tải lại Dashboard để làm mới Pending Notes
         })
         .catch(err => {
@@ -747,40 +817,54 @@ function submitErrorReport(){
 function loadTechnicians(){
     techniciansLoaded = false;
     technicianMap.clear();
-    document.getElementById('technicianSpinner').style.display='block';
+    // Đảm bảo spinner tồn tại trước khi truy cập style
+    const techSpinner = document.getElementById('technicianSpinner');
+    if (techSpinner) techSpinner.style.display='block';
+
     callApi('/manager/technicians')
         .then(techs => {
-            var sel=document.getElementById('technicianEmail');
-            var selFrom = document.getElementById('transferFromTech'); // <-- THÊM
-            var selTo = document.getElementById('transferToTech');   // <-- THÊM
+            var selManager = document.getElementById('technicianEmail');        // Manager view KTV
+            var selFrom = document.getElementById('transferFromTech');       // Transfer From
+            var selTo = document.getElementById('transferToTech');         // Transfer To
+            var selManagerHistory = document.getElementById('managerHistoryFilterTech'); // Manager History Filter
+            var selAuditorHistory = document.getElementById('auditorHistoryFilterTech'); // Auditor History Filter (MỚI)
 
-            sel.innerHTML='<option value="">Chọn kỹ thuật viên</option>';
-            // Đảm bảo các select khác tồn tại trước khi set innerHTML
-            if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>'; // <-- THÊM
-            if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';     // <-- THÊM
+            // Xóa các option cũ (trừ option mặc định)
+            if (selManager) selManager.innerHTML='<option value="">Chọn kỹ thuật viên</option>';
+            if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>';
+            if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';
+            if (selManagerHistory) selManagerHistory.innerHTML = '<option value="Tất cả">Tất cả KTV</option>';
+            if (selAuditorHistory) selAuditorHistory.innerHTML = '<option value="Tất cả">Tất cả KTV</option>';
 
-            (techs||[]).forEach(function(t){
+            (techs||[]).forEach(function(t, index){
+                // Kiểm tra email hợp lệ trước khi thêm
+                if (!t || !t.email) return;
+
                 const name = t.name || t.email;
                 const text = t.name ? `${t.name} (${t.email})` : t.email;
-                technicianMap.set(t.email, name);
+                technicianMap.set(t.email, name); // Lưu vào Map để dùng sau
 
                 var o=document.createElement('option');
                 o.value=t.email;
                 o.text= text;
 
-                sel.appendChild(o.cloneNode(true));
-                // Chỉ thêm vào nếu select tồn tại (phòng trường hợp HTML chưa load kịp)
-                if (selFrom) selFrom.appendChild(o.cloneNode(true)); // <-- THÊM
-                if (selTo) selTo.appendChild(o.cloneNode(true));   // <-- THÊM
+                // Thêm vào các dropdown (nếu tồn tại)
+                if (selManager) selManager.appendChild(o.cloneNode(true));
+                if (selFrom) selFrom.appendChild(o.cloneNode(true));
+                if (selTo) selTo.appendChild(o.cloneNode(true));
+                if (selManagerHistory) selManagerHistory.appendChild(o.cloneNode(true));
+                if (selAuditorHistory) selAuditorHistory.appendChild(o.cloneNode(true)); // <-- THÊM DÒNG NÀY
+                // === KẾT THÚC SỬA ===
             });
-            techniciansLoaded = true;
+            techniciansLoaded = true; // Đánh dấu đã tải xong
         })
         .catch(err => {
             showError('technicianErrorMessage','Lỗi tải danh sách KTV: '+err.message);
-            techniciansLoaded = false;
+            techniciansLoaded = false; // Đánh dấu là chưa tải được
         })
         .finally(() => {
-            document.getElementById('technicianSpinner').style.display='none';
+            // Đảm bảo spinner tồn tại trước khi truy cập style
+            if (techSpinner) techSpinner.style.display='none';
         });
 }
 
@@ -798,11 +882,43 @@ function initItemSearch(){
 
 function loadTechnicianData(){
     var email=document.getElementById('technicianEmail').value;
+    
+    // Đóng tất cả các toggle
+    jQuery('#managerPage .toggle-content').slideUp();
+    jQuery('#managerPage .toggle-header').removeClass('active');
+    
+    // Xóa bộ chọn note trả cũ
+    document.getElementById('returnNoteSelect').value = '';
+    document.getElementById('technicianNote').value = '';
+    selectedReturnNoteItems = null;
+
+    // Reset danh sách trả tạm (Bảng 2)
+    managerReturnItems = [];
+    displayManagerReturnList();
+
     if (!email){
-        // Logic reset form giữ nguyên
+        // Nếu bỏ chọn KTV, xóa hết các bảng
+        document.getElementById('managerOverviewBody').innerHTML='';
+        document.getElementById('unusedItemsBody').innerHTML='<tr><td colspan="5">Vui lòng chọn kỹ thuật viên</td></tr>';
+        document.getElementById('ticketRangesBody').innerHTML='';
         return;
     }
-    loadManagerDashboard(email); // Tải dashboard Manager với email đã chọn
+    
+    // Tải dashboard (Tổng quan, Lệnh chờ)
+    loadManagerDashboard(email); 
+    
+    // === THÊM DÒNG NÀY VÀO ===
+    // Tải dải số (tickets) cho KTV vừa chọn
+    loadTicketRanges();
+    // === KẾT THÚC THÊM ===
+    
+    // Kiểm tra xem tab "Trả vật tư" có đang active không
+    var returnModeActive = document.getElementById('returnUnusedMode').checked;
+    
+    if (returnModeActive) {
+        // Tải Bảng 1
+        loadUnusedItems();
+    }
 }
 // public/app.js (Bổ sung hàm uploadExcel)
 
@@ -946,7 +1062,16 @@ function toggleReturnUnusedMode(){
     var borrowMode=document.getElementById('borrowMode').checked;
     document.getElementById('borrowInputSection').style.display=borrowMode?'block':'none';
     document.getElementById('returnUnusedSection').style.display=borrowMode?'none':'block';
-    if (!borrowMode) loadUnusedItems();
+    
+    if (!borrowMode) {
+        // Khi chuyển sang tab Trả
+        loadUnusedItems();
+        
+        // Đảm bảo trạng thái mặc định là "Trả trực tiếp"
+        document.getElementById('approveNoteControls').style.display = 'none';
+        document.getElementById('directReturnControls').style.display = 'block';
+        // (Vì dropdown "Chọn note" mặc định là "Bỏ chọn")
+    }
 }
 
 function addManagerItem(){
@@ -1092,91 +1217,133 @@ function submitManagerReturn(){
         });
 }
 
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM loadUnusedItems
+
 function loadUnusedItems(){
-    var email=document.getElementById('technicianEmail').value;
-    var tbody=document.getElementById('unusedItemsBody');
-    if (!email){ tbody.innerHTML='<tr><td colspan="4">Vui lòng chọn kỹ thuật viên</td></tr>'; return; }
-    document.getElementById('returnUnusedSpinner').style.display='block';
-    
-    // Yêu cầu API GCF trả về danh sách tồn kho mượn chưa trả
+    var email = document.getElementById('technicianEmail').value;
+    var tbody = document.getElementById('unusedItemsBody');
+    if (!tbody) { /* ... */ return; }
+    if (!email) {
+        tbody.innerHTML = '<tr><td colspan="5">Vui lòng chọn kỹ thuật viên</td></tr>';
+        return;
+    }
+
+    const spinner = document.getElementById('returnUnusedSpinner');
+    if (spinner) spinner.style.display = 'block';
+    tbody.innerHTML = '<tr><td colspan="5"><div class="spinner"></div> Đang tải...</td></tr>';
+
+    // === 2 DÒNG GÂY LỖI ĐÃ BỊ XÓA TẠI ĐÂY ===
+    // showError('returnUnusedErrorMessage',''); (ĐÃ XÓA)
+    // showSuccess('returnUnusedSuccessMessage',''); (ĐÃ XÓA)
+
     callApi('/dashboard', { technicianEmail: email })
         .then(payload => {
             const items = payload.items || [];
-            tbody.innerHTML='';
+            tbody.innerHTML = ''; 
+            const returnableItems = items.filter(it => it.remaining > 0);
             
-            if (!items||!items.length){ tbody.innerHTML='<tr><td colspan="4">Không có vật tư đã mượn</td></tr>'; }
-            else {
-                items.forEach(function(it){
-                    var max=Math.max(0, (it.quantity||0)); // Total quantity after reconciliation
-                    var tr=document.createElement('tr');
-                    tr.innerHTML='<td data-label="Tên vật tư">'+(it.name||'')+'</td><td data-label="Mã vật tư">'+(it.code||'')+'</td><td data-label="Số lượng đã mượn">'+max+'</td><td data-label="Số lượng trả"><input type="number" class="quantity-return-input" min="0" max="'+max+'" value="0"></td>';
+            if (returnableItems.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">KTV này không nợ vật tư nào.</td></tr>';
+            } else {
+                returnableItems.forEach(function(it, index){
+                    const remainingQty = it.remaining;
+                    var tr = document.createElement('tr');
+                    tr.dataset.code = it.code; 
+                    tr.id = `return-item-row-${index}`; 
+                    
+                    tr.innerHTML = `
+                        <td data-label="Tên vật tư">${it.name || ''}</td>
+                        <td data-label="Mã vật tư">${it.code || ''}</td>
+                        <td data-label="Đang nợ" style="text-align: center;">${remainingQty}</td>
+                        <td data-label="Số lượng trả">
+                            <input type="number" class="quantity-return-input"
+                                   id="return-qty-input-${index}" 
+                                   min="0" max="${remainingQty}" value="0">
+                        </td>
+                        <td data-label="Thêm">
+                            <button onclick="addManagerReturnItem('${index}', '${it.code}', '${it.name}', ${remainingQty})">+</button>
+                        </td>`;
                     tbody.appendChild(tr);
                 });
             }
+            
+            highlightKtvRequestedReturnItems();
         })
         .catch(err => {
-            showError('returnUnusedErrorMessage','Lỗi tải danh sách: '+err.message);
+            // Chỉ hiển thị lỗi nếu tải thất bại
+            showError('returnUnusedErrorMessage','Lỗi tải danh sách trả: '+ (err.message || 'Lỗi không xác định'));
+            tbody.innerHTML='<tr><td colspan="5">Lỗi tải danh sách vật tư.</td></tr>';
         })
         .finally(() => {
-            document.getElementById('returnUnusedSpinner').style.display='none';
+            if (spinner) spinner.style.display = 'none';
         });
 }
 
+/**
+ * [SỬA ĐỔI] Gửi duyệt note KTV gửi (Quy trình cũ)
+ */
 function approveReturnNote(){
     var email=document.getElementById('technicianEmail').value;
     var date=document.getElementById('returnUnusedTransactionDate').value;
     var items=[];
     var valid=true;
+    // Lấy danh sách input từ Bảng 1 (unusedItemsTable)
     var inputs=document.querySelectorAll('#unusedItemsTable .quantity-return-input');
     
-    // 1. Lấy thông tin note KTV
     var selectedTs = document.getElementById('returnNoteSelect').value;
-    var techNote = (document.getElementById('technicianReturnNote').value || '').trim();
+    if (!selectedTs) {
+         showError('returnUnusedErrorMessage','Vui lòng chọn một note KTV để duyệt.');
+         return;
+    }
 
-    // 2. Lặp qua bảng vật tư (Logic cũ)
+    // Lặp qua Bảng 1, chỉ lấy các vật tư có số lượng > 0 (đã được auto-fill)
     inputs.forEach(function(input){
-      var tr=input.closest('tr');
-      var code=tr.cells[1].innerText;
-      var name=tr.cells[0].innerText;
       var qRet=parseFloat(input.value)||0;
-      var max=parseFloat(input.max)||0;
-      if (qRet<0 || qRet>max){ showError('returnUnusedErrorMessage','Số lượng trả không hợp lệ cho '+code); valid=false; return; }
-      if (qRet>0) items.push({ code:code, name:name, quantityReturned:qRet, quantityUsed:0 });
+      if (qRet > 0) { 
+          var tr=input.closest('tr');
+          var code=tr.cells[1].innerText;
+          var name=tr.cells[0].innerText;
+          var max=parseFloat(input.max)||0;
+          
+          if (qRet<0 || qRet>max){ showError('returnUnusedErrorMessage','Số lượng trả không hợp lệ cho '+code); valid=false; return; }
+          
+          items.push({ 
+              code:code, 
+              name:name, 
+              quantityReturned:qRet // Dùng key này
+          });
+      }
     });
     
-    if (!valid || !email || !date || !items.length){ showError('returnUnusedErrorMessage','Vui lòng chọn KTV, ngày và ít nhất một vật tư hợp lệ.');
+    if (!valid || !email || !date || !items.length){ showError('returnUnusedErrorMessage','Vui lòng chọn KTV, ngày và ít nhất một vật tư hợp lệ (đã được điền tự động).');
     return; }
 
-    // 3. *** LOGIC MỚI: Gán note ***
-    // Nếu quản lý có chọn note (selectedTs) VÀ note đó có nội dung (techNote), thì dùng note của KTV.
-    // Ngược lại, dùng note mặc định.
-    const finalNote = (selectedTs && techNote) ? techNote : 'Trả vật tư không sử dụng';
-
-    // 4. Tạo data object
     var data={ 
-        timestamp:new Date().toISOString(), 
+        timestamp: new Date().toISOString(), // Timestamp của QL
         type:'Trả', 
         email:email, 
         date:date, 
         items:items, 
-        note: finalNote, // <-- ĐÃ SỬA
-        returnTimestamp: selectedTs 
+        note: (document.getElementById('technicianReturnNote').value || '').trim(), // Note gốc KTV
+        returnTimestamp: selectedTs // Đây là ID của note KTV (pendingNoteId)
     };
     
     document.getElementById('returnUnusedSpinner').style.display='block';
     
-    callApi('/submit/return', data) //
+    callApi('/submit/return', data)
       .then(() => {
-        showSuccess('returnUnusedSuccessMessage','Trả vật tư không sử dụng thành công!');
+        showSuccess('returnUnusedSuccessMessage','Duyệt note trả thành công!');
         document.getElementById('returnUnusedTransactionDate').value='';
         document.getElementById('returnNoteSelect').value = ''; 
         document.getElementById('technicianReturnNote').value = ''; 
+        selectedReturnNoteItems = null; // Reset
         
-        loadUnusedItems(); 
-        loadTechnicianData();
+        loadUnusedItems(); // Tải lại Bảng 1
+        loadManagerDashboard(email); // Tải lại dashboard
       })
       .catch(err => {
-        showError('returnUnusedErrorMessage','Lỗi xác nhận: '+err.message);
+        showError('returnUnusedErrorMessage','Lỗi duyệt note: '+err.message);
       })
       .finally(() => {
         document.getElementById('returnUnusedSpinner').style.display='none';
@@ -1278,61 +1445,187 @@ function removeTicketRange(i){
 /**
  * Gửi yêu cầu (note) trả vật tư không sử dụng
  */
-function submitReturnNote(){
-    var note=(document.getElementById('returnNoteItems').value||'').trim();
-    if (!note){ showError('returnNoteErrorMessage','Vui lòng nhập nội dung trả.'); return; }
+// function submitReturnNote(){
+//     var note=(document.getElementById('returnNoteItems').value||'').trim();
+//     if (!note){ showError('returnNoteErrorMessage','Vui lòng nhập nội dung trả.'); return; }
     
-    var data={
-      timestamp: new Date().toISOString(),
-      type:'Trả', 
-      email:userEmail, 
-      date: new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
-      note:note,
-      items: [] 
-    };
+//     var data={
+//       timestamp: new Date().toISOString(),
+//       type:'Trả', 
+//       email:userEmail, 
+//       date: new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
+//       note:note,
+//       items: [] 
+//     };
     
-    document.getElementById('returnNoteSpinner').style.display='block';
+//     document.getElementById('returnNoteSpinner').style.display='block';
     
-    callApi('/submit/return', data)
-        .then(() => {
-            showSuccess('returnNoteSuccessMessage','Gửi yêu cầu trả thành công!');
+//     callApi('/submit/return', data)
+//         .then(() => {
+//             showSuccess('returnNoteSuccessMessage','Gửi yêu cầu trả thành công!');
             
-            // === BẮT ĐẦU CẬP NHẬT GIAO DIỆN TỨC THỜI ===
-            var tbody = document.getElementById('returnHistoryBody');
+//             // === BẮT ĐẦU CẬP NHẬT GIAO DIỆN TỨC THỜI ===
+//             var tbody = document.getElementById('returnHistoryBody');
             
-            // Xóa dòng "Không có lịch sử" nếu có
-            var firstRow = tbody.rows[0];
-            if (firstRow && (firstRow.cells.length === 1 || (firstRow.cells[1] && firstRow.cells[1].innerText === 'Không có lịch sử trả hàng'))) {
-                tbody.innerHTML = '';
-            }
+//             // Xóa dòng "Không có lịch sử" nếu có
+//             var firstRow = tbody.rows[0];
+//             if (firstRow && (firstRow.cells.length === 1 || (firstRow.cells[1] && firstRow.cells[1].innerText === 'Không có lịch sử trả hàng'))) {
+//                 tbody.innerHTML = '';
+//             }
 
-            var tr = document.createElement('tr');
-            var date = new Date().toLocaleString('vi-VN');
-            // Thêm trạng thái MÀU XANH
-            var statusHtml = ' <span style="color: blue; font-weight: bold; font-style: italic">(Đang xử lý...)</span>';
+//             var tr = document.createElement('tr');
+//             var date = new Date().toLocaleString('vi-VN');
+//             // Thêm trạng thái MÀU XANH
+//             var statusHtml = ' <span style="color: blue; font-weight: bold; font-style: italic">(Đang xử lý...)</span>';
             
-            tr.innerHTML = '<td data-label="Thời gian">' + date + '</td>' +
-                           '<td data-label="Nội dung trả">' + note + statusHtml + '</td>';
+//             tr.innerHTML = '<td data-label="Thời gian">' + date + '</td>' +
+//                            '<td data-label="Nội dung trả">' + note + statusHtml + '</td>';
             
-            tbody.prepend(tr); // Thêm vào đầu bảng
-            // === KẾT THÚC CẬP NHẬT GIAO DIỆN ===
+//             tbody.prepend(tr); // Thêm vào đầu bảng
+//             // === KẾT THÚC CẬP NHẬT GIAO DIỆN ===
             
-            document.getElementById('returnNoteItems').value='';
-        })
-        .catch(err => {
-            showError('returnNoteErrorMessage','Lỗi gửi yêu cầu: '+err.message);
-        })
-        .finally(() => {
-            document.getElementById('returnNoteSpinner').style.display='none';
-        });
-}
+//             document.getElementById('returnNoteItems').value='';
+//         })
+//         .catch(err => {
+//             showError('returnNoteErrorMessage','Lỗi gửi yêu cầu: '+err.message);
+//         })
+//         .finally(() => {
+//             document.getElementById('returnNoteSpinner').style.display='none';
+//         });
+// }
 
 /**
  * Hiển thị danh sách các note trả hàng đang chờ
  */
+function loadKtvReturnItems() {
+    const tbody = document.getElementById('ktvReturnItemsBody');
+    if (!tbody) {
+        console.warn("Attempted to load return items but tbody not found.");
+        return;
+    }
+    const spinner = document.getElementById('ktvReturnSpinner');
+    if (spinner) spinner.style.display = 'block';
+    // Update colspan
+    tbody.innerHTML = '<tr><td colspan="3"><div class="spinner"></div> Đang tải...</td></tr>';
+
+    callApi('/dashboard', { technicianEmail: userEmail })
+        .then(payload => {
+            const items = payload.items || [];
+            const returnableItems = items.filter(it => it.remaining > 0);
+            tbody.innerHTML = '';
+
+            if (returnableItems.length === 0) {
+                // Update colspan
+                tbody.innerHTML = '<tr><td colspan="3">Bạn không nợ vật tư nào để trả.</td></tr>';
+                const submitBtn = document.getElementById('submitKtvReturnButton');
+                if (submitBtn) submitBtn.style.display = 'none';
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitKtvReturnButton');
+            if (submitBtn) submitBtn.style.display = 'inline-block';
+
+            returnableItems.forEach(item => {
+                var tr = document.createElement('tr');
+                // REMOVE the item code cell (<td> for item.code)
+                tr.innerHTML = `
+                    <td data-label="Tên vật tư">${item.name}</td>
+                    <td data-label="Đang nợ" style="text-align: center;">${item.remaining}</td>
+                    <td data-label="Số lượng trả">
+                        <input type="number" class="ktv-return-input"
+                               min="0" max="${item.remaining}" value="0"
+                               data-code="${item.code}" data-name="${item.name}"
+                               style="width: 80px; max-width: 100px; padding: 8px; text-align: center;">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        })
+        .catch(err => {
+            showError('ktvReturnErrorMessage', 'Lỗi tải danh sách vật tư nợ: ' + err.message);
+            // Update colspan
+            tbody.innerHTML = '<tr><td colspan="3">Lỗi tải danh sách.</td></tr>';
+        })
+        .finally(() => {
+            if (spinner) spinner.style.display = 'none';
+        });
+}
+function submitKtvReturnItems() {
+    const spinner = document.getElementById('ktvReturnSpinner');
+    const inputs = document.querySelectorAll('#ktvReturnItemsTable .ktv-return-input');
+    const itemsToReturn = [];
+    let hasError = false;
+
+    // Clear previous messages
+    showError('ktvReturnErrorMessage', '');
+    showSuccess('ktvReturnSuccessMessage', '');
+
+
+    inputs.forEach(input => {
+        // Skip if already found an error
+        if(hasError) return;
+
+        const qty = parseInt(input.value, 10) || 0;
+        const max = parseInt(input.max, 10);
+        const code = input.dataset.code;
+        const name = input.dataset.name; // Get name for the request
+
+        if (qty < 0 || qty > max) {
+            showError('ktvReturnErrorMessage', `Số lượng trả cho ${name || code} không hợp lệ (phải từ 0 đến ${max}).`);
+            input.focus(); // Focus the invalid input
+            hasError = true;
+            return;
+        }
+
+        if (qty > 0) {
+            itemsToReturn.push({
+                code: code,
+                name: name, // Include name
+                quantityReturned: qty // Key used by backend logic
+            });
+        }
+    });
+
+    if (hasError) return;
+    if (itemsToReturn.length === 0) {
+        showError('ktvReturnErrorMessage', 'Vui lòng nhập số lượng cho ít nhất 1 vật tư để trả.');
+        return;
+    }
+
+    const note = (document.getElementById('ktvReturnNote').value || '').trim();
+
+    const data = {
+        timestamp: new Date().toISOString(),
+        type: 'Trả',
+        email: userEmail,
+        date: new Date().toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'}),
+        note: note || 'KTV trả vật tư không sử dụng', // Default note
+        items: itemsToReturn // This becomes itemsR in backend
+    };
+
+    if (spinner) spinner.style.display = 'block';
+
+    callApi('/submit/return', data)
+        .then(() => {
+            showSuccess('ktvReturnSuccessMessage', 'Gửi yêu cầu trả thành công! Chờ quản lý duyệt.');
+            document.getElementById('ktvReturnNote').value = ''; // Clear note field
+            // Don't reload immediately, let the listener update history
+            // loadReturnHistory();
+            // Reload the return items list to show updated remaining quantities (or empty state)
+            loadKtvReturnItems();
+            // Reload the overview dashboard as well
+            loadSelfDashboard();
+        })
+        .catch(err => {
+            showError('ktvReturnErrorMessage', 'Lỗi gửi yêu cầu trả: ' + err.message);
+        })
+        .finally(() => {
+            if (spinner) spinner.style.display = 'none';
+        });
+}
 function displayReturnNotes(notes){
     var select=document.getElementById('returnNoteSelect');
-    select.innerHTML='<option value="">Chọn lệnh trả</option>';
+    select.innerHTML='<option value="">-- Bỏ chọn (Để Trả hàng Trực tiếp) --</option>'; // Sửa text
     
     var statusText = ' (Đang xử lý...)'; 
     (notes||[]).forEach(function(n){
@@ -1345,46 +1638,68 @@ function displayReturnNotes(notes){
 }
 
 /**
- * Hiển thị nội dung note trả khi Quản lý chọn
+ * [SỬA ĐỔI] Hiển thị nội dung note trả khi Quản lý chọn
  */
 function displaySelectedReturnNote(){
-    var ts=document.getElementById('returnNoteSelect').value;
-    // Tìm trong biến global pendingReturnNotes (sẽ tạo ở bước sau)
-    var n=(pendingReturnNotes||[]).find(function(x){return x.timestamp===ts;});
+    var ts = document.getElementById('returnNoteSelect').value;
+    
+    var approveControls = document.getElementById('approveNoteControls');
+    var directControls = document.getElementById('directReturnControls');
+    
+    // === THÊM 2 DÒNG RESET VÀO ĐÂY ===
+    // Khi chọn/bỏ chọn note, reset danh sách trả tạm (Bảng 2)
+    managerReturnItems = [];
+    displayManagerReturnList();
+    // === KẾT THÚC THÊM ===
+    
+    if (!ts) {
+        // Nếu Quản lý "Bỏ chọn" (Trả trực tiếp)
+        document.getElementById('technicianReturnNote').value = '';
+        selectedReturnNoteItems = null;
+        
+        approveControls.style.display = 'none'; 
+        directControls.style.display = 'block'; 
+        
+        loadUnusedItems(); // Tải lại bảng (sẽ xóa highlight)
+        return;
+    }
+    
+    // Nếu Quản lý CHỌN một note
+    var n = (pendingReturnNotes || []).find(function(x){ return x.timestamp === ts; });
     document.getElementById('technicianReturnNote').value = n ? n.note : '';
+    selectedReturnNoteItems = n ? (n.items || []) : null; 
+    
+    approveControls.style.display = 'block'; 
+    directControls.style.display = 'none'; 
+    
+    loadUnusedItems();
 }
 // File: app.js (DÁN VÀO CUỐI FILE)
 
+/**
+ * [SỬA ĐỔI] Từ chối note KTV gửi (Quy trình cũ)
+ */
 function rejectReturnNote() {
     var selectedTs = document.getElementById('returnNoteSelect').value;
     var reason = (document.getElementById('returnRejectionReason').value || '').trim();
     var email = document.getElementById('technicianEmail').value;
 
-    if (!selectedTs) {
-        showError('returnUnusedErrorMessage', 'Vui lòng chọn một note trả hàng để từ chối.');
-        return;
-    }
-    if (!reason) {
-        showError('returnUnusedErrorMessage', 'Vui lòng nhập lý do từ chối.');
-        return;
-    }
+    if (!selectedTs) { /* ... (báo lỗi) ... */ return; }
+    if (!reason) { /* ... (báo lỗi) ... */ return; }
 
-    var data = {
-        email: email,
-        timestamp: selectedTs, // timestamp của note cần từ chối
-        reason: reason
-    };
-
+    var data = { email: email, timestamp: selectedTs, reason: reason };
     document.getElementById('returnUnusedSpinner').style.display = 'block';
 
-    // Gọi API endpoint mới
     callApi('/manager/rejectReturnNote', data)
         .then(() => {
             showSuccess('returnUnusedSuccessMessage', 'Đã từ chối note thành công!');
             document.getElementById('returnRejectionReason').value = '';
             document.getElementById('returnNoteSelect').value = '';
-            document.getElementById('technicianReturnNote').value = '';
-            loadTechnicianData(); // Tải lại, note sẽ biến mất khỏi danh sách
+            document.getElementById('technicianNote').value = '';
+            selectedReturnNoteItems = null; // Reset
+            
+            loadUnusedItems(); // Tải lại Bảng 1
+            loadManagerDashboard(email); // Tải lại dashboard
         })
         .catch(err => {
             showError('returnUnusedErrorMessage', 'Lỗi từ chối note: ' + err.message);
@@ -1396,77 +1711,77 @@ function rejectReturnNote() {
 /**
  * Tải lịch sử TRẢ hàng không sử dụng
  */
-function loadReturnHistory(){
-    document.getElementById('returnHistorySpinner').style.display='block';
+// function loadReturnHistory(){
+//     document.getElementById('returnHistorySpinner').style.display='block';
     
-    // Gọi API mới
-    callApi('/history/return', { email: userEmail, currentPage: 1, pageSize: 50 }) // Tạm thời tải 50
-        .then(history => { 
-            displayReturnHistory(history.history); 
-        })
-        .catch(err => { 
-            document.getElementById('returnHistoryBody').innerHTML = '<tr><td colspan="2">Lỗi tải lịch sử.</td></tr>';
-        })
-        .finally(() => { 
-            document.getElementById('returnHistorySpinner').style.display='none'; 
-        });
-}
+//     // Gọi API mới
+//     callApi('/history/return', { email: userEmail, currentPage: 1, pageSize: 50 }) // Tạm thời tải 50
+//         .then(history => { 
+//             displayReturnHistory(history.history); 
+//         })
+//         .catch(err => { 
+//             document.getElementById('returnHistoryBody').innerHTML = '<tr><td colspan="2">Lỗi tải lịch sử.</td></tr>';
+//         })
+//         .finally(() => { 
+//             document.getElementById('returnHistorySpinner').style.display='none'; 
+//         });
+// }
 
 /**
  * Hiển thị lịch sử TRẢ hàng (Tương tự displayBorrowHistory)
  */
-function displayReturnHistory(history){
-    var tbody=document.getElementById('returnHistoryBody');
-    tbody.innerHTML='';
+// function displayReturnHistory(history){
+//     var tbody=document.getElementById('returnHistoryBody');
+//     tbody.innerHTML='';
 
-    if (!history||!history.length){ tbody.innerHTML='<tr><td colspan="2">Không có lịch sử trả hàng</td></tr>'; return; }
+//     if (!history||!history.length){ tbody.innerHTML='<tr><td colspan="2">Không có lịch sử trả hàng</td></tr>'; return; }
     
-    history.forEach(function(entry){
-      var note = entry.note || '';
-      var itemsHtml = '';
-      var hasItems = Object.keys(entry.itemsEntered).length > 0;
+//     history.forEach(function(entry){
+//       var note = entry.note || '';
+//       var itemsHtml = '';
+//       var hasItems = Object.keys(entry.itemsEntered).length > 0;
 
-      // 1. Tạo danh sách vật tư (nếu có)
-      if (hasItems) {
-          itemsHtml = Object.values(entry.itemsEntered).map(function(it){ 
-              return '— '+it.name+' ('+it.code+'): '+it.quantity; 
-          }).join('<br>');
-      }
+//       // 1. Tạo danh sách vật tư (nếu có)
+//       if (hasItems) {
+//           itemsHtml = Object.values(entry.itemsEntered).map(function(it){ 
+//               return '— '+it.name+' ('+it.code+'): '+it.quantity; 
+//           }).join('<br>');
+//       }
 
-      // 2. Tạo HTML trạng thái (MÀU XANH/ĐỎ)
-      var statusHtml = '';
-      if (entry.status === 'Pending') {
-          statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
-      } else if (entry.status === 'Rejected') {
-          // Thêm lý do từ chối (nếu có)
-          var reason = entry.reason ? (': ' + entry.reason) : '';
-          statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
-      }
+//       // 2. Tạo HTML trạng thái (MÀU XANH/ĐỎ)
+//       var statusHtml = '';
+//       if (entry.status === 'Pending') {
+//           statusHtml = ' <span style="color: green; font-style: italic;">(Đang xử lý...)</span>'; // <-- ĐÃ SỬA
+//       } else if (entry.status === 'Rejected') {
+//           // Thêm lý do từ chối (nếu có)
+//           var reason = entry.reason ? (': ' + entry.reason) : '';
+//           statusHtml = ' <span style="color: red; font-style: italic;">(Bị từ chối' + reason + ')</span>'; // <-- ĐÃ SỬA
+//       }
 
-      // 3. Kết hợp note, trạng thái, và vật tư
-      var finalNoteHtml = '';
-      // Thêm gạch ngang nếu bị từ chối và có note
-      var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
+//       // 3. Kết hợp note, trạng thái, và vật tư
+//       var finalNoteHtml = '';
+//       // Thêm gạch ngang nếu bị từ chối và có note
+//       var noteDisplay = (entry.status === 'Rejected' && note) ? `<s>${note}</s>` : note; 
 
-      if (noteDisplay && hasItems) {
-          // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
-          finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
-      } else if (noteDisplay) {
-          // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
-          finalNoteHtml = noteDisplay + statusHtml;
-      } else if (hasItems) {
-          // Chỉ có vật tư (đã duyệt, không có note gốc)
-          finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
-      }
+//       if (noteDisplay && hasItems) {
+//           // Note đã duyệt (có gạch ngang nếu bị từ chối) + Vật tư
+//           finalNoteHtml = noteDisplay + statusHtml + '<br><strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+//       } else if (noteDisplay) {
+//           // Chỉ có note (có gạch ngang nếu bị từ chối) + Trạng thái
+//           finalNoteHtml = noteDisplay + statusHtml;
+//       } else if (hasItems) {
+//           // Chỉ có vật tư (đã duyệt, không có note gốc)
+//           finalNoteHtml = '<strong style="font-weight: bold; font-style: italic;">Vật tư đã duyệt:</strong><br>' + itemsHtml;
+//       }
 
-      if (!finalNoteHtml) finalNoteHtml = 'Không có dữ liệu';
+//       if (!finalNoteHtml) finalNoteHtml = 'Không có dữ liệu';
     
-      var date=new Date(entry.timestamp).toLocaleString('vi-VN');
-      var tr=document.createElement('tr');
-      tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung trả">'+finalNoteHtml+'</td>'; 
-      tbody.appendChild(tr);
-    });
-}
+//       var date=new Date(entry.timestamp).toLocaleString('vi-VN');
+//       var tr=document.createElement('tr');
+//       tr.innerHTML='<td data-label="Thời gian">'+date+'</td><td data-label="Nội dung trả">'+finalNoteHtml+'</td>'; 
+//       tbody.appendChild(tr);
+//     });
+// }
 function toggleTableView() {
     const body = document.body;
     const isCardView = body.classList.toggle('card-view-mobile'); // Toggle và lấy trạng thái mới
@@ -1581,6 +1896,12 @@ function loadPendingNotifications() {
 /**
  * Tải danh sách vật tư KTV đang nợ để chuyển
  */
+// File: app.js
+// THAY THẾ TOÀN BỘ HÀM NÀY:
+
+/**
+ * Tải danh sách vật tư KTV đang nợ để chuyển (ĐÃ SỬA LỖI)
+ */
 function loadTransferableItems() {
     const fromEmail = document.getElementById('transferFromTech').value;
     const tbody = document.getElementById('transferItemsBody');
@@ -1596,7 +1917,8 @@ function loadTransferableItems() {
             const items = payload.items || [];
             tbody.innerHTML = '';
 
-            const transferableItems = items.filter(it => it.quantity > 0);
+            // SỬA 1: Lọc theo "remaining" (còn lại) thay vì "quantity" (tổng mượn)
+            const transferableItems = items.filter(it => it.remaining > 0);
 
             if (transferableItems.length === 0) {
                  tbody.innerHTML = '<tr><td colspan="4">Kỹ thuật viên này không nợ vật tư nào.</td></tr>';
@@ -1605,13 +1927,14 @@ function loadTransferableItems() {
 
             transferableItems.forEach(item => {
                 const row = document.createElement('tr');
-                // Lưu ý data-label khớp với CSS và thead
+                
+                // SỬA 2 & 3: Hiển thị và đặt max là "remaining"
                 row.innerHTML = `
                     <td data-label="Tên vật tư">${item.name || ''}</td>
                     <td data-label="Mã vật tư">${item.code || ''}</td>
-                    <td data-label="Đang nợ" style="text-align: center;">${item.quantity}</td>
+                    <td data-label="Đang nợ" style="text-align: center;">${item.remaining}</td>
                     <td data-label="Số lượng chuyển">
-                        <input type="number" class="transfer-quantity-input" min="0" max="${item.quantity}" value="0" data-code="${item.code}" data-name="${item.name}">
+                        <input type="number" class="transfer-quantity-input" min="0" max="${item.remaining}" value="0" data-code="${item.code}" data-name="${item.name}">
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -1705,5 +2028,835 @@ function submitTransfer() {
             document.getElementById('transferSpinner').style.display = 'none';
         });
 }
+// File: app.js
+// DÁN 3 HÀM NÀY VÀO CUỐI FILE
+
+/**
+ * Định dạng nội dung cho bảng lịch sử (helper)
+ */
+function formatManagerHistoryContent(doc) {
+    let html = '';
+    let statusHtml = '';
+
+    // === SỬA LỖI LOGIC HIỂN THỊ TÊN ===
+    // 1. Thêm KTV (Ưu tiên Tên, nếu không có Tên thì mới dùng Email)
+    let techDisplay = doc.email; // Mặc định là email
+    
+    if (technicianMap.has(doc.email)) {
+        const name = technicianMap.get(doc.email);
+        // Chỉ dùng Tên nếu Tên tồn tại và không phải là chuỗi rỗng
+        if (name && name.trim() !== '') {
+            techDisplay = name; // <-- CHỈ HIỂN THỊ TÊN
+        }
+        // (Nếu không, techDisplay vẫn là doc.email, là đúng)
+    } else if (techniciansLoaded) {
+         // Nếu đã tải xong KTV mà vẫn không thấy -> có thể là KTV cũ
+         techDisplay = `${doc.email} (cũ)`;
+    }
+    // (Nếu chưa tải xong KTV, techDisplay vẫn là email)
+    
+    html += `<strong>KTV:</strong> ${techDisplay}<br>`;
+    // === KẾT THÚC SỬA LỖI ===
+
+    // 2. Tạo HTML Trạng thái
+    if (doc.status === 'Pending') {
+        statusHtml = `<span style="color: blue; font-style: italic;">(Đang chờ duyệt...)</span><br>`;
+    } else if (doc.status === 'Rejected') {
+        let reason = doc.rejectionReason ? `: ${doc.rejectionReason}` : '';
+        statusHtml = `<span style="color: red; font-style: italic;">(Bị từ chối${reason})</span><br>`;
+    }
+
+    // 3. Thêm Nội dung mượn (Note)
+    let noteDisplay = (doc.status === 'Rejected' && doc.note) ? `<s>${doc.note}</s>` : doc.note;
+    if (noteDisplay) {
+        html += `<strong>Nội dung:</strong> ${noteDisplay}<br>`; // Đã đổi thành "Nội dung"
+    }
+
+    // 4. Thêm Trạng thái
+    html += statusHtml;
+
+    // 5. Thêm Vật tư
+    if (doc.items && doc.items.length > 0) {
+        html += `<strong>Vật tư đã duyệt:</strong><ul>`;
+        doc.items.forEach(item => {
+            html += `<li>${item.name || item.code}: ${item.quantity}</li>`;
+        });
+        html += `</ul>`;
+    }
+    return html;
+}
+
+/**
+ * Vẽ lại bảng lịch sử từ cache (khi lọc)
+ */
+function renderManagerHistoryTable() {
+    // SỬA 1: Dùng đúng ID của tbody
+    const tbody = document.getElementById('managerHistoryBody'); 
+    if (!tbody) {
+        console.error("Lỗi render: Không tìm thấy 'managerHistoryBody'");
+        return; 
+    }
+    
+    // SỬA 2 & 3: Dùng đúng ID của bộ lọc
+    const filterValue = document.getElementById('managerHistoryFilterType').value;
+    const filterTech = document.getElementById('managerHistoryFilterTech').value; 
+    
+    tbody.innerHTML = ''; // Xóa nội dung cũ
+    
+    // SỬA 4: Dùng đúng biến cache
+    const filteredDocs = managerHistoryCache.filter(doc => { 
+        const typeMatch = (filterValue === 'Tất cả' || doc.type === filterValue);
+        const techMatch = (filterTech === 'Tất cả' || doc.email === filterTech); 
+        return typeMatch && techMatch;
+    });
+
+    if (filteredDocs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">Không có dữ liệu khớp với bộ lọc.</td></tr>';
+        return;
+    }
+    
+    filteredDocs.forEach(doc => {
+        const tr = document.createElement('tr');
+        const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
+        const typeClass = doc.type === 'Mượn' ? 'unreconciled' : 'success'; 
+        
+        // Gọi đúng hàm format (formatManagerHistoryContent)
+        tr.innerHTML = `
+            <td data-label="Thời gian">${timestamp}</td>
+            <td data-label="Loại"><strong class="${typeClass}">${doc.type}</strong></td>
+            <td data-label="Nội dung">${formatManagerHistoryContent(doc)}</td> 
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/**
+ * Lắng nghe thay đổi trên collection history_transactions
+ */
+/**
+ * [MANAGER] Lắng nghe thay đổi trên collection history_transactions
+ */
+/**
+ * [MANAGER] Lắng nghe thay đổi trên collection history_transactions
+ */
+/**
+ * [MANAGER] Lắng nghe thay đổi trên collection history_transactions (Trang 1)
+ */
+function listenForManagerHistory() {
+    if (managerHistoryListener) {
+        managerHistoryListener();
+        managerHistoryListener = null;
+    }
+
+    const spinner = document.getElementById('managerHistorySpinner');
+    if (!spinner) { /* ... (báo lỗi) ... */ return; }
+    spinner.style.display = 'block';
+    
+    // Ẩn và kích hoạt nút Tải thêm
+    const loadMoreBtn = document.getElementById('loadMoreManagerHistory');
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = 'none';
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.innerText = 'Tải thêm';
+    }
+
+    const historyQuery = firebase.firestore().collection('history_transactions')
+                                    .orderBy('timestamp', 'desc')
+                                    .limit(HISTORY_PAGE_SIZE);
+
+    managerHistoryListener = historyQuery.onSnapshot(snapshot => {
+        // (Xóa log console.log cũ)
+        if (spinner) spinner.style.display = 'none'; 
+        managerHistoryCache = []; // Xóa cache cũ khi có cập nhật
+        
+        snapshot.forEach(doc => {
+            managerHistoryCache.push(doc.data());
+        });
+        
+        managerHistoryCache.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Lưu lại document cuối cùng của trang 1
+        const snapshotSize = snapshot.size;
+        managerHistoryLastDoc = snapshotSize > 0 ? snapshot.docs[snapshotSize - 1] : null;
+
+        // Hiển thị nút Tải thêm
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = snapshotSize < HISTORY_PAGE_SIZE ? 'none' : 'block';
+        }
+
+        renderManagerHistoryTable(); 
+    }, error => {
+        // ... (khối xử lý lỗi giữ nguyên) ...
+        console.error("Lỗi Manager Real-time History:", error);
+        if (spinner) spinner.style.display = 'none';
+        const historyBody = document.getElementById('managerHistoryBody');
+        if (historyBody) { /* ... (hiển thị lỗi) ... */ }
+        if (managerHistoryListener) { /* ... (hủy listener) ... */ }
+    });
+
+    console.log("Đã bật listener lịch sử (Manager) cho Trang 1.");
+}
+// File: app.js
+// DÁN 3 HÀM MỚI NÀY VÀO CUỐI FILE
+
+/**
+ * [KTV] Định dạng nội dung (Đã rút gọn)
+ */
+function formatKtvHistoryContent(doc) {
+    let html = '';
+    let statusHtml = '';
+
+    // Tạo HTML Trạng thái
+    if (doc.status === 'Pending') {
+        statusHtml = `<span style="color: blue; font-style: italic;">(Đang chờ duyệt...)</span><br>`;
+    } else if (doc.status === 'Rejected') {
+        let reason = doc.rejectionReason ? `: ${doc.rejectionReason}` : '';
+        statusHtml = `<span style="color: red; font-style: italic;">(Bị từ chối${reason})</span><br>`;
+    }
+
+    // Thêm Nội dung mượn (Note)
+    let noteDisplay = (doc.status === 'Rejected' && doc.note) ? `<s>${doc.note}</s>` : doc.note;
+    if (noteDisplay) {
+        html += `<strong>Nội dung:</strong> ${noteDisplay}<br>`;
+    }
+
+    // Thêm Trạng thái
+    html += statusHtml;
+
+    // Thêm Vật tư
+    if (doc.items && doc.items.length > 0) {
+        html += `<strong>Vật tư đã duyệt:</strong><ul>`;
+        doc.items.forEach(item => {
+            html += `<li>${item.name || item.code}: ${item.quantity}</li>`;
+        });
+        html += `</ul>`;
+    }
+
+    if (!html.trim()) html = '...';
+    return html;
+}
+
+/**
+ * [KTV] Vẽ lại bảng lịch sử từ cache (khi lọc)
+ */
+function renderKtvHistoryTable() {
+    const tbody = document.getElementById('ktvHistoryBody');
+    if (!tbody) return; 
+    
+    const filterValue = document.getElementById('ktvHistoryFilterType').value;
+    tbody.innerHTML = '';
+    
+    const filteredDocs = ktvHistoryCache.filter(doc => {
+        if (filterValue === 'Tất cả') return true;
+        return doc.type === filterValue;
+    });
+
+    if (filteredDocs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">Không có dữ liệu.</td></tr>';
+        return;
+    }
+    
+    filteredDocs.forEach(doc => {
+        const tr = document.createElement('tr');
+        const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
+        const typeClass = doc.type === 'Mượn' ? 'unreconciled' : 'success'; 
+        
+        tr.innerHTML = `
+            <td data-label="Thời gian">${timestamp}</td>
+            <td data-label="Loại"><strong class="${typeClass}">${doc.type}</strong></td>
+            <td data-label="Nội dung">${formatKtvHistoryContent(doc)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/**
+ * [KTV] Lắng nghe lịch sử của CHÍNH KTV
+ */
+/**
+ * [KTV] Lắng nghe lịch sử của CHÍNH KTV (Trang 1)
+ */
+function listenForKtvHistory() {
+    // Hủy listener cũ (nếu có) để tránh chạy nhiều lần
+    if (ktvHistoryListener) {
+        ktvHistoryListener();
+        ktvHistoryListener = null;
+    }
+
+    const spinner = document.getElementById('ktvHistorySpinner');
+    spinner.style.display = 'block';
+    
+    // Ẩn và kích hoạt nút Tải thêm
+    const loadMoreBtn = document.getElementById('loadMoreKtvHistory');
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = 'none';
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.innerText = 'Tải thêm';
+    }
+
+    const historyQuery = firebase.firestore().collection('history_transactions')
+                                    .where('email', '==', userEmail)
+                                    .orderBy('timestamp', 'desc')
+                                    .limit(HISTORY_PAGE_SIZE); 
+
+    ktvHistoryListener = historyQuery.onSnapshot(snapshot => {
+        spinner.style.display = 'none';
+        ktvHistoryCache = []; // Xóa cache cũ khi có cập nhật thời gian thực
+        
+        snapshot.forEach(doc => {
+            ktvHistoryCache.push(doc.data());
+        });
+        
+        ktvHistoryCache.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Lưu lại document cuối cùng của trang 1
+        const snapshotSize = snapshot.size;
+        ktvHistoryLastDoc = snapshotSize > 0 ? snapshot.docs[snapshotSize - 1] : null;
+
+        // Hiển thị nút Tải thêm NẾU trang 1 đã đầy (15/15)
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = snapshotSize < HISTORY_PAGE_SIZE ? 'none' : 'block';
+        }
+
+        renderKtvHistoryTable(); // Vẽ lại bảng
+    
+    }, error => {
+        console.error("Lỗi KTV Real-time History:", error);
+        spinner.style.display = 'none';
+        document.getElementById('ktvHistoryBody').innerHTML = '<tr><td colspan="3" class="error">Lỗi tải lịch sử.</td></tr>';
+        
+        if (ktvHistoryListener) {
+            ktvHistoryListener();
+            ktvHistoryListener = null;
+        }
+    });
+    
+    console.log("Đã bật listener lịch sử (KTV) cho Trang 1.");
+}
+// Xử lý Slide Toggle cho các section
+jQuery(document).ready(function($) {
+    $('.toggle-header').on('click', function() {
+        var header = $(this);
+        var content = header.next('.toggle-content');
+        var contentId = content.attr('id'); // Lấy ID của div nội dung
+
+        // === THÊM LOGIC GỌI HÀM KHI MỞ ===
+        // Chỉ gọi loadKtvReturnItems khi mở toggle "Trả hàng" (returnContent)
+        // và header chưa có class 'active' (tức là nó đang đóng)
+        if (contentId === 'returnContent' && !header.hasClass('active')) {
+             console.log("Mở mục Trả hàng, đang gọi loadKtvReturnItems...");
+             loadKtvReturnItems(); // Gọi hàm tải danh sách
+        }
+        // === KẾT THÚC THÊM LOGIC ===
+
+        // Thực hiện slide toggle
+        content.slideToggle(300); // 300ms animation
+
+        // Đổi trạng thái active của header (để đổi mũi tên)
+        header.toggleClass('active');
+    });
+});
+/**
+ * [SỬA ĐỔI] Tô sáng và tự điền số lượng KTV yêu cầu
+ */
+function highlightKtvRequestedReturnItems() {
+    const tbody = document.getElementById('unusedItemsBody');
+    if (!tbody) return; // Thoát nếu tbody chưa sẵn sàng
+
+    // Nếu không có note nào được chọn, xóa highlight cũ
+    if (!selectedReturnNoteItems || selectedReturnNoteItems.length === 0) {
+         tbody.querySelectorAll('tr.requested-return').forEach(row => row.classList.remove('requested-return'));
+         // Reset input về 0 (quan trọng khi bỏ chọn note)
+         tbody.querySelectorAll('.quantity-return-input').forEach(input => input.value = 0);
+        return;
+    }
+
+    // === SỬA LỖI Ở ĐÂY ===
+    // Bỏ chữ "utils."
+    const requestedMap = new Map(selectedReturnNoteItems.map(item => [normalizeCode(item.code), item.quantity]));
+    // === KẾT THÚC SỬA ===
+
+    tbody.querySelectorAll('tr').forEach(row => {
+        // === SỬA LỖI Ở ĐÂY ===
+        // Bỏ chữ "utils."
+        const rowCode = normalizeCode(row.dataset.code); 
+        // === KẾT THÚC SỬA ===
+        
+        const input = row.querySelector('.quantity-return-input');
+
+        if (rowCode && input) {
+            if (requestedMap.has(rowCode)) {
+                const requestedQty = requestedMap.get(rowCode);
+                const maxQty = parseInt(input.max, 10);
+                const fillQty = Math.min(requestedQty, maxQty);
+                
+                input.value = fillQty;
+                row.classList.add('requested-return'); // Thêm class highlight
+            } else {
+                row.classList.remove('requested-return');
+                input.value = 0; // Reset về 0
+            }
+        }
+    });
+}
+/**
+ * [AUDITOR] Định dạng nội dung (Giống Manager)
+ */
+function formatAuditorHistoryContent(doc) {
+    // Hàm này giống hệt formatManagerHistoryContent
+    // Bạn có thể copy paste nội dung hoặc gọi trực tiếp hàm kia
+    return formatManagerHistoryContent(doc); // Gọi lại hàm của Manager cho gọn
+}
+
+/**
+ * [AUDITOR] Vẽ lại bảng lịch sử từ cache
+ */
+function renderAuditorHistoryTable() {
+    const tbody = document.getElementById('auditorHistoryBody');
+    if (!tbody) {
+        console.error("Lỗi render: Không tìm thấy 'auditorHistoryBody'");
+        return;
+    }
+
+    const filterValue = document.getElementById('auditorHistoryFilterType').value;
+    const filterTech = document.getElementById('auditorHistoryFilterTech').value;
+    tbody.innerHTML = '';
+
+    const filteredDocs = auditorHistoryCache.filter(doc => {
+        const typeMatch = (filterValue === 'Tất cả' || doc.type === filterValue);
+        const techMatch = (filterTech === 'Tất cả' || doc.email === filterTech);
+        return typeMatch && techMatch;
+    });
+
+    if (filteredDocs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">Không có dữ liệu khớp với bộ lọc.</td></tr>';
+        return;
+    }
+
+    filteredDocs.forEach(doc => {
+        const tr = document.createElement('tr');
+        const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
+        const typeClass = doc.type === 'Mượn' ? 'unreconciled' : 'success';
+
+        tr.innerHTML = `
+            <td data-label="Thời gian">${timestamp}</td>
+            <td data-label="Loại"><strong class="${typeClass}">${doc.type}</strong></td>
+            <td data-label="Nội dung">${formatAuditorHistoryContent(doc)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/**
+ * [AUDITOR] Lắng nghe lịch sử của TẤT CẢ KTV
+ */
+function listenForAuditorHistory() {
+    if (auditorHistoryListener) {
+        auditorHistoryListener();
+        auditorHistoryListener = null;
+    }
+
+    const spinner = document.getElementById('auditorHistorySpinner');
+    if (!spinner) { /* ... (báo lỗi) ... */ return; }
+    spinner.style.display = 'block';
+    
+    // Ẩn và kích hoạt nút Tải thêm
+    const loadMoreBtn = document.getElementById('loadMoreAuditorHistory');
+    if (loadMoreBtn) {
+        loadMoreBtn.style.display = 'none';
+        loadMoreBtn.disabled = false;
+        loadMoreBtn.innerText = 'Tải thêm';
+    }
+
+    const historyQuery = firebase.firestore().collection('history_transactions')
+                                    .orderBy('timestamp', 'desc')
+                                    .limit(HISTORY_PAGE_SIZE); 
+
+    auditorHistoryListener = historyQuery.onSnapshot(snapshot => {
+        // (Xóa log console.log cũ)
+        if (spinner) spinner.style.display = 'none';
+        auditorHistoryCache = []; // Xóa cache cũ khi có cập nhật
+        
+        snapshot.forEach(doc => {
+            auditorHistoryCache.push(doc.data());
+        });
+        
+        auditorHistoryCache.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        // Lưu lại document cuối cùng của trang 1
+        const snapshotSize = snapshot.size;
+        auditorHistoryLastDoc = snapshotSize > 0 ? snapshot.docs[snapshotSize - 1] : null;
+
+        // Hiển thị nút Tải thêm
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = snapshotSize < HISTORY_PAGE_SIZE ? 'none' : 'block';
+        }
+
+        renderAuditorHistoryTable(); // Vẽ bảng Auditor
+
+    }, error => {
+        // ... (khối xử lý lỗi giữ nguyên) ...
+        console.error("!!! LỖI Auditor Real-time History:", error);
+        if (spinner) spinner.style.display = 'none';
+        const historyBody = document.getElementById('auditorHistoryBody');
+        if (historyBody) { /* ... (hiển thị lỗi) ... */ }
+        if (auditorHistoryListener) { /* ... (hủy listener) ... */ }
+    });
+    console.log("Đã bật listener lịch sử (Auditor) cho Trang 1.");
+}
+/**
+ * [MỚI] Thêm vật tư vào danh sách trả tạm (Bảng 2)
+ */
+/**
+ * [SỬA ĐỔI] Thêm vật tư vào danh sách trả tạm (Thêm Highlight & Scroll)
+ */
+function addManagerReturnItem(index, code, name, maxQty) {
+    const input = document.getElementById(`return-qty-input-${index}`);
+    if (!input) return;
+
+    // Tự động bỏ chọn Note (nếu đang chọn)
+    document.getElementById('returnNoteSelect').value = '';
+    if (selectedReturnNoteItems) {
+        selectedReturnNoteItems = null;
+        highlightKtvRequestedReturnItems(); // Xóa highlight Bảng 1
+    }
+
+    const qty = parseInt(input.value, 10) || 0;
+
+    if (qty <= 0) {
+        showError('returnUnusedErrorMessage', `Số lượng trả cho ${name} phải lớn hơn 0.`);
+        return;
+    }
+    if (qty > maxQty) {
+        showError('returnUnusedErrorMessage', `Số lượng trả cho ${name} không thể vượt quá ${maxQty}.`);
+        return;
+    }
+
+    let isExisting = false; // Cờ để biết là thêm mới hay cập nhật
+    const existingItem = managerReturnItems.find(item => item.code === code);
+    if (existingItem) {
+        existingItem.quantityReturned = qty; 
+        isExisting = true;
+    } else {
+        managerReturnItems.push({
+            code: code,
+            name: name,
+            quantityReturned: qty
+        });
+    }
+
+    // Hiển thị thông báo thành công (vẫn ở vị trí cũ)
+    input.value = 0;
+    showSuccess('returnUnusedSuccessMessage', `Đã thêm/cập nhật ${name} (SL: ${qty}).`);
+    
+    // Vẽ lại Bảng 2
+    displayManagerReturnList();
+
+    // === PHẦN TRỰC QUAN MỚI ===
+    try {
+        const tableBody = document.getElementById('managerReturnListBody');
+        let rowToHighlight = null;
+
+        if (isExisting) {
+            // Nếu Cập nhật: Tìm hàng đã tồn tại (dựa vào Mã VT ở ô thứ 2)
+            const rows = tableBody.querySelectorAll('tr');
+            for (let row of rows) {
+                if (row.cells[1] && row.cells[1].innerText === code) {
+                    rowToHighlight = row;
+                    break;
+                }
+            }
+        } else {
+            // Nếu Thêm mới: Lấy hàng cuối cùng
+            rowToHighlight = tableBody.lastElementChild;
+        }
+
+        if (rowToHighlight) {
+            // 1. Highlight:
+            // Xóa animation cũ (nếu có)
+            rowToHighlight.classList.remove('row-highlight'); 
+            // Dòng này buộc trình duyệt "vẽ lại" (reflow)
+            void rowToHighlight.offsetWidth; 
+            // Thêm animation mới
+            rowToHighlight.classList.add('row-highlight'); 
+
+            // 2. Scroll:
+            // Cuộn Bảng 2 (managerReturnListTable) vào tầm nhìn
+            const tableElement = document.getElementById('managerReturnListTable');
+            tableElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (e) {
+        console.warn("Lỗi khi highlight/scroll:", e);
+    }
+    // === KẾT THÚC PHẦN MỚI ===
+}
+
+/**
+ * [MỚI] Hiển thị danh sách trả tạm (Bảng 2)
+ */
+function displayManagerReturnList() {
+    const tbody = document.getElementById('managerReturnListBody');
+    tbody.innerHTML = '';
+    
+    if (managerReturnItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4">Danh sách trả trống.</td></tr>';
+        return;
+    }
+
+    managerReturnItems.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td data-label="Tên vật tư">${item.name}</td>
+            <td data-label="Mã vật tư">${item.code}</td>
+            <td data-label="Số lượng trả">${item.quantityReturned}</td>
+            <td data-label="Xóa"><button onclick="removeManagerReturnItem(${index})">Xóa</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+/**
+ * [MỚI] Xóa vật tư khỏi danh sách trả tạm
+ */
+function removeManagerReturnItem(index) {
+    managerReturnItems.splice(index, 1);
+    displayManagerReturnList();
+}
+
+/**
+ * [MỚI] Gửi danh sách trả trực tiếp (Bảng 2)
+ */
+function submitManagerReturnList() {
+    var email = document.getElementById('technicianEmail').value;
+    var date = document.getElementById('returnUnusedTransactionDate').value;
+    var note = (document.getElementById('managerReturnNote').value || '').trim();
+
+    if (!email || !date) { /* ... (báo lỗi) ... */ return; }
+    if (managerReturnItems.length === 0) { /* ... (báo lỗi) ... */ return; }
+
+    var data = { 
+        timestamp: new Date().toISOString(), 
+        type: 'Trả', 
+        email: email, 
+        date: date, 
+        items: managerReturnItems, 
+        note: note || 'Quản lý trả vật tư không sử dụng',
+        returnTimestamp: '', // Rỗng
+        mode: 'MANAGER_DIRECT' // <-- CỜ QUAN TRỌNG
+    };
+
+    const spinner = document.getElementById('returnUnusedSpinner');
+    if (spinner) spinner.style.display = 'block';
+
+    callApi('/submit/return', data)
+      .then(() => {
+        showSuccess('returnUnusedSuccessMessage', 'Xác nhận trả vật tư (trực tiếp) thành công!');
+        document.getElementById('returnUnusedTransactionDate').value = '';
+        document.getElementById('managerReturnNote').value = '';
+        managerReturnItems = [];
+        displayManagerReturnList();
+        loadUnusedItems(); // Tải lại Bảng 1
+        loadManagerDashboard(email); // Tải lại dashboard
+      })
+      .catch(err => {
+        showError('returnUnusedErrorMessage', 'Lỗi xác nhận: ' + err.message);
+      })
+      .finally(() => {
+        if (spinner) spinner.style.display = 'none';
+      });
+}
+/**
+ * [KTV] Tải thêm trang lịch sử tiếp theo
+ */
+function loadMoreKtvHistory() {
+    if (!ktvHistoryLastDoc) return; // Không có gì để tải
+    const btn = document.getElementById('loadMoreKtvHistory');
+    btn.disabled = true;
+    btn.innerText = 'Đang tải...';
+
+    // Tạo truy vấn cho trang tiếp theo
+    const nextQuery = firebase.firestore().collection('history_transactions')
+                                .where('email', '==', userEmail)
+                                .orderBy('timestamp', 'desc')
+                                .startAfter(ktvHistoryLastDoc) // <-- Bắt đầu sau doc cuối
+                                .limit(HISTORY_PAGE_SIZE);
+    
+    // Dùng .get() (lấy 1 lần) thay vì .onSnapshot() (lắng nghe)
+    nextQuery.get().then(snapshot => {
+        const snapshotSize = snapshot.size;
+        if (snapshotSize > 0) {
+            ktvHistoryLastDoc = snapshot.docs[snapshotSize - 1]; // Cập nhật doc cuối
+            snapshot.forEach(doc => {
+                ktvHistoryCache.push(doc.data()); // Nối vào cache
+            });
+            renderKtvHistoryTable(); // Vẽ lại toàn bộ cache
+        }
+        
+        btn.disabled = false;
+        btn.innerText = 'Tải thêm';
+        if (snapshotSize < HISTORY_PAGE_SIZE) {
+            btn.style.display = 'none'; // Đã hết, ẩn nút
+        }
+    }).catch(err => {
+        console.error("Lỗi tải thêm (KTV):", err);
+        btn.disabled = false;
+        btn.innerText = 'Lỗi! Thử lại';
+    });
+}
+
+/**
+ * [MANAGER] Tải thêm trang lịch sử tiếp theo
+ */
+function loadMoreManagerHistory() {
+    if (!managerHistoryLastDoc) return;
+    const btn = document.getElementById('loadMoreManagerHistory');
+    btn.disabled = true;
+    btn.innerText = 'Đang tải...';
+
+    const nextQuery = firebase.firestore().collection('history_transactions')
+                                .orderBy('timestamp', 'desc')
+                                .startAfter(managerHistoryLastDoc)
+                                .limit(HISTORY_PAGE_SIZE);
+    
+    nextQuery.get().then(snapshot => {
+        const snapshotSize = snapshot.size;
+        if (snapshotSize > 0) {
+            managerHistoryLastDoc = snapshot.docs[snapshotSize - 1];
+            snapshot.forEach(doc => {
+                managerHistoryCache.push(doc.data()); // Nối vào cache
+            });
+            renderManagerHistoryTable(); // Vẽ lại
+        }
+        
+        btn.disabled = false;
+        btn.innerText = 'Tải thêm';
+        if (snapshotSize < HISTORY_PAGE_SIZE) {
+            btn.style.display = 'none'; // Đã hết
+        }
+    }).catch(err => {
+        console.error("Lỗi tải thêm (Manager):", err);
+        btn.disabled = false;
+        btn.innerText = 'Lỗi! Thử lại';
+    });
+}
+
+/**
+ * [AUDITOR] Tải thêm trang lịch sử tiếp theo
+ */
+function loadMoreAuditorHistory() {
+    if (!auditorHistoryLastDoc) return;
+    const btn = document.getElementById('loadMoreAuditorHistory');
+    btn.disabled = true;
+    btn.innerText = 'Đang tải...';
+
+    const nextQuery = firebase.firestore().collection('history_transactions')
+                                .orderBy('timestamp', 'desc')
+                                .startAfter(auditorHistoryLastDoc)
+                                .limit(HISTORY_PAGE_SIZE);
+    
+    nextQuery.get().then(snapshot => {
+        const snapshotSize = snapshot.size;
+        if (snapshotSize > 0) {
+            auditorHistoryLastDoc = snapshot.docs[snapshotSize - 1];
+            snapshot.forEach(doc => {
+                auditorHistoryCache.push(doc.data()); // Nối vào cache
+            });
+            renderAuditorHistoryTable(); // Vẽ lại
+        }
+        
+        btn.disabled = false;
+        btn.innerText = 'Tải thêm';
+        if (snapshotSize < HISTORY_PAGE_SIZE) {
+            btn.style.display = 'none'; // Đã hết
+        }
+    }).catch(err => {
+        console.error("Lỗi tải thêm (Auditor):", err);
+        btn.disabled = false;
+        btn.innerText = 'Lỗi! Thử lại';
+    });
+}
+
+/**
+ * [KTV] Render bảng Sổ Đã Đối Chiếu (từ cache) - ĐÃ SỬA LỖI
+ */
+function renderReconciledTicketsTable() {
+    const tbody = document.getElementById('reconciledTicketsBody');
+    const loadMoreBtn = document.getElementById('loadMoreReconciled'); // Vẫn lấy nút
+    
+    // SỬA LỖI: Chỉ kiểm tra tbody. Nút "Tải thêm" là tùy chọn.
+    if (!tbody) {
+        console.error("Lỗi render: Không tìm thấy 'reconciledTicketsBody'");
+        return; 
+    }
+    
+    tbody.innerHTML = ''; // Xóa nội dung cũ
+
+    // Tính toán dữ liệu cho trang hiện tại
+    const itemsToShow = allReconciledTicketsCache.slice(0, reconciledTicketsCurrentPage * HISTORY_PAGE_SIZE);
+
+    if (itemsToShow.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3">Chưa có sổ đã đối chiếu</td></tr>';
+        // Thêm kiểm tra "if (loadMoreBtn)"
+        if (loadMoreBtn) loadMoreBtn.style.display = 'none'; // Ẩn nút nếu không có gì
+        return;
+    }
+
+    itemsToShow.forEach(function(ticket) {
+        var rRow = document.createElement('tr');
+        var rItemsNameHtml = ticket.items.map(it => (it.name || 'N/A') + ' (' + (it.code || 'N/A') + ')').join('<br>');
+        var rItemsQtyHtml = ticket.items.map(it => it.quantity).join('<br>');
+        
+        rRow.innerHTML =
+            '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
+            '<td data-label="Tên vật tư">' + rItemsNameHtml + '</td>' +
+            '<td data-label="Số lượng sử dụng" style="text-align: center;">' + rItemsQtyHtml + '</td>';
+        tbody.appendChild(rRow);
+    });
+    
+    // Ẩn/hiện nút "Tải thêm" (Thêm kiểm tra "if (loadMoreBtn)")
+    if (loadMoreBtn) {
+        if (itemsToShow.length < allReconciledTicketsCache.length) {
+            loadMoreBtn.style.display = 'block';
+            loadMoreBtn.disabled = false;
+            loadMoreBtn.innerText = 'Tải thêm';
+        } else {
+            loadMoreBtn.style.display = 'none'; // Đã hết
+        }
+    }
+}
+
+/**
+ * [KTV] Tải thêm Sổ Đã Đối Chiếu (từ cache)
+ */
+function loadMoreReconciledTickets() {
+    const btn = document.getElementById('loadMoreReconciled');
+    btn.disabled = true;
+    btn.innerText = 'Đang tải...';
+
+    reconciledTicketsCurrentPage++; // Tăng trang
+    renderReconciledTicketsTable(); // Render lại
+    
+    // (Không cần .get() vì chúng ta đã tải tất cả về cache)
+}
+// function switchKtvTab(tabName) {
+//     // 1. Lấy các element cần thiết
+//     const borrowContent = document.getElementById('borrowTabContent');
+//     const returnContent = document.getElementById('returnTabContent');
+//     const borrowButton = document.getElementById('tabButtonMượn');
+//     const returnButton = document.getElementById('tabButtonTrả');
+
+//     // 2. Ẩn/hiện nội dung Tab
+//     if (tabName === 'Mượn') {
+//         borrowContent.style.display = 'block';
+//         returnContent.style.display = 'none';
+//         borrowButton.classList.add('active');
+//         returnButton.classList.remove('active');
+//     } else { // tabName === 'Trả'
+//         borrowContent.style.display = 'none';
+//         returnContent.style.display = 'block';
+//         borrowButton.classList.remove('active');
+//         returnButton.classList.add('active');
+//     }
+// }
 // DOM ready
 document.addEventListener('DOMContentLoaded', function(){ initForm(); });
