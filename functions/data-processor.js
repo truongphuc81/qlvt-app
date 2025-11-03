@@ -753,13 +753,16 @@ async function submitTransaction({ sheets, spreadsheetId, db, data }) {
  * Lưu dữ liệu Excel đã xử lý vào sheet 'Đối chiếu sổ 3 liên', xử lý trùng lặp.
  * (ĐÃ SỬA LỖI BATCH > 500)
  */
+/**
+ * Lưu dữ liệu Excel (ĐÃ SỬA LOGIC: Xóa cũ, Thêm mới)
+ */
 async function saveExcelData({ sheets, spreadsheetId, db, data }) {
     if (!data || data.length === 0) {
         throw new Error('Không có dữ liệu hợp lệ để lưu.');
     }
 
     let totalNew = 0;
-    let totalUpdated = 0;
+    let totalDeleted = 0;
     const batchSize = 450; // Giữ an toàn (giới hạn là 500)
 
     // 1. Chia dữ liệu Excel thành các lô 450
@@ -767,31 +770,56 @@ async function saveExcelData({ sheets, spreadsheetId, db, data }) {
 
     // 2. Xử lý từng lô một
     for (const chunk of dataChunks) {
-        let newCount = 0;
-        let updateCount = 0;
         const batch = db.batch();
-        const promises = [];
-        
-        // 3. Đọc dữ liệu (Query) cho lô hiện tại
-        chunk.forEach(r => {
-            const ticket = r.ticket || '';
-            const itemCode = utils.normalizeCode(r.itemCode || '');
-            if (ticket && itemCode) {
-                promises.push(
-                    db.collection(USAGE_TICKETS_COLLECTION)
-                        .where('ticket', '==', ticket)
-                        .where('itemCode', '==', itemCode)
-                        .limit(1)
-                        .get()
-                );
+        let newCountInChunk = 0;
+
+        // 3. Lấy danh sách Sổ (tickets) duy nhất trong lô này
+        const ticketsInChunk = [...new Set(chunk.map(r => r.ticket).filter(t => t))];
+
+        // 4. Tìm và XÓA tất cả các vật tư "Chưa đối chiếu" CŨ
+        // thuộc về các sổ này.
+        if (ticketsInChunk.length > 0) {
+            // Chúng ta phải chia truy vấn 'in' thành các lô 30 (giới hạn mới)
+            const ticketSubChunks = chunkArray(ticketsInChunk, 30);
+            
+            for (const subChunk of ticketSubChunks) {
+                const deleteQuery = await db.collection(USAGE_TICKETS_COLLECTION)
+                    .where('ticket', 'in', subChunk)
+                    .where('status', '==', 'Chưa đối chiếu')
+                    .get();
+                
+                if (!deleteQuery.empty) {
+                    deleteQuery.forEach(doc => {
+                        batch.delete(doc.ref);
+                        totalDeleted++;
+                    });
+                }
             }
-        });
+        }
+        
+        // 5. Tìm tất cả các vật tư "Đã đối chiếu"
+        // (Chúng ta không muốn thêm lại chúng)
+        const reconciledItems = new Set();
+        if (ticketsInChunk.length > 0) {
+             const ticketSubChunks = chunkArray(ticketsInChunk, 30);
+             for (const subChunk of ticketSubChunks) {
+                const reconciledQuery = await db.collection(USAGE_TICKETS_COLLECTION)
+                    .where('ticket', 'in', subChunk)
+                    .where('status', '==', 'Đã đối chiếu')
+                    .get();
 
-        const snapshots = await Promise.all(promises);
+                if (!reconciledQuery.empty) {
+                    reconciledQuery.docs.forEach(doc => {
+                        const key = doc.data().ticket + '|' + doc.data().itemCode;
+                        reconciledItems.add(key);
+                    });
+                }
+             }
+        }
 
-        // 4. Chuẩn bị batch ghi (set/update) cho lô hiện tại
-        snapshots.forEach((snapshot, index) => {
-            const r = chunk[index]; // Dữ liệu Excel của lô này
+        // 6. THÊM tất cả vật tư MỚI từ lô Excel
+        // (TRỪ những cái đã được đối chiếu)
+        chunk.forEach(r => {
             const docData = {
                 date: r.date || '',
                 itemCode: utils.normalizeCode(r.itemCode || ''),
@@ -800,40 +828,39 @@ async function saveExcelData({ sheets, spreadsheetId, db, data }) {
                 quantity: Number(r.quantity) || 0,
                 email: r.email || '',
                 note: r.note || '',
-                status: 'Chưa đối chiếu'
+                status: 'Chưa đối chiếu' // Luôn đặt là "Chưa đối chiếu"
             };
 
-            if (snapshot.empty) {
-                // Thêm mới
-                const newRef = db.collection(USAGE_TICKETS_COLLECTION).doc();
-                batch.set(newRef, docData);
-                newCount++;
-            } else {
-                // Cập nhật
-                const existingDoc = snapshot.docs[0];
-                if (existingDoc.data().status === 'Chưa đối chiếu') {
-                    batch.update(existingDoc.ref, docData);
-                    updateCount++;
+            // Chỉ thêm nếu Sổ và Mã VT hợp lệ
+            if (docData.ticket && docData.itemCode) {
+                const key = docData.ticket + '|' + docData.itemCode;
+                
+                // Nếu vật tư này CHƯA từng được đối chiếu
+                if (!reconciledItems.has(key)) {
+                    const newRef = db.collection(USAGE_TICKETS_COLLECTION).doc();
+                    batch.set(newRef, docData);
+                    newCountInChunk++;
                 }
+                // Nếu đã đối chiếu, chúng ta bỏ qua (không thêm)
             }
         });
 
-        // 5. Commit batch ghi cho lô hiện tại
-        if (newCount > 0 || updateCount > 0) {
-            await batch.commit();
-        }
-
-        // 6. Ghi backup vào Google Sheets (Async)
-        const newDataToBackup = chunk.filter((r, index) => snapshots[index].empty);
+        // 7. Commit batch (Xóa + Thêm)
+        await batch.commit();
+        totalNew += newCountInChunk;
+        
+        // 8. Ghi backup vào Google Sheets (Chỉ ghi những gì vừa thêm)
+        const newDataToBackup = chunk.filter(r => {
+             const key = (r.ticket || '') + '|' + utils.normalizeCode(r.itemCode || '');
+             return r.ticket && r.itemCode && !reconciledItems.has(key);
+        });
+        
         if (newDataToBackup.length > 0) {
             writeUsageTicketsToSheet_({ sheets, spreadsheetId, data: newDataToBackup });
         }
-        
-        totalNew += newCount;
-        totalUpdated += updateCount;
     } // Hết vòng lặp (chuyển sang lô tiếp theo)
 
-    return { ok: true, message: `Lưu thành công. Thêm mới ${totalNew} dòng, cập nhật ${totalUpdated} dòng.` };
+    return { ok: true, message: `Lưu thành công. Đã xóa ${totalDeleted} vật tư cũ, thêm mới ${totalNew} vật tư.` };
 }
 
 
