@@ -266,6 +266,14 @@
                 <div id="content_techCheck" style="color:#666; font-style:italic;">Chưa có dữ liệu kiểm tra.</div>
             </div>
 
+            <div class="control-group" id="block_external_logistics" style="display:none; border: 2px dashed #ff9800; background: #fff3e0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4 style="margin:0; color:#e65100;">🚚 Điều Phối Gửi Ngoài</h4>
+                    </div>
+                <div id="content_external_logistics">---</div>
+            </div>
+
+
             <div class="control-group" id="block_quotation" style="opacity:0.6;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h4 style="margin:0;">💰 Báo giá sửa chữa</h4>
@@ -338,10 +346,12 @@
             </div>
         </div>
         
-        <div id="ext_unit_div" class="ext-only" style="margin-bottom: 15px; background: #fff8e1; border: 1px solid #ffe0b2; padding: 12px; border-radius: 6px;">
-            <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #e65100;">
+        <div id="ext_unit_div" class="ext-only" style="display: flex; flex-direction: column; margin-bottom: 15px; background: #fff8e1; border: 1px solid #ffe0b2; padding: 12px; border-radius: 6px;">
+    
+            <label style="margin-bottom: 8px; font-weight: bold; color: #e65100; width: 100%;">
                 Tên đơn vị sửa chữa / Hãng:
             </label>
+            
             <input type="text" id="q_ext_unit" 
                 placeholder="VD: Trung tâm bảo hành Dell..." 
                 style="width: 100%; box-sizing: border-box; height: 40px; border: 1px solid #e65100; padding: 0 10px; border-radius: 4px;">
@@ -358,7 +368,7 @@
                         <th>Tên linh kiện / Dịch vụ</th>
                         <th style="width: 90px;">SL</th>
                         <th class="ext-only" style="width: 130px; color:#e65100;">Giá Gốc (A)</th>
-                        <th style="width: 130px; color:#2e7d32;">Giá Bán (B)</th>
+                        <th style="width: 150px; color:#2e7d32;">Giá Bán (B)</th>
                         <th style="width: 30px;"></th>
                     </tr>
                 </thead>
@@ -507,7 +517,7 @@
         <p>Xác nhận gửi máy cho đơn vị đối tác?</p>
         
         <label>Đơn vị tiếp nhận:</label>
-        <input type="text" id="ext_send_unit" placeholder="Tên cửa hàng/hãng..." readonly style="background:#eee;">
+        <input type="text" id="ext_send_unit" placeholder="Nhập tên cửa hàng/hãng...">
         
         <label>Ghi chú gửi hàng:</label>
         <textarea id="ext_send_note" rows="2" placeholder="VD: Gửi kèm sạc, pass máy là..."></textarea>

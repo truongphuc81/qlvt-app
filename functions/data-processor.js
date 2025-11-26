@@ -1792,21 +1792,17 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
         logDetails = `Báo giá: ${formattedPrice} (${(data.items || []).length} hạng mục)`;
     }
     else if (action === 'CUSTOMER_CONFIRM') {
-        const isAgreed = data.isAgreed; // true (Đồng ý) / false (Không sửa)
-        
-        // Kiểm tra xem KTV có kết luận "Không sửa được" không
+        const isAgreed = data.isAgreed; 
         const techSolution = currentTicket.techCheck ? currentTicket.techCheck.solution : '';
         const isUnrepairable = techSolution === 'Không sửa được' || techSolution === 'Trả máy (Không sửa được)';
-
-        // LOGIC CHUYỂN TRẠNG THÁI:
-        // 1. Khách ĐỒNG Ý + Máy SỬA ĐƯỢC -> Chuyển sang "Đang sửa"
-        // 2. Khách KHÔNG ĐỒNG Ý -> Chuyển sang "Chờ trả máy" (Kết thúc sớm)
-        // 3. Khách ĐỒNG Ý (nhận lại) + Máy KHÔNG SỬA ĐƯỢC -> Chuyển sang "Chờ trả máy"
+        
+        // Kiểm tra xem có phải đang gửi ngoài không
+        const isExternal = currentTicket.quotation && currentTicket.quotation.type === 'EXTERNAL';
 
         if (isAgreed && !isUnrepairable) {
-            // --- TRƯỜNG HỢP 1: TIẾN HÀNH SỬA ---
+            // === TRƯỜNG HỢP 1: ĐỒNG Ý SỬA ===
             updateData = {
-                currentStatus: 'Đang sửa',
+                currentStatus: isExternal ? 'Đang sửa ngoài' : 'Đang sửa',
                 customerConfirm: {
                     date: new Date().toISOString(),
                     result: 'Đồng ý sửa',
@@ -1816,29 +1812,42 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
             logAction = 'Khách xác nhận';
             logDetails = 'Khách ĐỒNG Ý sửa chữa.';
         } else {
-            // --- TRƯỜNG HỢP 2 & 3: TRẢ MÁY (KHÔNG SỬA) ---
+            // === TRƯỜNG HỢP 2: KHÔNG SỬA / TỪ CHỐI ===
             let resultText = !isAgreed ? 'Không sửa (Từ chối báo giá)' : 'Đồng ý nhận lại máy (Không sửa được)';
             let workText = !isAgreed ? 'Khách từ chối sửa. Trả nguyên trạng.' : 'Kỹ thuật không sửa được. Trả nguyên trạng.';
 
-            updateData = {
-                currentStatus: 'Chờ trả máy', // Thống nhất dùng trạng thái này để hiện nút Trả
-                customerConfirm: {
-                    date: new Date().toISOString(),
-                    result: resultText,
-                    note: data.note
-                },
-                // Tự động tạo dữ liệu "Sửa xong" (giả) để quy trình liền mạch
-                repair: {
-                    technicianName: userName, // Người xác nhận (Sale/Admin)
-                    technicianEmail: userEmail,
-                    completionDate: new Date().toISOString(),
-                    workDescription: workText,
-                    warranty: "Không",
-                    photos: [] 
-                }
-            };
+            if (isExternal) {
+                // A. NẾU GỬI NGOÀI: Giữ trạng thái "Đang sửa ngoài" để chờ nhận về
+                updateData = {
+                    currentStatus: 'Đang sửa ngoài',
+                    customerConfirm: {
+                        date: new Date().toISOString(),
+                        result: resultText,
+                        note: data.note
+                    }
+                    // Chưa tạo dữ liệu 'repair' vội, đợi nhận về mới tạo
+                };
+                logDetails = `${resultText}. Cần nhận máy về từ đơn vị ngoài.`;
+            } else {
+                // B. NẾU TẠI CHỖ: Kết thúc luôn
+                updateData = {
+                    currentStatus: 'Chờ trả máy',
+                    customerConfirm: {
+                        date: new Date().toISOString(),
+                        result: resultText,
+                        note: data.note
+                    },
+                    repair: {
+                        technicianName: userName,
+                        completionDate: new Date().toISOString(),
+                        workDescription: workText,
+                        warranty: "Không",
+                        photos: []
+                    }
+                };
+                logDetails = `${resultText}. Chuyển sang chờ trả máy.`;
+            }
             logAction = 'Khách xác nhận';
-            logDetails = `${resultText}. Chuyển sang chờ trả máy.`;
         }
     }
     else if (action === 'EXTERNAL_ACTION') {
@@ -1859,27 +1868,51 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
             logDetails = `Đã gửi cho: ${data.unitName}`;
         } 
         else if (subType === 'RECEIVE_PASS') {
-            // 2. Nhận máy về & Test OK -> Chuyển sang Chờ trả máy
+            // 2. Nhận máy về
+            const prevLogistics = currentTicket.externalLogistics || {};
+            
+            // Kiểm tra quyết định của khách
+            const confirm = currentTicket.customerConfirm;
+            const isDeclined = confirm && (confirm.result.includes('Không sửa') || confirm.result.includes('Từ chối'));
+            
+            let workDesc = "";
+            let warrantyVal = "";
+            let qcResultVal = "Đạt";
+            let logActionTxt = "Nhận máy & QC Đạt";
+            let logDetailTxt = "Đã nhận về. KTV kiểm tra hoạt động tốt.";
+
+            if (isDeclined) {
+                // TRƯỜNG HỢP KHÁCH HỦY -> CHỈ NHẬN VỀ
+                workDesc = "Trả máy không sửa (Đã nhận về từ đơn vị ngoài). Tình trạng: " + data.note;
+                warrantyVal = "Không";
+                qcResultVal = "Trả về (Không sửa)";
+                logActionTxt = "Nhận máy về (Khách hủy)";
+                logDetailTxt = "Đã nhận máy về kho. Tình trạng: " + data.note;
+            } else {
+                // TRƯỜNG HỢP SỬA XONG -> CÓ QC
+                workDesc = "Sửa chữa/Bảo hành bởi đối tác. Đã nhận về và QC: " + data.note;
+                warrantyVal = data.warranty || "Theo báo giá";
+            }
+
             updateData = {
                 currentStatus: 'Chờ trả máy',
                 externalLogistics: {
-                    // Giữ lại thông tin lúc gửi
-                    ...currentTicket.externalLogistics, 
+                    ...prevLogistics,
                     receivedDate: new Date().toISOString(),
                     receivedBy: userName,
-                    qcResult: 'Đạt',
+                    qcResult: qcResultVal,
                     qcNote: data.note
                 },
-                // Tự động điền thông tin repair để khớp với quy trình chung
                 repair: {
-                    technicianName: data.unitName + " (Sửa ngoài)",
+                    technicianName: (prevLogistics.unitName || "Đơn vị ngoài") + " (Sửa ngoài)",
                     completionDate: new Date().toISOString(),
-                    workDescription: "Sửa chữa bởi đơn vị ngoài. Đã QC: " + data.note,
-                    warranty: currentTicket.quotation ? currentTicket.quotation.warranty : 'Theo báo giá'
+                    workDescription: workDesc,
+                    warranty: warrantyVal,
+                    photos: [] 
                 }
             };
-            logAction = 'Nhận máy & QC Đạt';
-            logDetails = 'Đã nhận về. KTV kiểm tra hoạt động tốt.';
+            logAction = logActionTxt;
+            logDetails = logDetailTxt;
         }
     }
     else if (action === 'ORDER_PARTS') {

@@ -587,17 +587,97 @@ function renderTicketDetail(t) {
         }
     }
 
+    // --- KHỐI ĐIỀU PHỐI GỬI NGOÀI (LOGIC ĐÃ SỬA) ---
+    const extContainer = document.getElementById('block_external_logistics');
+    const extContent = document.getElementById('content_external_logistics');
+    
+    const techSol = t.techCheck ? t.techCheck.solution : '';
+    const isKtvSuggestExternal = techSol === 'Gửi sửa ngoài' || techSol === 'Gửi hãng';
+    const hasExternalLog = t.externalLogistics && t.externalLogistics.sentDate;
+
+    if (isKtvSuggestExternal || hasExternalLog) {
+        extContainer.style.display = 'block';
+        
+        const log = t.externalLogistics || {};
+        const isWarranty = techSol === 'Gửi hãng' || (log.unitName && log.unitName.toLowerCase().includes('hãng'));
+        const typeLabel = isWarranty ? 'Bảo Hành' : 'Sửa Ngoài';
+
+        if (log.sentDate) {
+            // ĐÃ GỬI ĐI
+            
+            // === SỬA LOGIC HIỂN THỊ ===
+            if (log.receivedDate) {
+                // TRƯỜNG HỢP 1: ĐÃ NHẬN VỀ
+                extContent.innerHTML = `
+                    <div style="font-size:13px;">
+                        <div><strong>Đơn vị:</strong> ${log.unitName}</div>
+                        <div style="color:#666;">Gửi: ${new Date(log.sentDate).toLocaleString('vi-VN')}</div>
+                        <div style="margin-top:5px; color:#155724; font-weight:bold; background:#d4edda; padding:5px; border-radius:4px;">
+                            ✅ Đã nhận về: ${new Date(log.receivedDate).toLocaleString('vi-VN')}
+                        </div>
+                        <div style="font-size:12px; margin-top:2px;">
+                            QC: <strong>${log.qcResult}</strong> - ${log.qcNote}
+                        </div>
+                    </div>
+                `;
+            } else {
+                // TRƯỜNG HỢP 2: VẪN ĐANG Ở ĐƠN VỊ NGOÀI
+                extContent.innerHTML = `
+                    <div style="font-size:13px;">
+                        <div><strong>Đơn vị:</strong> ${log.unitName}</div>
+                        <div><strong>Gửi lúc:</strong> ${new Date(log.sentDate).toLocaleString('vi-VN')}</div>
+                        <div style="color:#666; font-style:italic;">"${log.note || ''}"</div>
+                        <div style="margin-top:5px; color:#0d47a1; font-weight:bold;">
+                            ⏳ Đang ở đơn vị xử lý...
+                        </div>
+                    </div>
+                `;
+            }
+            // === KẾT THÚC SỬA ===
+            
+        } else {
+            // CHƯA GỬI
+            extContent.innerHTML = `
+                <div style="text-align:center;">
+                    <div style="margin-bottom:10px; color:#e65100;">Cần gửi máy đi để kiểm tra/báo giá</div>
+                    <button onclick="openExternalModal('SEND')" class="btn-sm" style="background:#ff9800; padding:8px 20px; font-size:13px;">
+                        🚚 Xác nhận Gửi đi ${typeLabel}
+                    </button>
+                </div>
+            `;
+        }
+    } else {
+        extContainer.style.display = 'none';
+    }
+
+    // --- CHUẨN BỊ BIẾN DÙNG CHUNG ---
+    // const techSol = t.techCheck ? t.techCheck.solution : '';
+    // const isKtvSuggestExternal = techSol === 'Gửi sửa ngoài' || techSol === 'Gửi hãng';
+    // const hasExternalLog = t.externalLogistics && t.externalLogistics.sentDate;
+
+    // ============================================================
     // 4. KHỐI BÁO GIÁ
+    // ============================================================
     const quoteBlock = document.getElementById('content_quotation');
     const quoteContainer = document.getElementById('block_quotation');
     const btnUpdateQuote = document.getElementById('btn_update_quote');
     
-    const canQuote = (userRoles.sale || userRoles.admin) && !isTicketLocked;
+    // 1. Kiểm tra Quyền hạn cơ bản
+    const canUpdate = (userRoles.sale || userRoles.admin) && !isTicketLocked;
+
+    // 2. Kiểm tra Điều kiện Quy trình (Workflow)
+    // Nếu là Sửa ngoài -> Phải Gửi đi rồi (hasExternalLog) thì mới được Báo giá
+    let isReadyToQuote = true;
+    if (isKtvSuggestExternal && !hasExternalLog) {
+        isReadyToQuote = false; 
+    }
 
     if (t.quotation) {
+        // --- TRƯỜNG HỢP A: ĐÃ CÓ BÁO GIÁ ---
         quoteContainer.style.opacity = '1';
         if(btnUpdateQuote) {
-            btnUpdateQuote.style.display = canQuote ? 'block' : 'none'; 
+            // Nếu đã có báo giá, cho phép sửa (Cập nhật) miễn là có quyền
+            btnUpdateQuote.style.display = canUpdate ? 'block' : 'none'; 
             btnUpdateQuote.innerText = 'Cập nhật';
         }
         
@@ -685,20 +765,32 @@ function renderTicketDetail(t) {
             </div>
         `;
     } else {
+        // --- TRƯỜNG HỢP B: CHƯA CÓ BÁO GIÁ ---
         if (t.techCheck) {
             quoteContainer.style.opacity = '1';
-            if (canQuote) {
-                if(btnUpdateQuote) {
-                    btnUpdateQuote.style.display = 'block';
-                    btnUpdateQuote.innerText = '➕ Lên Báo Giá';
-                    btnUpdateQuote.style.backgroundColor = '#28a745';
+            
+            // Logic hiển thị nút "Lên Báo Giá"
+            if (canUpdate) {
+                if (isReadyToQuote) {
+                    // Đủ điều kiện -> Hiện nút
+                    if(btnUpdateQuote) {
+                        btnUpdateQuote.style.display = 'block';
+                        btnUpdateQuote.innerText = '➕ Lên Báo Giá';
+                        btnUpdateQuote.style.backgroundColor = '#28a745';
+                    }
+                    quoteBlock.innerHTML = '<div style="color:#666; font-style:italic;">Chưa có báo giá.</div>';
+                } else {
+                    // Chưa đủ điều kiện (Chưa gửi máy) -> Ẩn nút, Báo lý do
+                    if(btnUpdateQuote) btnUpdateQuote.style.display = 'none';
+                    quoteBlock.innerHTML = '<div style="color:#e65100; font-style:italic;">⚠️ Vui lòng gửi máy đi sửa ngoài trước khi báo giá.</div>';
                 }
-                quoteBlock.innerHTML = '<div style="color:#666; font-style:italic;">Chưa có báo giá.</div>';
             } else {
+                // Không có quyền (KTV)
                 if(btnUpdateQuote) btnUpdateQuote.style.display = 'none';
                 quoteBlock.innerHTML = '<div style="color:#666; font-style:italic;">Chờ Phòng Kinh Doanh báo giá...</div>';
             }
         } else {
+            // Chưa có kết quả kiểm tra
             quoteContainer.style.opacity = '0.6';
             if(btnUpdateQuote) btnUpdateQuote.style.display = 'none';
             quoteBlock.innerHTML = 'Đang chờ kỹ thuật kiểm tra...';
@@ -777,45 +869,49 @@ function renderTicketDetail(t) {
             confirmInfo = `<div style="margin-bottom:10px; font-style:italic;">Khách đã chốt: ${t.customerConfirm.result} (${new Date(t.customerConfirm.date).toLocaleString('vi-VN')})</div>`;
         }
 
-        // KIỂM TRA: Phiếu này là Sửa trong hay Sửa ngoài?
+        // Xác định lại thông tin Gửi ngoài / Bảo hành
+        const techSolution = t.techCheck ? t.techCheck.solution : '';
+        let unitName = t.quotation && t.quotation.externalInfo ? t.quotation.externalInfo.unit : '';
+        
+        // Nhận diện Bảo hành
+        const isWarranty = (techSolution === 'Gửi hãng') || 
+                           (unitName && unitName.toLowerCase().includes('hãng')) || 
+                           (unitName && unitName.toLowerCase().includes('bảo hành'));
+
+        // === KHAI BÁO CÁC BIẾN MÀ BẠN ĐANG BỊ THIẾU ===
+        const labelAction = isWarranty ? 'Gửi đi Bảo Hành' : 'Gửi đi Sửa Ngoài';
+        const labelStatus = isWarranty ? 'Máy đang được Bảo Hành' : 'Máy đang ở đơn vị ngoài';
+        const colorStyle  = isWarranty ? '#17a2b8' : '#ff9800'; 
+        const bgStyle     = isWarranty ? '#e0f7fa' : '#fff3e0';
+        // ===============================================
+
+        // Kiểm tra xem là Sửa ngoài hay Sửa trong
         const isExternal = t.quotation && t.quotation.type === 'EXTERNAL';
+        // (Biến isKtvSuggestExternal đã được khai báo ở đầu hàm renderTicketDetail rồi)
 
-        if (isExternal) {
-            // === A. LOGIC SỬA NGOÀI / BẢO HÀNH ===
-            const techSolution = t.techCheck ? t.techCheck.solution : '';
-            let unitName = t.quotation.externalInfo ? t.quotation.externalInfo.unit : '';
+        if (isExternal || isKtvSuggestExternal) {
+            // === A. LOGIC SỬA NGOÀI ===
             
-            // Nhận diện Bảo hành
-            const isWarranty = (techSolution === 'Gửi hãng') || 
-                               (unitName.toLowerCase().includes('hãng')) || 
-                               (unitName.toLowerCase().includes('bảo hành'));
-
-            const labelAction = isWarranty ? 'Gửi đi Bảo Hành' : 'Gửi đi Sửa Ngoài';
-            const labelStatus = isWarranty ? 'Máy đang được Bảo Hành' : 'Máy đang ở đơn vị ngoài';
-            const colorStyle  = isWarranty ? '#17a2b8' : '#ff9800'; // Xanh ngọc hoặc Cam
-            const bgStyle     = isWarranty ? '#e0f7fa' : '#fff3e0';
-
-            if (t.currentStatus === 'Đang sửa') {
-                // 1. Chưa gửi đi -> Hiện nút Gửi
-                if (!unitName) unitName = 'Đối tác / Hãng';
-                
-                repairBlock.innerHTML = `
-                    ${confirmInfo}
-                    <div style="text-align:center; padding:15px; border:2px dashed ${colorStyle}; background:${bgStyle}; border-radius:8px;">
-                        <h4 style="margin-top:0; color:${colorStyle};">🚚 Cần ${labelAction}</h4>
-                        <div style="margin-bottom:10px;">Nơi nhận: <strong>${unitName}</strong></div>
-                        <button onclick="openExternalModal('SEND')" class="btn-sm" style="background:${colorStyle}; padding:10px 20px;">
-                            Xác nhận Gửi đi
-                        </button>
-                    </div>
-                `;
-            } else if (t.currentStatus === 'Đang sửa ngoài') {
-                // 2. Đã gửi đi -> Hiện thông tin & Nút Nhận về
+            if (t.currentStatus === 'Đang sửa ngoài') {
+                // B. Đã gửi đi
                 const log = t.externalLogistics || {};
+                
+                // Kiểm tra xem khách có hủy không để hiện màu cảnh báo
+                const confirm = t.customerConfirm;
+                const isDeclined = confirm && (confirm.result.includes('Không sửa') || confirm.result.includes('Từ chối'));
+                
+                let statusTitle = `⏳ ${labelStatus}...`;
+                let boxStyle = `border:2px solid ${colorStyle}; background:${bgStyle};`;
+                
+                if (isDeclined) {
+                    statusTitle = `⚠️ KHÁCH ĐÃ HỦY - CẦN RÚT MÁY VỀ`;
+                    boxStyle = `border:2px solid #dc3545; background:#fff5f5;`; // Màu đỏ cảnh báo
+                }
+
                 repairBlock.innerHTML = `
                     ${confirmInfo}
-                    <div style="text-align:center; padding:15px; border:2px solid ${colorStyle}; background:${bgStyle}; border-radius:8px;">
-                        <h4 style="margin-top:0; color:${colorStyle};">⏳ ${labelStatus}...</h4>
+                    <div style="text-align:center; padding:15px; ${boxStyle} border-radius:8px;">
+                        <h4 style="margin-top:0; color:${isDeclined ? '#dc3545' : colorStyle};">${statusTitle}</h4>
                         <div style="font-size:13px; margin-bottom:10px;">
                             Gửi lúc: ${log.sentDate ? new Date(log.sentDate).toLocaleString('vi-VN') : '---'}<br>
                             Nơi nhận: <strong>${log.unitName}</strong>
@@ -823,6 +919,17 @@ function renderTicketDetail(t) {
                         <button onclick="openExternalModal('RECEIVE')" class="btn-sm" style="background:#28a745; padding:10px 20px;">
                             ✅ Đã Nhận Về & Test OK
                         </button>
+                    </div>
+                `;
+            } else {
+                // A. Chưa gửi (Đã xử lý ở khối Logistics trên rồi)
+                if (!unitName) unitName = 'Đối tác / Hãng';
+                
+                repairBlock.innerHTML = `
+                    ${confirmInfo}
+                    <div style="text-align:center; padding:15px; border:2px dashed ${colorStyle}; background:${bgStyle}; border-radius:8px;">
+                        <h4 style="margin-top:0; color:${colorStyle};">🚚 Cần ${labelAction}</h4>
+                        <div style="margin-bottom:10px;">(Vui lòng thực hiện ở khối Điều phối bên trên)</div>
                     </div>
                 `;
             }
@@ -1016,7 +1123,13 @@ function openUpdateModal(type) {
             // Tự động chọn loại hình dựa trên đề xuất của KTV
             if (techSolution === 'Gửi sửa ngoài' || techSolution === 'Gửi hãng') {
                  radioExternal.checked = true;
-            } else {
+                 if (currentTicketData.externalLogistics && currentTicketData.externalLogistics.unitName) {
+                        // Chờ toggle xong mới điền được
+                        setTimeout(() => {
+                            document.getElementById('q_ext_unit').value = currentTicketData.externalLogistics.unitName;
+                        }, 0);
+                    }
+                } else {
                  radioInternal.checked = true;
             }
             toggleQuoteType(); // Cập nhật giao diện ngay lập tức
@@ -1060,11 +1173,9 @@ function openUpdateModal(type) {
                 
                 // Reset form giá vốn
                 document.getElementById('q_ext_unit').value = '';
-                document.getElementById('q_ext_cost').value = '';
+                
                 document.getElementById('q_ext_ship').value = '';
-                document.getElementById('q_ext_profit').value = '';
-                const previewEl = document.getElementById('q_ext_total_preview');
-                if(previewEl) previewEl.innerText = '0';
+                
             }
         }
         // ======================================================
@@ -1120,6 +1231,9 @@ function openUpdateModal(type) {
 async function submitQuote() {
     const items = [];
     const quoteType = document.querySelector('input[name="quoteType"]:checked').value;
+// Lấy nút bấm để tạo hiệu ứng loading
+    const btn = document.querySelector('#modalQuote button[onclick="submitQuote()"]');
+    const originalText = btn ? btn.innerText : 'Gửi Báo Giá';
 
     document.querySelectorAll('#quoteItemsBody tr').forEach(tr => {
         const name = tr.querySelector('.q-name').value.trim();
@@ -1520,18 +1634,6 @@ function toggleQuoteType() {
     }
     calculateQuoteTotal();
 }
-//logic báo giá gửi sửa ngoài
-// Tự động tính tổng khi nhập số liệu
-document.querySelectorAll('.calc-input').forEach(input => {
-    input.addEventListener('input', function() {
-        const cost = parseFloat(document.getElementById('q_ext_cost').value) || 0;
-        const ship = parseFloat(document.getElementById('q_ext_ship').value) || 0;
-        const profit = parseFloat(document.getElementById('q_ext_profit').value) || 0;
-        
-        const total = cost + ship + profit;
-        document.getElementById('q_ext_total_preview').innerText = new Intl.NumberFormat('vi-VN').format(total);
-    });
-});
 
 function applyExternalPriceToTable() {
     const cost = parseFloat(document.getElementById('q_ext_cost').value) || 0;
@@ -1571,6 +1673,52 @@ function openExternalModal(type) {
         document.getElementById('modalExtSend').style.display = 'flex';
     } 
     else if (type === 'RECEIVE') {
+        // Kiểm tra xem khách có hủy không
+        const confirm = currentTicketData.customerConfirm;
+        const isDeclined = confirm && (confirm.result.includes('Không sửa') || confirm.result.includes('Từ chối'));
+
+        const titleEl = document.querySelector('#modalExtReceive h3');
+        const pEl = document.querySelector('#modalExtReceive p');
+        const qcSelect = document.getElementById('ext_qc_result');
+        // Tìm label QC (nằm ngay trước select)
+        const qcLabel = qcSelect.previousElementSibling; 
+        
+        const noteLabel = document.querySelector('label[for="ext_qc_note"]'); // Tìm label ghi chú (cần thêm for vào html hoặc tìm theo text)
+        // Cách tìm an toàn hơn nếu chưa có for:
+        const allLabels = document.querySelectorAll('#modalExtReceive label');
+        const noteLabelEl = allLabels[allLabels.length - 1]; // Label cuối cùng là Ghi chú
+
+        const btnSubmit = document.querySelector('#modalExtReceive button[onclick*="submitExternalAction"]');
+
+        if (isDeclined) {
+            // --- GIAO DIỆN NHẬN MÁY HỦY ---
+            titleEl.innerText = '↩️ Nhận Máy Về (Khách Hủy)';
+            pEl.innerText = 'Máy khách không sửa. Xác nhận nhận lại từ đối tác.';
+            
+            // Ẩn phần QC
+            if(qcSelect) qcSelect.style.display = 'none';
+            if(qcLabel) qcLabel.style.display = 'none';
+            
+            // Đổi text label ghi chú
+            if(noteLabelEl) noteLabelEl.innerText = 'Tình trạng máy khi nhận lại:';
+            
+            // Đổi nút bấm
+            btnSubmit.innerText = 'Đã Nhận Về Kho';
+            btnSubmit.style.background = '#546e7a'; // Màu xám xanh
+        } else {
+            // --- GIAO DIỆN QC BÌNH THƯỜNG ---
+            titleEl.innerText = '✅ Nhận Máy & Kiểm Tra (QC)';
+            pEl.innerText = 'Máy đã được gửi trả về. Kỹ thuật viên cần kiểm tra lại.';
+            
+            if(qcSelect) qcSelect.style.display = 'block';
+            if(qcLabel) qcLabel.style.display = 'block';
+            
+            if(noteLabelEl) noteLabelEl.innerText = 'Ghi chú kiểm tra:';
+            
+            btnSubmit.innerText = 'QC Đạt - Chờ Trả Khách';
+            btnSubmit.style.background = '#28a745'; // Màu xanh lá
+        }
+
         document.getElementById('ext_qc_note').value = '';
         document.getElementById('modalExtReceive').style.display = 'flex';
     }
