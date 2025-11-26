@@ -663,7 +663,7 @@ function renderTicketDetail(t) {
             `;
         }
         // ================================================
-
+        const totalFormatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.quotation.totalPrice || 0);
         quoteBlock.innerHTML = `
             <div style="background:#fff3cd; padding:10px; border-radius:6px; border-left:4px solid #ffc107;">
                 <div style="margin-bottom:8px;">${itemsHtml}</div>
