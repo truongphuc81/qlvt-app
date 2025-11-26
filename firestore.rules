@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Cho phép TẤT CẢ user đã đăng nhập ĐỌC (read) lịch sử
+    match /history_transactions/{docId} {
+      allow read: if request.auth != null;
+      // (Giữ nguyên luật write cũ nếu có)
+    }
+    //
+    // Hàm helper để kiểm tra các vai trò (roles)
+    // Chúng ta đọc quyền từ request.auth.token (đây chính là Custom Claims)
+    function isAdmin() {
+      return request.auth.token.admin == true;
+    }
+    
+    function isInventoryManager() {
+      return request.auth.token.inventory_manager == true;
+    }
+    
+    function isAuditor() {
+      return request.auth.token.auditor == true;
+    }
+    
+    // Admin có thể đọc/ghi MỌI THỨ
+    // Auditor có thể đọc MỌI THỨ
+    // Manager Kho có thể đọc/ghi MỌI THỨ (để quản lý)
+    // (Bạn có thể siết chặt quyền của Manager Kho sau nếu muốn)
+    match /{document=**} {
+      allow read: if request.auth != null && (isAdmin() || isAuditor() || isInventoryManager());
+      allow write: if request.auth != null && (isAdmin() || isInventoryManager());
+    }
+
+    // --- QUYỀN CỦA KTV THÔNG THƯỜNG ---
+    
+    // KTV có thể đọc/ghi các note của chính họ
+    match /pending_notes/{noteId} {
+      allow read, write: if request.auth != null && (
+                            request.auth.email == resource.data.email 
+                            || isAdmin() || isInventoryManager()
+                          );
+    }
+    
+    match /pending_return_notes/{noteId} {
+       allow read, write: if request.auth != null && (
+                            request.auth.email == resource.data.email 
+                            || isAdmin() || isInventoryManager()
+                          );
+    }
+
+    // KTV có thể đọc/ghi lịch sử của chính họ
+    match /history_transactions/{txId} {
+      allow read, write: if request.auth != null && (
+                            request.auth.email == resource.data.email 
+                            || isAdmin() || isInventoryManager()
+                          );
+    }
+    
+    // KTV có thể đọc/ghi các sổ của chính họ
+    match /usage_tickets/{ticketId} {
+       allow read, write: if request.auth != null && (
+                            request.auth.email == resource.data.email 
+                            || isAdmin() || isInventoryManager()
+                          );
+    }
+    
+    // KTV (hoặc bất kỳ ai đã đăng nhập) có thể đọc trang KTV
+    // (Cần thiết cho các truy vấn .where('email', '==', userEmail))
+    match /history_transactions/{document=**} {
+      allow list: if request.auth != null;
+    }
+    match /usage_tickets/{document=**} {
+      allow list: if request.auth != null;
+    }
+    
+  }
+}

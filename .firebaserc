@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "default": "quan-ly-vat-tu-backend"
+  },
+  "targets": {
+    "quan-ly-vat-tu-backend": {
+      "hosting": {
+        "backend": [
+          "quan-ly-vat-tu-backend"
+        ],
+        "frontend": [
+          "khodotnet-frontend"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

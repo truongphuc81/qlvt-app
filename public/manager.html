@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Trang Quản Lý Vật Tư</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  
+  <script>
+    // Copy cấu hình Firebase Config từ index.html
+    const firebaseConfig = {
+        apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+        authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+        projectId: "quan-ly-vat-tu-backend",
+        storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+        messagingSenderId: "323292129107",
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
+        measurementId: "G-N3VLYSXTR8"
+    };
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebaseApp.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const db = firebase.firestore(); // Khởi tạo DB cho manager.js
+  </script>
+</head>
+<body>
+  <div class="main-header">
+    <div class="brand-row">
+        <div class="brand-left">
+            <img src="logo.png" alt="Logo" class="header-logo">
+            <h3 class="header-title">Trang Quản Lý</h3>
+        </div>
+        <div class="brand-right">
+             <button id="authButton" class="btn-login" style="display:none;">Đăng nhập</button>
+             <button id="signOutButton" class="btn-logout" style="display:none;" onclick="firebase.auth().signOut().then(() => { window.location.href = 'index.html'; })">
+                Đăng xuất
+             </button>
+        </div>
+    </div>
+
+    <div class="nav-grid">
+        <a href="index.html" class="nav-item-link">
+            <button class="nav-btn" style="background-color: var(--secondary-color) !important;">
+                < Quay lại Trang KTV
+            </button>
+        </a>
+        <a href="auditor.html" class="nav-item-link">
+            <button class="nav-btn btn-auditor">
+                Xem Lịch sử Kho
+            </button>
+        </a>
+    </div>
+
+    <button id="darkModeToggle" onclick="toggleDarkMode()" style="display:none;"></button> 
+  </div>
+
+  <div id="managerPage" class="form-section" style="display:none; margin-top: 20px;">
+    
+    <div id="globalOverviewSection" class="form-section toggle-section" style="display: none;">
+      <h3 class="toggle-header">Tổng quan Toàn hệ thống (Admin)</h3>
+      <div class="toggle-content" style="display: none;">
+        <p class="form-hint">Tổng hợp số lượng mượn/trả/sử dụng của TẤT CẢ kỹ thuật viên.</p>
+        <table id="globalOverviewTable">
+          <thead> 
+            <tr>
+              <th>Tên vật tư</th>
+              <th>Mã vật tư</th>
+              <th>Tổng mượn</th>
+              <th>Tổng sử dụng</th>
+              <th>Tổng trả</th>
+              <th>Tổng còn nợ (Toàn kho)</th>
+              <th>KTV đang nợ</th>
+            </tr>
+          </thead>
+          <tbody id="globalOverviewBody">
+            <tr><td colspan="7">Nhấn để mở và tải...</td></tr>
+          </tbody>
+        </table>
+        <div id="globalOverviewSpinner" style="display:none; text-align:center; margin-top: 15px;">
+          <div class="spinner"></div>
+          <p>Đang tổng hợp dữ liệu toàn hệ thống, vui lòng chờ...</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="managerNotificationArea" class="form-section" style="display: none; background-color: #fff3cd; border-color: #ffeeba;">
+      <h4><span style="color: #856404;">🔔 Thông báo yêu cầu đang chờ:</span></h4>
+      <p id="pendingCountsText" style="color: #856404; font-weight: bold;"></p>
+      <div id="notificationSpinner" style="display:none;"><div class="spinner"></div></div>
+    </div>
+
+    <div class="form-section">
+      <h3>Chọn kỹ thuật viên</h3>
+      <select id="technicianEmail" onchange="loadTechnicianData()">
+        <option value="">Chọn kỹ thuật viên</option>
+      </select>
+      <div id="technicianSpinner" style="display:none;text-align:center;">...</div>
+      <div id="technicianSuccessMessage" class="success" style="display:none;"></div>
+      <div id="technicianErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div id="managerBorrowForm" class="form-section toggle-section">
+  <h3 class="toggle-header">Giao dịch Mượn / Trả</h3>
+  <div class="toggle-content" style="display: none;">
+    
+    <div class="borrow-layout">
+      <div class="left-panel">
+        <div class="mode-tabs">
+          <div id="tab-borrow" class="mode-tab active" onclick="selectMode('borrow')">NHẬP MƯỢN</div>
+          <div id="tab-return" class="mode-tab" onclick="selectMode('return')">NHẬP TRẢ</div>
+        </div>
+        
+        <input type="radio" name="managerMode" id="borrowMode" checked style="display:none">
+        <input type="radio" name="managerMode" id="returnUnusedMode" style="display:none">
+
+        <div id="borrowLeftControls">
+          <div class="control-group">
+              <label class="toggle-switch-label" style="font-weight: bold; display: flex; align-items: center; gap: 10px;">
+                  <input type="checkbox" id="directBorrow" onchange="toggleBorrowInput()"> 
+                  <span>Nhập trực tiếp (Không cần lệnh từ KTV)</span>
+              </label>
+          </div>
+    
+              <div id="borrowNoteSelectDiv" class="control-group" style="background-color: #fff3cd; border: 1px dashed #ffeeba;">
+                  <label style="color: #856404; font-weight: bold;">Chọn lệnh mượn từ KTV:</label>
+                  <select id="borrowNoteSelect" onchange="displaySelectedNote()" style="width: 100%; margin-bottom: 10px; padding: 8px;">
+                      <option value="">-- Chọn lệnh mượn --</option>
+                  </select>
+                  
+                  <label style="font-size: 0.9em; color: #666;">Ghi chú của KTV:</label>
+                  <textarea id="technicianNote" readonly rows="2" style="width: 100%; font-size: 13px; background: #fff; border: 1px solid #ddd;"></textarea>
+              </div>
+    
+              <div id="directBorrowNoteDiv" class="control-group" style="display:none;">
+                  <label>Ghi chú mượn trực tiếp:</label>
+                  <textarea id="managerBorrowNote" rows="2" style="width: 100%;" placeholder="VD: Xuất cho NHCS"></textarea>
+              </div>
+          </div>
+
+        <div id="returnLeftControls" style="display:none;">
+            <div class="control-group">
+                 <label>Chọn lệnh trả (Nếu có):</label>
+                 <select id="returnNoteSelect" onchange="displaySelectedReturnNote()" style="width: 100%; margin-bottom: 10px;">
+                    <option value="">-- Trả trực tiếp --</option>
+                 </select>
+                 
+                 <label style="font-size: 0.9em; color: #666;">Ghi chú trả của KTV:</label>
+                 <textarea id="technicianReturnNote" readonly rows="3" style="font-size: 13px; background: #f8f9fa; border: 1px solid #eee;"></textarea>
+            </div>
+        </div>
+      </div>
+
+      <div class="right-panel">
+        
+        <div id="borrowRightPanel">
+            <div class="control-group" style="padding: 10px;">
+                <div class="input-row">
+                    <input type="text" id="managerItemSearch" placeholder="Nhập mã hoặc tên vật tư..." style="flex-grow: 2;">
+                    <button class="btn-icon" onclick="startQrScanner()" title="Quét mã QR" style="width: auto;">QUÉT QR</button>
+                </div>
+                <div class="input-row" style="margin-top: 10px;">
+                    <input type="number" id="managerItemQuantity" placeholder="Số lượng" min="1" style="flex-grow: 1;">
+                    <button onclick="addManagerItem()" class="btn-add" title="Thêm vào danh sách" style="flex-grow: 0; min-width: 80px; background-color: var(--primary-color) !important;">Thêm</button>
+                </div>
+            </div>
+            <div id="managerBorrowSuccessMessage" class="success" style="display:none; margin-top:10px;"></div>
+            <div id="managerBorrowErrorMessage" class="error" style="display:none; margin-top:10px;"></div>
+            <div class="table-scroll-container">
+                <table id="managerSelectedItemsTable">
+                    <thead><tr><th>Mã</th><th>Tên</th><th style="width: 60px; text-align: center;">SL</th><th style="width: 50px;">Xóa</th></tr></thead>
+                    <tbody id="managerSelectedItemsBody"></tbody>
+                </table>
+            </div>
+
+            <div class="action-footer">
+                <div style="flex-grow: 1; margin-right: 10px;">
+                    <input type="text" id="managerTransactionDate" placeholder="Ngày (để trống = hôm nay)" style="display:none;">
+                    <textarea id="borrowRejectionReason" placeholder="Nhập lý do từ chối..." style="height: 40px; width: 100%; display:none; margin-bottom: 0; font-size: 13px;"></textarea>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <button onclick="submitManagerBorrow()" style="margin: 0; height: 40px;">Duyệt & Gửi</button>
+                    <button onclick="toggleRejectInput('borrow')" style="margin: 0; background-color: var(--error-color) !important; font-size: 12px; padding: 5px;">Từ chối</button>
+                </div>
+            </div>
+            
+            <div id="managerBorrowSpinner" style="display:none;text-align:center; margin-top:10px;">...</div>
+            
+        </div>
+
+        <div id="returnRightPanel" style="display:none;">
+     
+     <div class="table-scroll-container" style="max-height: 250px;">
+        <table id="unusedItemsTable">
+          <thead>
+            <tr>
+              <th>Tên VT</th>
+              <th>Mã VT</th>
+              <th style="text-align: center;">Nợ</th>
+              <th style="width: 100px;">SL Trả</th> 
+              </tr>
+          </thead>
+          <tbody id="unusedItemsBody"><tr><td colspan="4">Vui lòng chọn Kỹ thuật viên</td></tr></tbody>
+        </table>
+     </div>
+
+     <button onclick="addSelectedItemsToReturnList()" 
+             style="width: 100%; margin-top: 5px; margin-bottom: 15px; background-color: var(--primary-color); height: 45px;">
+        ↓ Thêm các mục đã nhập vào danh sách
+     </button>
+     <div id="directReturnControls" style="margin-top: 15px; border-top: 2px dashed #eee; padding-top: 15px;">
+        <h4 style="font-size: 14px; margin: 0 0 10px 0; color: var(--success-color);">Danh sách xác nhận trả:</h4>
+                <div class="table-scroll-container" style="max-height: 150px;">
+                    <table id="managerReturnListTable">
+                        <thead><tr><th>Tên</th><th>Mã</th><th>SL Trả</th><th>Xóa</th></tr></thead>
+                        <tbody id="managerReturnListBody"><tr><td colspan="4">Chưa có vật tư nào.</td></tr></tbody>
+                    </table>
+                </div>
+                
+                <div class="action-footer">
+                     <div style="flex-grow: 1; margin-right: 10px;">
+                        <textarea id="returnRejectionReason" placeholder="Lý do từ chối..." style="height: 40px; width: 100%; display:none; margin-bottom: 5px; font-size: 13px;"></textarea>
+                        <textarea id="managerReturnNote" placeholder="Ghi chú trả hàng (Tùy chọn)..." style="height: 40px; width: 100%; font-size: 13px; margin-bottom: 5px;"></textarea>
+
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="directReturnDate" placeholder="Ngày trả (DD/MM/YYYY)" style="flex: 1; margin-bottom: 0; height: 35px;" autocomplete="off">
+                            <input type="text" id="approveReturnDate" style="display:none;"> 
+                        </div>
+                     </div>
+                     <div id="returnActionButtons" style="display: flex; flex-direction: column; gap: 5px;">
+                        <button onclick="handleReturnSubmit()" style="margin: 0; height: 40px;">Xác nhận</button>
+                        <button onclick="toggleRejectInput('return')" style="margin: 0; background-color: var(--error-color) !important; font-size: 12px; padding: 5px;">Từ chối</button>
+                     </div>
+                </div>
+             </div>
+             
+             <div id="returnUnusedSpinner" style="display:none;text-align:center; margin-top:10px;">...</div>
+             <div id="returnUnusedSuccessMessage" class="success" style="display:none; margin-top:10px;"></div>
+             <div id="returnUnusedErrorMessage" class="error" style="display:none; margin-top:10px;"></div>
+        </div>
+
+      </div> </div> </div>
+</div>
+
+    <div id="managerOverviewSection" class="form-section toggle-section">
+      <h3 class="toggle-header">Tổng quan mặt hàng (KTV đã chọn)</h3>
+      <div class="toggle-content" style="display: none;">
+        <table id="managerOverviewTable">
+          <thead> 
+            <tr>
+              <th>Tên vật tư</th><th>Mã vật tư</th><th>Tổng mượn</th><th>Tổng sử dụng</th><th>Đã trả</th> <th>Còn lại</th> <th>Chi tiết số sổ</th><th>Hàng động</th>
+            </tr>
+          </thead>
+          <tbody id="managerOverviewBody"></tbody>
+        </table>
+        <button id="fix-all-negative-btn" 
+          onclick="fixAllNegativeItems()" 
+          style="background-color: var(--error-color); display:none; margin-top: 15px; width: 100%; max-width: 500px;">Sửa Tất Cả Vật Tư Bị Âm (Về 0)</button>
+        <div id="managerOverviewSpinner" style="display:none;text-align:center;">...</div>
+      </div>
+    </div>
+
+    <div id="ticketRangeForm" class="form-section toggle-section">
+      <h3 class="toggle-header">Quản lý dải số sổ (KTV đã chọn)</h3>
+      <div class="toggle-content" style="display: none;">
+        <label>Số bắt đầu:</label><br>
+        <input type="number" id="ticketRangeStart" class="ticket-range-input" min="1" placeholder="VD: 1"><br>
+        <label>Số kết thúc:</label><br>
+        <input type="number" id="ticketRangeEnd" class="ticket-range-input" min="1" placeholder="VD: 100"><br>
+        <button onclick="addTicketRange()">Thêm dải số</button><br>
+        <h4>Danh sách dải số sổ</h4>
+        <table id="ticketRangesTable">
+          <thead>
+            <tr><th>Số bắt đầu</th><th>Số kết thúc</th><th>Xóa</th></tr>
+          </thead>
+          <tbody id="ticketRangesBody"></tbody>
+        </table>
+        <button onclick="saveTicketRanges()">Lưu dải số sổ</button>
+        <div id="ticketRangeSpinner" style="display:none;text-align:center;">...</div>
+        <div id="ticketRangeSuccessMessage" class="success" style="display:none;"></div>
+        <div id="ticketRangeErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div id="excelUploadForm" class="form-section toggle-section">
+      <h3 class="toggle-header">Upload Excel (Toàn hệ thống)</h3>
+      <div class="toggle-content" style="display: none;">
+        <input type="file" id="excelFile" accept=".xlsx,.xls"><br>
+        <button onclick="uploadExcel()">Tải lên và xem trước</button><br>
+        <table id="excelDataTable" style="display:none;">
+          <thead> <tr>
+              <th>Ngày</th><th>Số sổ</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Số lượng sử dụng</th><th>Email</th><th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody id="excelDataBody"></tbody>
+        </table>
+        <button id="confirmExcelButton" style="display:none;" onclick="confirmExcelData()">Xác nhận và lưu</button>
+        <div id="excelSpinner" style="display:none;text-align:center;">...</div>
+        <div id="excelSuccessMessage" class="success" style="display:none;"></div>
+        <div id="excelErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+    
+    <div id="transferForm" class="form-section toggle-section">
+      <h3 class="toggle-header">Chuyển vật tư (Toàn hệ thống)</h3>
+      <div class="toggle-content" style="display: none;">
+        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 20px;">
+          <div style="flex: 1; min-width: 250px;">
+            <label for="transferFromTech">Từ Kỹ thuật viên:</label><br>
+            <select id="transferFromTech" onchange="loadTransferableItems()"><option value="">-- Chọn người chuyển --</option></select>
+          </div>
+          <div style="flex: 1; min-width: 250px;">
+            <label for="transferToTech">Đến Kỹ thuật viên:</label><br>
+            <select id="transferToTech"><option value="">-- Chọn người nhận --</option></select>
+          </div>
+        </div>
+        <h4>Vật tư có thể chuyển (của người chuyển)</h4>
+        <table id="transferItemsTable">
+          <thead>
+            <tr><th>Tên vật tư</th><th>Mã vật tư</th><th>Đang nợ</th><th>Số lượng chuyển</th></tr>
+          </thead>
+          <tbody id="transferItemsBody"><tr><td colspan="4">Vui lòng chọn Kỹ thuật viên chuyển</td></tr></tbody>
+        </table>
+        <label for="transferDate">Ngày chuyển:</label><br>
+        <input type="text" id="transferDate" placeholder="DD/MM/YYYY" required><br> 
+        <button id="submitTransferButton" onclick="submitTransfer()">Xác nhận chuyển</button>
+        <div id="transferSpinner" style="display:none; text-align:center;">...</div>
+        <div id="transferSuccessMessage" class="success" style="display:none;"></div>
+        <div id="transferErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div id="roleManagerForm" class="form-section toggle-section" style="display: none;"> 
+      <h3 class="toggle-header">Quản lý Phân quyền (Admin)</h3>
+      <div class="toggle-content" style="display: none;">
+        <p class="form-hint">Chỉ Admin mới thấy mục này...</p>
+        <label for="roleEmailInput">Email Người dùng:</label><br>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+            <input type="email" id="roleEmailInput" placeholder="user@example.com" style="flex: 1; margin-bottom: 0;">
+            <button onclick="loadUserRolesForAdmin()" class="btn-sm" style="width: auto; background: var(--secondary-color); white-space: nowrap;">
+                🔍 Kiểm tra
+            </button>
+        </div>
+        <label>Các vai trò:</label><br>
+        <div class="role-checkbox-group">
+          <label><input type="checkbox" id="roleCheckboxInventoryManager"> Quản lý Kho (Duyệt mượn)</label>
+          <label><input type="checkbox" id="roleCheckboxSale"> Phòng Kinh Doanh (Báo giá)</label>
+          <label><input type="checkbox" id="roleCheckboxAuditor"> Kiểm duyệt viên (Xem lịch sử)</label>
+        </div>
+        <button id="submitSetRolesButton" onclick="submitSetRoles()">Lưu Quyền</button>
+        <div id="roleManagerSpinner" style="display:none;text-align:center;"><div class="spinner"></div></div>
+        <div id="roleManagerSuccessMessage" class="success" style="display:none;"></div>
+        <div id="roleManagerErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div id="managerHistorySection" class="form-section"> 
+      <h3>Lịch sử Giao dịch (Thời gian thực)</h3>
+      <label for="managerHistoryFilterType">Lọc theo loại:</label> <select id="managerHistoryFilterType" onchange="listenForManagerHistory()"> <option value="Tất cả">Tất cả</option><option value="Mượn">Mượn</option><option value="Trả">Trả</option></select>
+      <label for="managerHistoryFilterTech">Lọc theo Kỹ thuật viên:</label> <select id="managerHistoryFilterTech" onchange="listenForManagerHistory()"> <option value="Tất cả">Tất cả KTV</option></select>
+      <div id="managerHistorySpinner" style="display:none; text-align:center;"> ... </div>
+      <table id="managerHistoryTable"> 
+        <thead>
+          <tr><th>Thời gian</th><th>Loại</th><th>Nội dung</th></tr>
+        </thead>
+        <tbody id="managerHistoryBody"> <tr><td colspan="3">Đang tải...</td></tr></tbody>
+      </table>
+      <button id="loadMoreManagerHistory" class="load-more-button" onclick="loadMoreManagerHistory()" style="display:none; margin-top: 10px;">Tải thêm</button>
+    </div>
+    
+  </div> 
+  <div id="qr-scanner-overlay" style="display:none;">
+    <div id="qr-reader-container">
+      <div id="qr-reader-header">Quét Mã Vật Tư</div>
+      <div id="qr-reader"></div>
+      <div id="qr-scan-error" class="error" style="display:none; margin: 10px;"></div>
+      <button id="qr-reader-close-btn" onclick="stopQrScanner()">Hủy Bỏ</button>
+    </div>
+  </div> 
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="common.js"></script> <script src="manager.js"></script> </body>
+</html>

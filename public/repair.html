@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Quản Lý Sửa Chữa</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <script>
+    // Copy cấu hình Firebase Config từ index.html
+    const firebaseConfig = {
+        apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+        authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+        projectId: "quan-ly-vat-tu-backend",
+        storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app", 
+        messagingSenderId: "323292129107",
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
+        measurementId: "G-N3VLYSXTR8"
+    };
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebaseApp.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage(); // Khởi tạo Storage
+  </script>
+</head>
+<body>
+  <div class="main-header">
+    <div class="brand-row">
+        <div class="brand-left">
+            <img src="logo.png" alt="Logo" class="header-logo">
+            <h3 class="header-title">Dịch Vụ Sửa Chữa</h3>
+        </div>
+        <div class="brand-right">
+             <button id="authButton" class="btn-login" style="display:none;">Đăng nhập</button>
+             <button id="signOutButton" class="btn-logout" style="display:none;" onclick="firebase.auth().signOut().then(() => { window.location.href = 'index.html'; })">Đăng xuất</button>
+        </div>
+    </div>
+    <div class="nav-grid">
+        <a href="index.html" class="nav-item-link">
+            <button class="nav-btn" style="background-color: var(--secondary-color) !important;">&lt; Trang Chủ</button>
+        </a>
+        <button id="btnShowList" class="nav-btn btn-manager" onclick="showView('list')" style="display:none;">Danh Sách Phiếu</button>
+        <button id="btnShowCreate" class="nav-btn btn-add" onclick="showView('create')">+ Tạo Phiếu Mới</button>
+    </div>
+  </div>
+
+  <div id="app-container" style="display:none;"> <div id="listView" class="form-section">
+        <div class="filter-bar">
+            <div style="display:flex; flex:2; gap:5px;">
+                <input type="text" id="searchTicket" placeholder="🔍 Tìm Mã phiếu / SĐT..." style="width:100%; height:45px;">
+                <button onclick="startTicketQrScanner()" class="btn-icon" style="width:50px; justify-content:center; height:45px; background:#6c757d;" title="Quét mã phiếu">
+                    📷
+                </button>
+            </div>
+            
+            <select id="filterStatus" style="flex: 1; height:45px;">
+                <option value="" selected>-- Tất cả trạng thái --</option>
+                <option value="Chưa hoàn tất">Chưa hoàn tất (Đang xử lý)</option>
+                <option value="Hoàn tất">Đã hoàn tất</option>
+            </select>
+            <button onclick="loadTickets()" style="width: auto; height:45px;">Lọc</button>
+        </div>
+
+        <div id="ticketQrModal" class="modal-overlay" style="display:none;">
+            <div class="modal-content" style="text-align:center;">
+                <h3>Quét Mã Phiếu</h3>
+                <div id="ticket-qr-reader" style="width:100%;"></div>
+                <button onclick="stopTicketQrScanner()" style="margin-top:15px; background:#ccc; color:#333;">Đóng Camera</button>
+            </div>
+        </div>
+        <div class="table-scroll-container">
+            <table id="ticketTable">
+                <thead>
+                    <tr>
+                        <th>Mã Phiếu</th>
+                        <th>Khách Hàng</th>
+                        <th>Thiết Bị</th>
+                        <th>Trạng Thái</th>
+                        <th>Ngày Nhận</th>
+                        <th>Chi Tiết</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketTableBody">
+                    <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <button id="loadMoreTickets" class="load-more-button" onclick="loadMoreTickets()">Tải thêm</button>
+    </div>
+
+    <div id="createView" class="form-section" style="display:none;">
+        <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px;">Tạo Phiếu Tiếp Nhận Mới</h3>
+        
+        <div class="borrow-layout">
+            <div class="left-panel">
+                <h4>1. Thông Tin Khách Hàng</h4>
+                <div class="control-group">
+                    <label>Tên khách hàng (*):</label>
+                    <input type="text" id="custName" placeholder="VD: Nguyễn Văn A">
+                    
+                    <label>Số điện thoại (*):</label>
+                    <input type="tel" id="custPhone" placeholder="VD: 0912345678">
+                    
+                    <label>Địa chỉ:</label>
+                    <input type="text" id="custAddress" placeholder="Địa chỉ (Tùy chọn)">
+                </div>
+
+                <h4>2. Thông Tin Thiết Bị</h4>
+                <div class="control-group">
+                    <label>Loại thiết bị:</label>
+                    <select id="deviceType">
+                        <option value="Laptop">Laptop</option>
+                        <option value="PC">PC / Máy bàn</option>
+                        <option value="Printer">Máy in</option>
+                        <option value="Phone">Điện thoại</option>
+                        <option value="Other">Khác</option>
+                    </select>
+
+                    <div class="input-row">
+                        <div style="flex:1"><label>Hãng:</label><input type="text" id="deviceBrand" placeholder="Dell, HP..."></div>
+                        <div style="flex:1"><label>Model:</label><input type="text" id="deviceModel" placeholder="XPS 13..."></div>
+                    </div>
+                    
+                    <label>Serial / IMEI / Service Tag:</label>
+                    <input type="text" id="deviceSerial" placeholder="Nhập số serial...">
+
+                    <label>Phụ kiện đi kèm:</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" class="acc-check" value="Sạc"> Sạc</label>
+                        <label><input type="checkbox" class="acc-check" value="Chuột"> Chuột</label>
+                        <label><input type="checkbox" class="acc-check" value="Túi"> Túi</label>
+                        <label><input type="checkbox" class="acc-check" value="Hộp mực"> Hộp mực</label>
+                    </div>
+                    <input type="text" id="deviceAccessories" placeholder="Ghi chú phụ kiện khác...">
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <h4>3. Tình Trạng Khi Nhận</h4>
+                <div class="control-group">
+                    <label>Lỗi khách mô tả (*):</label>
+                    <textarea id="customerDesc" rows="3" placeholder="VD: Máy không lên nguồn, màn hình chớp..."></textarea>
+                    
+                    <label>Ngoại hình ghi nhận:</label>
+                    <textarea id="physicalDesc" rows="2" placeholder="VD: Trầy góc trái, móp nắp lưng..."></textarea>
+                </div>
+
+                <h4>4. Hình Ảnh (Tối đa 5 ảnh)</h4>
+                <div class="control-group">
+                    <input type="file" id="photoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelect(this)">
+                    <input type="file" id="photoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this)">
+                    
+                    <button onclick="openPhotoActionSheet('photoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                        📷 Thêm hình ảnh
+                    </button>
+                    
+                    <div id="photoPreviewGrid" class="photo-grid"></div>
+                </div>
+
+                <h4>5. Thông Tin Nhận</h4>
+                <div class="control-group">
+                    <label>Ghi chú nội bộ:</label>
+                    <textarea id="internalNote" rows="2" placeholder="Ghi chú cho kỹ thuật..."></textarea>
+                </div>
+
+                <div class="action-footer">
+                    <button onclick="showView('list')" style="background-color: var(--secondary-color) !important;">Hủy</button>
+                    <button onclick="submitTicket(false)" style="background-color: var(--primary-color);">Lưu Phiếu</button>
+                    <button onclick="submitTicket(true)" style="background-color: #28a745 !important;">Lưu & In</button>
+                </div>
+                <div id="createSpinner" style="display:none;text-align:center; margin-top:10px;">
+                    <div class="spinner"></div> Đang xử lý (Nén ảnh & Lưu)...
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="detailView" class="form-section" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px; margin-bottom:20px;">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <button onclick="showView('list')" style="background:#f1f3f4; color:#333; border:none; padding:8px 15px; border-radius:20px; font-weight:600;">← Quay lại</button>
+            <div>
+                <h3 style="margin:0; color:var(--primary-color);">Phiếu: <span id="d_ticketId">...</span></h3>
+                <span id="d_createdAt" style="font-size:13px; color:#666;">...</span>
+            </div>
+        </div>
+        <div style="display:flex; gap: 10px;">
+            <button class="btn-icon" onclick="printTicket()" style="background:#6c757d; padding: 8px 15px;">
+                🖨️ In Biên Nhận
+            </button>
+
+            <button class="btn-icon" onclick="printDeviceLabel()" style="background:#ffc107; color:#000; padding: 8px 15px;">
+                🏷️ In Tem Dán
+            </button>
+        </div>
+    </div>
+
+    <div class="timeline-wrapper" style="margin-bottom:30px; overflow-x:auto; padding-bottom:10px;">
+        <div class="timeline-steps">
+            <div class="step active" id="step_new">
+                <div class="step-circle">1</div>
+                <div class="step-label">Tiếp nhận</div>
+            </div>
+            <div class="step" id="step_check">
+                <div class="step-circle">2</div>
+                <div class="step-label">Kiểm tra</div>
+            </div>
+            <div class="step" id="step_quote">
+                <div class="step-circle">3</div>
+                <div class="step-label">Báo giá</div>
+            </div>
+            <div class="step" id="step_repair">
+                <div class="step-circle">4</div>
+                <div class="step-label">Sửa chữa</div>
+            </div>
+            <div class="step" id="step_done">
+                <div class="step-circle">5</div>
+                <div class="step-label">Hoàn tất</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="borrow-layout">
+        <div class="left-panel">
+            
+            <div class="control-group">
+                <h4>👤 Khách hàng</h4>
+                <div style="margin-bottom:5px;"><strong>Tên:</strong> <span id="d_custName">...</span></div>
+                <div style="margin-bottom:5px;"><strong>SĐT:</strong> <span id="d_custPhone" style="color:blue;">...</span></div>
+                <div style="margin-bottom:5px;"><strong>Đ/C:</strong> <span id="d_custAddress">...</span></div>
+            </div>
+
+            <div class="control-group">
+                <h4>💻 Thiết bị tiếp nhận</h4>
+                <div style="margin-bottom:5px;"><strong>Máy:</strong> <span id="d_deviceInfo">...</span></div>
+                <div style="margin-bottom:5px;"><strong>Serial:</strong> <span id="d_deviceSerial">...</span></div>
+                <div style="margin-bottom:5px;"><strong>Phụ kiện:</strong> <span id="d_accessories">...</span></div>
+            </div>
+
+            <div class="control-group">
+                <h4>⚠️ Tình trạng ban đầu</h4>
+                <p><strong>Khách báo:</strong> <span id="d_issueDesc">...</span></p>
+                <p><strong>Ngoại hình:</strong> <span id="d_physicalDesc">...</span></p>
+                <div style="margin-bottom:5px; border-bottom:1px dashed #eee; padding-bottom:5px;">
+                    <strong>Người nhận:</strong> <span id="d_receiver">...</span>
+                </div>
+                <h5 style="margin-top:15px; margin-bottom:5px;">Ảnh tiếp nhận:</h5>
+                <div id="d_receivePhotos" class="photo-grid" style="grid-template-columns: repeat(3, 1fr);"></div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            
+            <div class="control-group" id="block_techCheck">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4>🛠️ Kỹ thuật kiểm tra</h4>
+                    <button id="btn_update_check" class="btn-sm" onclick="openUpdateModal('check')">Cập nhật</button>
+                </div>
+                <div id="content_techCheck" style="color:#666; font-style:italic;">Chưa có dữ liệu kiểm tra.</div>
+            </div>
+
+            <div class="control-group" id="block_quotation" style="opacity:0.6;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4 style="margin:0;">💰 Báo giá sửa chữa</h4>
+                    <button id="btn_update_quote" class="btn-sm" onclick="openUpdateModal('quote')" style="display:none;">Cập nhật</button>
+                </div>
+                <div id="content_quotation">Đang chờ kiểm tra...</div>
+            </div>
+
+            <div class="control-group" id="block_repair" style="opacity:0.6;">
+                <h4>🔧 Quá trình sửa chữa</h4>
+                <div id="content_repair">---</div>
+            </div>
+
+        </div>
+    </div>
+</div>
+<div id="modalTechCheck" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <h3>🛠️ Cập Nhật Kết Quả Kiểm Tra</h3>
+        
+        <label>Nguyên nhân lỗi (*):</label>
+        <textarea id="check_cause" rows="3" placeholder="VD: Mainboard bị chạm nguồn..."></textarea>
+        
+        <label>Đề xuất xử lý:</label>
+            <select id="check_solution">
+                <option value="Sửa chữa">Sửa chữa / Thay thế</option>
+                <option value="Cài đặt">Cài đặt phần mềm</option>
+                
+                <option value="Gửi sửa ngoài">Gửi sửa ngoài</option>
+                <option value="Gửi hãng">Gửi bảo hành hãng</option>
+                <option value="Không sửa được">Trả máy (Không sửa được)</option>
+            </select>
+        
+        <label>Linh kiện cần thay (nếu có):</label>
+        <textarea id="check_components" rows="2" placeholder="VD: Cần thay màn hình 14 inch 30 pin..."></textarea>
+        
+        <label>Ảnh kiểm tra (nếu cần):</label>
+        <div class="control-group">
+            <input type="file" id="checkPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleCheckPhotoSelect(this)">
+            <input type="file" id="checkPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleCheckPhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('checkPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="checkPhotoGrid" class="photo-grid"></div>
+        </div>
+
+        <div class="action-footer" style="margin-top:20px;">
+            <button onclick="closeModal('modalTechCheck')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitTechCheck()" style="background:var(--primary-color);">Lưu & Gửi Báo Giá</button>
+        </div>
+    </div>
+</div>
+        <div id="modalQuote" class="modal-overlay" style="display:none;">
+            <div class="modal-content" style="max-width: 800px;"> <h3>💰 Lên Báo Giá Chi Tiết</h3>
+                
+                <div class="radio-group-container">
+                    <label class="group-label">Hình thức xử lý:</label>
+                    <div class="radio-options">
+                        <label class="radio-item">
+                            <input type="radio" name="quoteType" value="INTERNAL" checked onchange="toggleQuoteType()"> 
+                            Sửa tại chỗ
+                        </label>
+                        <label class="radio-item">
+                            <input type="radio" name="quoteType" value="EXTERNAL" onchange="toggleQuoteType()"> 
+                            Gửi đơn vị ngoài
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="ext_unit_div" class="control-group ext-only" style="margin-bottom:10px; background:#fff3e0; border:1px solid #ffe0b2;">
+                    <label>Tên đơn vị sửa chữa / Hãng:</label>
+                    <input type="text" id="q_ext_unit" placeholder="VD: Trung tâm bảo hành Dell..." style="margin-bottom:0;">
+                </div>
+
+                <div id="quoteTableContainer">
+                    <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
+                        <thead>
+                            <tr style="background: #f1f1f1;">
+                                <th>Tên linh kiện / Dịch vụ</th>
+                                <th style="width: 60px;">SL</th>
+                                <th class="ext-only" style="width: 130px; color:#e65100;">Giá Gốc (A)</th>
+                                <th style="width: 130px; color:#2e7d32;">Giá Bán (B)</th>
+                                <th style="width: 30px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="quoteItemsBody"></tbody>
+                    </table>
+                </div>
+                
+                <button onclick="addQuoteRow()" class="btn-sm" style="background: var(--secondary-color); margin-bottom: 15px;">+ Thêm dòng</button>
+
+                <div id="ext_ship_div" class="ext-only" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px; gap:10px;">
+                    <label style="margin:0; color:#666;">+ Phí vận chuyển (Nội bộ):</label>
+                    <input type="number" id="q_ext_ship" class="calc-input" placeholder="0" oninput="calculateQuoteTotal()" style="width:120px; text-align:right; margin:0;">
+                </div>
+
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size:1.1em;">Tổng Báo Khách (B):</span>
+                        <strong id="quote_total_display" style="font-size: 1.4em; color: #2e7d32;">0 đ</strong>
+                    </div>
+                    
+                    <div id="profit_display_div" class="ext-only" style="display:flex; justify-content: space-between; align-items: center; margin-top:5px; font-size:13px; color:#666; border-top:1px dashed #ccc; padding-top:5px;">
+                        <span>Lợi nhuận dự kiến (B - A - Ship):</span>
+                        <strong id="quote_profit_display" style="color: #e65100;">0 đ</strong>
+                    </div>
+                </div>
+                
+                <div class="input-row">
+                    <div style="flex:1">
+                        <label>Bảo hành:</label>
+                        <input type="text" id="quote_warranty" placeholder="VD: 3 tháng...">
+                    </div>
+                </div>
+                
+                <label>Ghi chú thêm (Option):</label>
+                <textarea id="quote_notes" rows="2" placeholder="VD: Giá chưa bao gồm VAT..."></textarea>
+
+                <div class="action-footer" style="margin-top:20px;">
+                    <button onclick="closeModal('modalQuote')" style="background:#ccc; color:#333;">Hủy</button>
+                    <button onclick="submitQuote()" style="background:var(--primary-color);">Gửi Báo Giá</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="external_cost_block" style="display:none; background: #fff3e0; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffe0b2;">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #e65100;">Tính toán giá vốn (Nội bộ)</h4>
+            <div class="input-row">
+                <div style="flex:1">
+                    <label>Tên đơn vị ngoài:</label>
+                    <input type="text" id="q_ext_unit" placeholder="VD: Hãng, Cửa hàng A...">
+                </div>
+                <div style="flex:1">
+                    <label>Giá họ báo (A):</label>
+                    <input type="number" id="q_ext_cost" class="calc-input" placeholder="0">
+                </div>
+            </div>
+            <div class="input-row">
+                <div style="flex:1">
+                    <label>Phí vận chuyển (B):</label>
+                    <input type="number" id="q_ext_ship" class="calc-input" placeholder="0">
+                </div>
+                <div style="flex:1">
+                    <label>Công ty lời (C):</label>
+                    <input type="number" id="q_ext_profit" class="calc-input" placeholder="0">
+                </div>
+            </div>
+            <div style="text-align: right; font-size: 13px; color: #666;">
+                Giá báo khách (A + B + C) = <strong id="q_ext_total_preview" style="color: #d32f2f; font-size: 16px;">0</strong>
+            </div>
+            <div style="text-align: right; margin-top: 5px;">
+                <button class="btn-sm" onclick="applyExternalPriceToTable()">⬇ Áp dụng giá này xuống bảng</button>
+            </div>
+        </div>
+        <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 13px;">
+            <strong>Đề xuất từ KTV:</strong> <span id="quote_tech_summary">...</span>
+        </div>
+
+        <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
+            <thead>
+                <tr style="background: #f1f1f1;">
+                    <th>Tên linh kiện / Dịch vụ</th>
+                    <th style="width: 100px;">SL</th>
+                    <th style="width: 160px;">Đơn giá</th>
+                    <th style="width: 40px;"></th>
+                </tr>
+            </thead>
+            <tbody id="quoteItemsBody">
+                </tbody>
+        </table>
+        
+        <button onclick="addQuoteRow()" class="btn-sm" style="background: var(--secondary-color); margin-bottom: 15px;">+ Thêm dòng</button>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #fff3cd; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong>TỔNG CỘNG:</strong>
+            <strong id="quote_total_display" style="font-size: 1.2em; color: #d32f2f;">0 đ</strong>
+        </div>
+        
+        <div class="input-row">
+            <div style="flex:1">
+                <label>Bảo hành:</label>
+                <input type="text" id="quote_warranty" placeholder="VD: 3 tháng...">
+            </div>
+        </div>
+        
+        <label>Ghi chú thêm (Option):</label>
+        <textarea id="quote_notes" rows="2" placeholder="VD: Giá chưa bao gồm VAT..."></textarea>
+
+        <div class="action-footer" style="margin-top:20px;">
+            <button onclick="closeModal('modalQuote')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitQuote()" style="background:var(--primary-color);">Gửi Báo Giá</button>
+        </div>
+    </div>
+</div>
+<div id="modalRepair" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <h3>✅ Báo Cáo Hoàn Tất Sửa Chữa</h3>
+        
+        <label>Công việc đã thực hiện (*):</label>
+        <textarea id="repair_work" rows="4" placeholder="VD: Đã thay IC nguồn, vệ sinh mainboard, test full chức năng..."></textarea>
+        
+        <label>Bảo hành (cho khách):</label>
+        <input type="text" id="repair_warranty" placeholder="VD: 1 tháng, 3 tháng...">
+        
+        <label>Ảnh sau khi sửa / Bàn giao:</label>
+        <div class="control-group">
+            <input type="file" id="repairPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleRepairPhotoSelect(this)">
+            <input type="file" id="repairPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleRepairPhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('repairPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="repairPhotoGrid" class="photo-grid"></div>
+        </div>
+
+        <div class="action-footer" style="margin-top:20px;">
+            <button onclick="closeModal('modalRepair')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitRepairComplete()" style="background:var(--success-color);">Xác nhận Sửa Xong</button>
+        </div>
+    </div>
+</div>
+<div id="modalReturn" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <h3>💸 Thanh Toán & Trả Máy</h3>
+        
+        <div class="control-group" style="background: #e8f5e9; border: 1px solid #c8e6c9;">
+            <label>Tổng tiền khách phải trả (theo báo giá):</label>
+            <div id="return_quote_price" style="font-size: 1.5em; font-weight: bold; color: #2e7d32; text-align: right;">0 đ</div>
+        </div>
+
+        <div class="input-row">
+            <div style="flex:1">
+                <label>Thực thu (VNĐ) (*):</label>
+                <input type="number" id="return_amount" placeholder="Nhập số tiền...">
+            </div>
+            <div style="flex:1">
+                <label>Hình thức (*):</label>
+                <select id="return_method">
+                    <option value="Tiền mặt">Tiền mặt</option>
+                    <option value="Chuyển khoản">Chuyển khoản</option>
+                    <option value="Công nợ">Công nợ</option>
+                    <option value="Không thu tiền">Không thu tiền</option> 
+                    <option value="Khác">Khác</option>
+                </select>
+            </div>
+        </div>
+        
+        <label>Số sổ 3 liên (Bắt buộc):</label>
+        <input type="text" id="return_ticket_number" placeholder="VD: 001234">
+        
+        <label>Ghi chú bàn giao:</label>
+        <textarea id="return_note" rows="2" placeholder="VD: Khách đã kiểm tra máy ok..."></textarea>
+        
+        <label>Ảnh bàn giao (Sổ 3 liên):</label>
+        <div class="control-group">
+            <input type="file" id="returnPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleReturnPhotoSelect(this)">
+            <input type="file" id="returnPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleReturnPhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('returnPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="returnPhotoGrid" class="photo-grid"></div>
+        </div>
+
+        <div class="action-footer" style="margin-top:20px;">
+            <button onclick="closeModal('modalReturn')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitReturnDevice()" style="background:#28a745;">Xác nhận & Hoàn tất</button>
+        </div>
+    </div>
+</div>
+<div id="imageViewerModal" class="image-modal" onclick="closeImageModal()">
+  <span class="close-img">&times;</span>
+  <img class="image-modal-content" id="imgExpanded">
+  <div id="imgCaption"></div>
+</div>
+<div id="photoActionSheet" class="modal-overlay" style="display:none; align-items: flex-end;" onclick="closePhotoActionSheet()">
+    <div class="action-sheet-content" onclick="event.stopPropagation()">
+        <h4 style="text-align:center; margin-bottom:15px; color:#666;">Bạn muốn chọn ảnh từ đâu?</h4>
+        
+        <button onclick="triggerPhotoInput('cam')" class="sheet-btn">
+            📷 &nbsp; Chụp ảnh mới
+        </button>
+        
+        <button onclick="triggerPhotoInput('gal')" class="sheet-btn">
+            🖼️ &nbsp; Chọn từ Thư viện
+        </button>
+        
+        <button onclick="closePhotoActionSheet()" class="sheet-btn cancel">
+            Hủy bỏ
+        </button>
+    </div>
+</div>
+<div id="modalExtSend" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <h3>🚚 Gửi Máy Đi Sửa Ngoài</h3>
+        <p>Xác nhận gửi máy cho đơn vị đối tác?</p>
+        
+        <label>Đơn vị tiếp nhận:</label>
+        <input type="text" id="ext_send_unit" placeholder="Tên cửa hàng/hãng..." readonly style="background:#eee;">
+        
+        <label>Ghi chú gửi hàng:</label>
+        <textarea id="ext_send_note" rows="2" placeholder="VD: Gửi kèm sạc, pass máy là..."></textarea>
+
+        <div class="action-footer">
+            <button onclick="closeModal('modalExtSend')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitExternalAction('SEND')" style="background:var(--primary-color);">Xác nhận Gửi</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalExtReceive" class="modal-overlay" style="display:none;">
+    <div class="modal-content">
+        <h3>✅ Nhận Máy & Kiểm Tra (QC)</h3>
+        <p>Máy đã được gửi trả về. Kỹ thuật viên cần kiểm tra lại.</p>
+        
+        <label>Kết quả kiểm tra (QC):</label>
+        <select id="ext_qc_result">
+            <option value="PASS">Đạt - Máy hoạt động tốt</option>
+            </select>
+        
+        <label>Ghi chú kiểm tra:</label>
+        <textarea id="ext_qc_note" rows="3" placeholder="VD: Đã test full chức năng, tem bảo hành nguyên vẹn..."></textarea>
+
+        <div class="action-footer">
+            <button onclick="closeModal('modalExtReceive')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitExternalAction('RECEIVE_PASS')" style="background:#28a745;">QC Đạt - Chờ Trả Khách</button>
+        </div>
+    </div>
+</div>
+  </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="common.js"></script>
+  <script src="repair.js"></script> </body>
+</html>

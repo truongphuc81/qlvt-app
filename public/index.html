@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phiếu Mượn/Trả Vật Tư</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  
+  <script>
+    // Copy cấu hình Firebase Config
+    const firebaseConfig = {
+        apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+        authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+        projectId: "quan-ly-vat-tu-backend",
+        storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+        messagingSenderId: "323292129107",
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
+        measurementId: "G-N3VLYSXTR8"
+    };
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebaseApp.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
+    const db = firebase.firestore(); // Khởi tạo DB cho app.js
+  </script>
+</head>
+<body>
+  <div class="main-header">
+    <div class="brand-row">
+        <div class="brand-left">
+            <img src="logo.png" alt="Logo" class="header-logo">
+            <h3 class="header-title">Phiếu Mượn/Trả</h3>
+        </div>
+        <div class="brand-right">
+             <button id="authButton" class="btn-login" style="display:none;">Đăng nhập</button>
+             <button id="signOutButton" class="btn-logout" style="display:none;" onclick="firebase.auth().signOut().then(() => { window.location.reload(); })">
+                Đăng xuất
+             </button>
+        </div>
+    </div>
+
+    <div class="nav-grid">
+        <div id="managerPageButtonWrapper" style="display:none; flex: 1;">
+            <button onclick="window.location.href='manager.html'" id="managerPageButton" class="nav-btn btn-manager">
+                Trang Quản Lý
+            </button>
+        </div>
+        
+        <a href="auditor.html" class="nav-item-link">
+            <button class="nav-btn btn-auditor">Xem Lịch sử Kho</button>
+        </a>
+    </div>
+
+    <button id="darkModeToggle" onclick="toggleDarkMode()" style="display:none;"></button> 
+    <button id="tableViewToggle" onclick="toggleTableView()" style="display:none;"></button> 
+  </div>
+  <div id="infoSpinner" style="display:none;text-align:center;">
+        <div class="spinner"></div><p>Đang tải...</p>
+      </div>
+  <div id="mainPage" style="display:none;">
+    <div class="form-section">
+      <h3>Thông tin chung</h3>
+      <label>Email kỹ thuật viên: <span id="userEmail">Loading...</span></label><br>
+      <label>Tên kỹ thuật viên: <span id="technicianName">Loading...</span></label><br>
+      
+      <div id="infoSuccessMessage" class="success" style="display:none;"></div>
+      <div id="infoErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+    <div class="form-section toggle-section">
+      <h3 class="toggle-header">Mượn hàng </h3>
+      <div id="borrowContent" class="toggle-content" style="display: none;"> <label>Nội dung mượn hàng:</label><br>
+        <textarea id="borrowItems" placeholder="VD: 2 mực 12A, 3 mực 26A"></textarea><br>
+        <button id="submitBorrowButton" onclick="submitBorrowForm()">Gửi Yêu Cầu Mượn</button>
+        <div id="borrowSpinner" style="display:none;text-align:center;">...</div>
+        <div id="borrowSuccessMessage" class="success" style="display:none;"></div>
+        <div id="borrowErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="form-section toggle-section">
+      <h3 class="toggle-header">Trả vật tư không sử dụng </h3>
+      <div id="returnContent" class="toggle-content" style="display: none;">
+        <p class="form-hint">Chỉ hiển thị các vật tư bạn đang nợ (số lượng còn lại > 0).</p>
+        <table id="ktvReturnItemsTable">
+          <thead>
+            <tr><th>Tên vật tư</th><th>Đang nợ</th><th>Số lượng trả</th></tr>
+          </thead>
+          <tbody id="ktvReturnItemsBody"><tr><td colspan="3">Nhấn để mở và tải danh sách...</td></tr></tbody>
+        </table>
+        <label for="ktvReturnNote" style="margin-top: 15px;">Ghi chú (Tùy chọn):</label><br>
+        <textarea id="ktvReturnNote" placeholder="VD: Trả hàng thừa, hàng lỗi..." style="height: 80px;"></textarea><br>
+        <button id="submitKtvReturnButton" onclick="submitKtvReturnItems()">Xác nhận Trả hàng</button>
+        <div id="ktvReturnSpinner" style="display:none;text-align:center;">...</div>
+        <div id="ktvReturnSuccessMessage" class="success" style="display:none;"></div>
+        <div id="ktvReturnErrorMessage" class="error" style="display:none;"></div>
+        </div>
+    </div>
+    
+    <div class="form-section" id="ktvHistorySection"> 
+      <h3>Lịch sử Giao dịch</h3> <div id="ktvHistoryContent"> <label for="ktvHistoryFilterType">Lọc theo loại:</label>
+        <select id="ktvHistoryFilterType" onchange="renderKtvHistoryTable()"><option value="Tất cả">Tất cả</option><option value="Mượn">Mượn</option><option value="Trả">Trả</option></select>
+        <div id="ktvHistorySpinner" style="display:none; text-align:center;">...</div>
+        <table id="ktvHistoryTable">
+          <thead>
+            <tr><th>Thời gian</th><th>Loại</th><th>Nội dung</th></tr>
+          </thead>
+          <tbody id="ktvHistoryBody"><tr><td colspan="3">Đang tải...</td></tr></tbody>
+        </table>
+        <button id="loadMoreKtvHistory" class="load-more-button" onclick="loadMoreKtvHistory()" style="display:none;">Tải thêm</button>
+      </div>
+    </div>
+    
+    <div class="form-section toggle-section">
+      <h3 class="toggle-header">Tổng quan mặt hàng đã mượn </h3>
+      <div id="overviewContent" class="toggle-content" style="display: none;"> <table id="overviewTable">
+          <thead> 
+            <tr><th>Tên vật tư</th><th>Tổng mượn</th><th>Tổng sử dụng</th><th>Đã trả</th> <th>Còn lại</th></tr>
+          </thead>
+        <tbody id="overviewBody"></tbody>
+        </table>
+        <div id="overviewSpinner" style="display:none;text-align:center;">...</div>
+      </div>
+    </div>
+
+    <div class="form-section toggle-section">
+      <h3 class="toggle-header">Đối chiếu sổ 3 liên </h3>
+      <div id="reconcileContent" class="toggle-content" style="display: none;"> <h4>Số sổ chưa đối chiếu</h4>
+        <table id="borrowedItemsTable">
+          <thead> 
+            <tr><th>Số sổ</th><th>Vật tư & SL</th><th>Xác nhận</th></tr>
+          </thead>
+          <tbody id="borrowedItemsBody"></tbody>
+        </table>
+        <button id="loadMoreUnreconciled" class="load-more-button" onclick="loadMoreUnreconciledTickets()">Tải thêm</button>
+        <button id="submitReturnButton" onclick="submitReturnForm()">Xác nhận đối chiếu</button>
+        <button onclick="showErrorReportForm()">Báo cáo sai sót</button>
+        <div id="returnSpinner" style="display:none;text-align:center;">...</div>
+        <div id="returnSuccessMessage" class="success" style="display:none;"></div>
+        <div id="returnErrorMessage" class="error" style="display:none;"></div>
+        <div id="reconciledTicketsSection" style="margin-top: 30px;">
+          <h4 style="color: var(--success-color);">Sổ 3 liên đã đối chiếu</h4>
+          <table id="reconciledTicketsTable">
+            <thead> 
+              <tr><th>Số sổ</th><th>Vật tư & SL</th></tr>
+            </thead>
+            <tbody id="reconciledTicketsBody"></tbody>
+          </table>
+          <button id="loadMoreReconciled" class="load-more-button" onclick="loadMoreReconciledTickets()">Tải thêm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="errorReportForm" class="form-section" style="display:none; margin-top: 20px;">
+        <h3>Báo cáo sai sót</h3>
+        <label for="errorType">Loại sai sót:</label>
+        <select id="errorType">
+            <option value="Số sổ sai">Số sổ sai</option>
+            <option value="Vật tư sai">Vật tư sai</option>
+            <option value="Số lượng sai">Số lượng sai</option>
+            <option value="Khác">Khác</option>
+        </select><br>
+        <label for="relatedTicketOrDate">Số sổ hoặc Ngày liên quan:</label>
+        <input type="text" id="relatedTicketOrDate" placeholder="VD: Sổ 123 hoặc 01/10/2025"><br>
+        <label for="errorDescription">Mô tả sai sót:</label>
+        <textarea id="errorDescription" style="height: 100px;"></textarea><br>
+        <label for="suggestedFix">Đề xuất sửa (Nếu có):</label>
+        <textarea id="suggestedFix" style="height: 60px;"></textarea><br>
+        <button onclick="submitErrorReport()">Gửi Báo cáo</button>
+        <button onclick="hideErrorReportForm()" style="background-color: var(--secondary-color);">Hủy</button>
+        <div id="errorReportSpinner" style="display:none;text-align:center;"><div class="spinner"></div></div>
+        <div id="errorReportSuccessMessage" class="success" style="display:none;"></div>
+        <div id="errorReportErrorMessage" class="error" style="display:none;"></div>
+    </div>
+
+  </div> 
+  <script src="common.js"></script> <script src="app.js"></script> </body>
+</html>

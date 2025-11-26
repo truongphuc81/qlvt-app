@@ -1,0 +1,1896 @@
+
+/* ==============================================
+   CÀI ĐẶT GỐC (VARIABLES) - PHONG CÁCH TỐI GIẢN
+   ============================================== */
+:root {
+  --primary-color: #007bff;
+  --secondary-color: #6c757d;
+  --background-color: #f8f9fa; /* Nền xám rất nhạt */
+  --text-color: #212529; /* Chữ đen nhạt */
+  --error-color: #dc3545;
+  --success-color: #28a745;
+  --card-background: #ffffff;
+  --border-color: #e7e7e7; /* Viền mờ */
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+body {
+  /* Font hệ thống hiện đại */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  line-height: 1.6;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-size: 16px; /* Cỡ chữ gốc */
+}
+body.dark-mode {
+  --background-color: #121212; /* Nền đen sâu */
+  --text-color: #e0e0e0;
+  --card-background: #1e1e1e;
+  --border-color: #333;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+h2, h3, h4 {
+  color: var(--primary-color);
+  margin-bottom: 16px;
+  letter-spacing: -0.2px;
+}
+.form-section {
+  background: var(--card-background);
+  padding: 24px; /* Tăng khoảng trắng */
+  margin-bottom: 24px;
+  border-radius: 12px; /* Bo góc mềm mại */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Bóng mờ */
+  border: 1px solid var(--border-color);
+}
+.dark-mode .form-section {
+  background: #1e1e1e;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  font-size: 15px;
+}
+input, select, textarea {
+  width: 100%;
+  max-width: 500px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px; /* Bo góc mềm */
+  font-size: 16px; /* Giữ nguyên cỡ chữ */
+  background: var(--card-background);
+  color: var(--text-color);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary-color);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15); /* Hiệu ứng focus */
+}
+textarea#borrowItems, textarea#technicianNote {
+  height: 150px;
+  resize: vertical;
+}
+button {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  padding: 12px 24px;
+  border: none !important;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600; /* Chữ nút đậm */
+  transition: background-color 0.3s, transform 0.1s;
+  margin: 5px;
+}
+button:hover {
+  background-color: #0056b3 !important;
+  transform: translateY(-1px);
+}
+button:active {
+  transform: translateY(0);
+}
+#darkModeToggle::before {
+  content: "Chuyển chế độ tối";
+}
+.dark-mode #darkModeToggle::before {
+  content: "Chuyển chế độ sáng";
+}
+/* Nút chuyển đổi giao diện bảng */
+#tableViewToggle::before {
+  content: "Xem dạng Thẻ"; /* Mặc định là xem cuộn */
+}
+body.card-view-mobile #tableViewToggle::before {
+  content: "Xem dạng Bảng cuộn";
+}
+.ui-button, button.ui-widget {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  border: none !important;
+}
+.ui-button:hover, button.ui-widget:hover {
+  background-color: #0056b3 !important;
+}
+
+/* ==============================================
+   BẢNG (TABLE) - PHONG CÁCH TỐI GIẢN
+   ============================================== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  background: var(--card-background);
+  border-radius: 12px;
+  overflow: hidden; /* Quan trọng để bo góc */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  table-layout: auto; /* Cho phép trình duyệt tự điều chỉnh cột */
+}
+.dark-mode table {
+  background: #1e1e1e;
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+}
+th, td {
+  padding: 16px; /* Tăng padding */
+  text-align: left;
+  border-bottom: 1px solid var(--border-color); /* Chỉ giữ viền ngang */
+  border-right: none; /* Bỏ viền dọc */
+  /* === THAY ĐỔI: Cho phép xuống dòng === */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+th:last-child, td:last-child {
+  border-right: none;
+}
+/* === TIÊU ĐỀ TỐI GIẢN (Xám/Đen) === */
+th {
+  background-color: #f9f9f9; /* Nền xám nhạt */
+  color: #555; /* Chữ xám đậm */
+  font-weight: 600;
+  text-transform: uppercase; /* Chữ hoa */
+  font-size: 12px; /* Chữ nhỏ */
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color);
+  /* Ưu tiên không xuống dòng cho tiêu đề */
+  white-space: nowrap;
+}
+.dark-mode th {
+  background-color: #2a2a2a; /* Nền tối */
+  color: #aaa;
+  border-bottom: 2px solid var(--border-color);
+}
+tr:nth-child(even) {
+  background-color: #fcfcfc; /* Nền sọc ngựa vằn rất nhạt */
+}
+.dark-mode tr:nth-child(even) {
+  background-color: #222;
+}
+
+/* ==============================================
+   CÁC THÀNH PHẦN KHÁC (SPINNER, UI, v.v.)
+   ============================================== */
+.warning {
+  color: var(--error-color);
+  font-weight: bold;
+}
+.unreconciled {
+  color: var(--success-color);
+  font-weight: bold;
+}
+.error {
+  color: var(--error-color);
+  margin-bottom: 10px;
+  padding: 10px;
+  background: #ffe6e6;
+  border-radius: 4px;
+  animation: fadeIn 0.5s;
+}
+.success {
+  color: var(--success-color);
+  background: #e6ffe6;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+  animation: fadeIn 0.5s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.ui-autocomplete {
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--card-background);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.dark-mode .ui-autocomplete {
+  background: #2a2a2a;
+  color: #e0e0e0;
+}
+#returnUnusedSection {
+  margin-top: 20px;
+}
+#unusedItemsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+/* Bảng này giữ lại phong cách cũ vì nó là bảng con */
+#unusedItemsTable th, #unusedItemsTable td {
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  text-align: left;
+}
+#unusedItemsTable th {
+  background-color: var(--primary-color);
+  color: white;
+  font-weight: 600;
+  border-bottom: 2px solid #0056b3;
+  font-size: 14px; /* Reset font-size */
+  text-transform: none; /* Reset text-transform */
+  letter-spacing: 0;
+  white-space: normal; /* Cho phép tiêu đề bảng này xuống dòng */
+}
+.dark-mode #unusedItemsTable th {
+  background-color: #0056b3;
+  border-bottom: 2px solid #003d82;
+}
+.quantity-return-input {
+  width: 80px;
+}
+.ticket-range-input, .quantity-return-input, .item-row input {
+  max-width: 120px;
+}
+#excelUploadForm, #excelDataTable {
+  margin-top: 20px;
+}
+.form-hint {
+  display: block;
+  color: var(--text-color);
+  font-size: 14px;
+  margin-bottom: 10px;
+  font-style: italic;
+}
+.dark-mode .form-hint {
+  color: #b0b0b0;
+}
+#managerNote {
+  width: 100%;
+  max-width: 500px;
+  height: 80px;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+.dark-mode #managerNote {
+  background: #333;
+  color: #e0e0e0;
+  border-color: #444;
+}
+#reportSection {
+  margin-top: 20px;
+}
+#reportTable td {
+  vertical-align: top;
+}
+#reportTable td:nth-child(3), #reportTable td:nth-child(4), #reportTable td:nth-child(5) {
+  white-space: pre-wrap;
+}
+#managerNote:focus {
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+/* ==============================================
+   CSS CHO RESPONSIVE (DI ĐỘNG) - NỘI DUNG TỰ XUỐNG DÒNG
+   ============================================== */
+@media (max-width: 768px) {
+  body {
+    padding: 10px 5px;
+    font-size: 15px; /* Cỡ chữ di động chuẩn */
+  }
+  h2, h3, h4 {
+    font-size: 1.2em;
+  }
+  .form-section {
+    padding: 15px;
+  }
+  
+  /* Sửa lỗi font: Đồng bộ font-size */
+  input, select, textarea {
+    font-size: 15px; /* Đồng bộ với body */
+    padding: 12px;
+  }
+  button {
+    font-size: 15px; /* Đồng bộ */
+    padding: 12px 20px;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  /* === THAY ĐỔI LỚN: KHÔNG DÙNG CARD, GIỮ NGUYÊN BẢNG === */
+  table {
+    /* Không cần display: block */
+    /* Không cần overflow-x: auto */
+    /* Không cần white-space: nowrap */
+    box-shadow: none; /* Bỏ shadow trên di động */
+    border-radius: 8px; /* Giữ bo góc nhẹ */
+    border: 1px solid var(--border-color); /* Thêm viền nhẹ */
+  }
+  
+  th, td {
+    font-size: 15px; /* Đồng bộ font */
+    padding: 10px 8px; /* Giảm padding cho di động */
+    white-space: normal; /* Đảm bảo nội dung xuống dòng */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    border-right: 1px solid var(--border-color); /* Thêm kẻ dọc nhẹ */
+  }
+  th:last-child, td:last-child {
+    border-right: none; /* Bỏ kẻ dọc cuối */
+  }
+  
+  /* Giữ lại tiêu đề ngang */
+  table thead {
+    display: table-header-group; 
+  }
+  /* Giữ lại cấu trúc hàng/cột */
+  table tbody, table tr, table td {
+    display: table-row-group; /* Reset về mặc định */
+  }
+  table tr {
+      display: table-row; /* Reset về mặc định */
+      width: auto;
+      margin-bottom: 0; 
+      border: none; 
+      border-radius: 0; 
+      padding: 0; 
+      background: none; 
+  }
+  table td {
+    display: table-cell; /* Reset về mặc định */
+    position: static; /* Reset */
+    padding: 10px 8px; /* Reset padding */
+    border-bottom: 1px solid var(--border-color); /* Giữ kẻ ngang */
+    text-align: left; /* Reset */
+    min-height: auto; /* Reset */
+    vertical-align: middle; /* Căn giữa dọc */
+  }
+  /* Bỏ label :before */
+  table td:before {
+    display: none;
+  }
+  
+  /* Sửa lỗi hiển thị Checkbox */
+  input[type="checkbox"] {
+    width: auto; 
+    max-width: none;
+    height: 20px;
+    width: 20px;
+    vertical-align: middle; /* Căn giữa checkbox */
+  }
+  
+  /* Căn giữa cột số lượng */
+  #borrowedItemsTable td:nth-child(3),
+  #reconciledTicketsTable td:nth-child(3) {
+    text-align: center;
+  }
+
+  /* === BỘ QUY TẮC DÀNH CHO CARD VIEW (KHI BODY CÓ CLASS .card-view-mobile) === */
+  /* Ghi đè lại các quy tắc bảng cuộn/xuống dòng */
+  body.card-view-mobile table {
+    display: block;
+    overflow-x: hidden; /* Không cuộn ngang */
+    white-space: normal; /* Cho phép xuống dòng */
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+  }
+  body.card-view-mobile table thead {
+    display: none; /* Ẩn tiêu đề ngang */
+  }
+  body.card-view-mobile table tbody,
+  body.card-view-mobile table tr,
+  body.card-view-mobile table td {
+    display: block;
+    width: 100%;
+  }
+  /* Thiết kế CARD (cho mỗi <tr>) */
+  body.card-view-mobile table tr {
+    display: block; /* Ghi đè table-row */
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--card-background); /* Nền card */
+    white-space: normal; /* Cho phép xuống dòng */
+  }
+  /* Thiết kế HÀNG (cho mỗi <td>) */
+  body.card-view-mobile table td {
+    display: block; /* Ghi đè table-cell */
+    position: relative;
+    padding: 12px 10px 12px 45%; /* Padding chuẩn: 45% cho label */
+    border: none;
+    text-align: left;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    min-height: 40px; /* Chiều cao tối thiểu */
+    border-bottom: 1px solid var(--border-color); /* Kẻ ngang giữa các ô */
+    font-size: 15px; /* Đồng bộ font */
+    white-space: normal; /* Cho phép xuống dòng */
+    vertical-align: top; /* Căn trên cho card view */
+  }
+  body.card-view-mobile table tr td:last-child {
+    border-bottom: none; /* Bỏ kẻ ngang ở ô cuối */
+  }
+  /* Thiết kế LABEL (Tiêu đề :before) */
+  body.card-view-mobile table td:before {
+    display: block; /* Hiển thị lại label */
+    content: attr(data-label);
+    position: absolute;
+    left: 10px;
+    width: 40%;
+    font-weight: bold; /* Đậm hơn */
+    color: var(--primary-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* --- Ngoại lệ cho giao diện thẻ --- */
+  /* Sửa Checkbox */
+  body.card-view-mobile input[type="checkbox"] {
+    width: auto;
+    max-width: none;
+    height: 20px;
+    width: 20px;
+    margin: 0;
+  }
+  /* Căn phải ô checkbox
+  body.card-view-mobile #borrowedItemsTable td:nth-child(4) {
+    text-align: right;
+  } */
+   body.card-view-mobile #borrowedItemsTable td:nth-child(3) {
+    text-align: right;
+  }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3) {
+      padding-left: 10px;
+      padding-right: 10px;
+  }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(4) { display: none; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px; /* Reset padding 45% */
+    padding-right: 10px;
+    font-weight: 600; /* Làm nổi bật số lượng */
+  }
+  /* Ẩn label của cột căn giữa */
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3):before,
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3):before {
+    display: none;
+  }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(3) { display: none; }
+  /* --- ĐỊNH NGHĨA DATA LABELS (Chỉ dùng cho Card View) --- */
+body.card-view-mobile #overviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #overviewTable td:nth-child(2):before { content: "Tổng mượn"; }
+  body.card-view-mobile #overviewTable td:nth-child(3):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #overviewTable td:nth-child(4):before { content: "Đã trả"; }
+  body.card-view-mobile #overviewTable td:nth-child(5):before { content: "Còn lại"; }
+  body.card-view-mobile #borrowHistoryTable td:nth-child(1):before { content: "Thời gian"; }
+  body.card-view-mobile #borrowHistoryTable td:nth-child(2):before { content: "Nội dung mượn"; }
+  body.card-view-mobile #returnHistoryTable td:nth-child(1):before { content: "Thời gian"; }
+  body.card-view-mobile #returnHistoryTable td:nth-child(2):before { content: "Nội dung trả"; }
+ body.card-view-mobile #borrowedItemsTable td:nth-child(1):before { content: "Số sổ"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(2):before { content: "Vật tư & SL"; }
+  body.card-view-mobile #borrowedItemsTable td:nth-child(3):before { content: "Xác nhận"; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(1):before { content: "Số sổ"; }
+  body.card-view-mobile #reconciledTicketsTable td:nth-child(2):before { content: "Vật tư & SL"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(3):before { content: "Tổng mượn"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(4):before { content: "Tổng sử dụng"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(5):before { content: "Đã trả"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(6):before { content: "Còn lại"; }
+  body.card-view-mobile #managerOverviewTable td:nth-child(7):before { content: "Chi tiết số sổ"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(1):before { content: "Số bắt đầu"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(2):before { content: "Số kết thúc"; }
+  body.card-view-mobile #ticketRangesTable td:nth-child(3):before { content: "Xóa"; }
+  body.card-view-mobile #excelDataTable td:nth-child(1):before { content: "Ngày"; }
+  body.card-view-mobile #excelDataTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #excelDataTable td:nth-child(3):before { content: "Tên vật tư"; }
+  body.card-view-mobile #excelDataTable td:nth-child(4):before { content: "Số sổ"; }
+  body.card-view-mobile #excelDataTable td:nth-child(5):before { content: "Số lượng"; }
+  body.card-view-mobile #excelDataTable td:nth-child(6):before { content: "Email"; }
+  body.card-view-mobile #excelDataTable td:nth-child(7):before { content: "Ghi chú"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(1):before { content: "Mã vật tư"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(2):before { content: "Tên vật tư"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(3):before { content: "Số lượng"; }
+  body.card-view-mobile #managerSelectedItemsTable td:nth-child(4):before { content: "Xóa"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(4):before { content: "SL chuyển"; }
+
+} /* <-- Dấu đóng cho @media (max-width: 768px) */
+
+
+/* ==============================================
+   CSS CHO MÀN HÌNH RẤT NHỎ (480px)
+   ============================================== */
+@media (max-width: 480px) {
+  body {
+    font-size: 14px; /* Giảm 1px cho màn hình nhỏ nhất */
+  }
+  input, select, textarea {
+    font-size: 14px; /* Đồng bộ */
+  }
+  button {
+    font-size: 14px; /* Đồng bộ */
+  }
+  th, td {
+    font-size: 14px; /* Đồng bộ */
+    padding: 8px 6px; /* Giảm padding thêm */
+  }
+  
+  /* Cập nhật padding cho card view trên màn hình rất nhỏ */
+  body.card-view-mobile table td {
+    padding: 10px 10px 10px 40%; 
+  }
+  body.card-view-mobile table td:before {
+    width: 35%; 
+    font-size: 13px;
+  }
+
+  input[type="date"] {
+    width: 100%;
+    max-width: 500px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px; /* Đồng bộ */
+    background-color: var(--card-background);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    padding: 5px;
+    cursor: pointer;
+    filter: invert(0.6);
+  }       
+  .dark-mode input[type="date"] {
+    background-color: #333;
+    color: #e0e0e0;
+    border-color: #444;
+  } 
+  .dark-mode input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+}
+
+/* ==============================================
+   FIX PLACEHOLDER (Dán vào cuối)
+   ============================================== */
+::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+  font-size: inherit; /* Luôn dùng cỡ chữ của input */
+  color: #aaa;
+  opacity: 1; /* Firefox */
+}
+.dark-mode ::placeholder {
+  color: #666;
+}
+/* File: styles.css (Dán vào cuối) */
+
+/* CSS cho bảng Chuyển vật tư */
+#transferItemsTable .transfer-quantity-input {
+  width: 80px; /* Input số lượng nhỏ */
+  max-width: 100px;
+  padding: 8px; /* Giảm padding */
+}
+
+/* Responsive cho bảng Chuyển vật tư */
+@media (max-width: 768px) {
+  /* Bảng cuộn ngang */
+  #transferItemsTable th, #transferItemsTable td { white-space: nowrap; } /* Đảm bảo cuộn */
+  #transferItemsTable td:nth-child(1) { min-width: 150px; } /* Tên VT */
+  #transferItemsTable td:nth-child(2) { min-width: 100px; } /* Mã VT */
+  #transferItemsTable td:nth-child(3) { min-width: 80px; text-align: center; } /* Đang nợ */
+  #transferItemsTable td:nth-child(4) { min-width: 120px; } /* SL chuyển */
+
+  /* Giao diện thẻ */
+  body.card-view-mobile #transferItemsTable th,
+  body.card-view-mobile #transferItemsTable td { white-space: normal; } /* Cho phép xuống dòng trong thẻ */
+
+  body.card-view-mobile #transferItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #transferItemsTable td:nth-child(4):before { content: "SL chuyển"; }
+
+  /* Căn giữa cột "Đang nợ" trong card view */
+  body.card-view-mobile #transferItemsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 10px;
+    font-weight: 600;
+  }
+  body.card-view-mobile #transferItemsTable td:nth-child(3):before {
+    display: none;
+  }
+}
+@media (max-width: 480px) {
+    /* Điều chỉnh padding cho bảng transfer trên màn hình rất nhỏ nếu cần */
+    #transferItemsTable td { padding: 8px 6px; }
+}
+h2 {
+  text-align: center; /* Căn giữa chữ */
+}
+
+/* 2. Thu nhỏ VÀ CĂN GIỮA logo trên máy tính */
+#app-logo {
+  display: block; /* Bắt buộc phải có để margin: auto hoạt động */
+  max-width: 120px; /* Kích thước mới cho máy tính */
+  height: auto;
+  margin: 0 auto 20px; /* Căn giữa (trên 0, trái/phải tự động, dưới 20px) */
+}
+
+/* 3. Thu nhỏ logo trên di động (vẫn giữ căn giữa) */
+@media (max-width: 768px) {
+  #app-logo {
+    max-width: 100px; /* Kích thước mới cho di động */
+    margin-bottom: 15px;
+  }
+}
+
+/* File: styles.css */
+/* === DÁN VÀO CUỐI FILE === */
+
+/* Định dạng bảng Lịch sử thời gian thực */
+#realtimeHistoryTable td {
+  vertical-align: top;
+}
+
+#realtimeHistoryTable td ul {
+  margin-left: 20px;
+  margin-top: 5px;
+  padding-left: 0;
+  list-style-type: '— '; /* Thêm gạch đầu dòng */
+}
+#realtimeHistoryTable td li {
+  font-size: 14px;
+  font-style: italic;
+  padding-left: 5px;
+}
+
+/* Căn giữa bộ lọc */
+#historyFilterType {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+/* Căn chỉnh bộ lọc lịch sử */
+#historyFilterType,
+#historyFilterTech {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+* Định dạng bảng Lịch sử KTV (Mới) */
+#ktvHistoryTable td {
+  vertical-align: top;
+}
+#ktvHistoryTable td ul {
+  margin-left: 20px;
+  margin-top: 5px;
+  padding-left: 0;
+  list-style-type: '— ';
+}
+#ktvHistoryTable td li {
+  font-size: 14px;
+  font-style: italic;
+  padding-left: 5px;
+}
+#ktvHistoryFilterType {
+  margin-bottom: 20px;
+  max-width: 250px;
+}
+/* Kiểu cho nút Tab KTV (Chung) */
+.ktv-tab-button {
+  padding: 8px 16px;
+  margin-right: 5px;
+  border: 1px solid var(--border-color);
+  background-color: var(--background-color);
+  color: var(--secondary-color);
+  cursor: pointer;
+  border-radius: 4px 4px 0 0; /* Bo góc trên */
+  font-size: 15px;
+  transition: all 0.2s ease-in-out; /* Transition cho mượt */
+  position: relative; /* Cần cho z-index và top */
+  z-index: 1; /* Nút không active nằm dưới */
+  opacity: 0.7; /* Làm mờ nút không active */
+  border-bottom: 1px solid var(--border-color); /* Giữ viền dưới */
+}
+
+/* Kiểu cho nút Tab KTV đang active */
+.ktv-tab-button.active {
+  background-color: var(--card-background);
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--card-background); /* Che viền dưới của div chứa tabs */
+  font-weight: bold;
+  opacity: 1; /* Rõ nét */
+  z-index: 3; /* Nổi lên trên */
+  top: 1px; /* Dịch lên 1px để che viền */
+}
+
+/* Hover effect (làm rõ hơn khi di chuột qua nút không active) */
+.ktv-tab-button:not(.active):hover {
+  opacity: 0.9;
+  background-color: #e9ecef; /* Màu nền sáng hơn một chút */
+}
+
+/* Dark mode adjustments */
+.dark-mode .ktv-tab-button {
+  background-color: #2a2a2a;
+  color: #aaa;
+}
+.dark-mode .ktv-tab-button.active {
+  background-color: var(--card-background);
+  color: var(--primary-color);
+  border-bottom: 1px solid var(--card-background);
+}
+.dark-mode .ktv-tab-button:not(.active):hover {
+  background-color: #3a3a3a;
+  opacity: 0.9;
+}
+/* Kiểu cho header có thể click */
+.toggle-header {
+  cursor: pointer;
+  background-color: var(--primary-color); /* Nền xanh */
+  color: white; /* Chữ trắng */
+  padding: 10px 15px; /* Tăng padding */
+  margin: -24px -24px 15px -24px; /* Căn lề âm để tràn ra form-section */
+  border-radius: 12px 12px 0 0; /* Bo góc trên */
+  transition: background-color 0.2s;
+  position: relative; /* Cho vị trí mũi tên */
+  display: flex; /* Cho căn chỉnh mũi tên */
+  align-items: center; /* Căn giữa dọc mũi tên */
+}
+
+/* Bỏ margin âm cho header đầu tiên */
+#mainPage .toggle-section:first-of-type > .toggle-header {
+    margin-top: -24px;
+}
+/* Thêm margin top cho các section sau */
+.toggle-section + .toggle-section,
+.toggle-section + .form-section:not(#errorReportForm) {
+    margin-top: 24px;
+}
+
+
+.toggle-header:hover {
+  background-color: #0056b3; /* Đậm hơn khi hover */
+  color: white; /* Giữ chữ trắng */
+}
+
+/* Kiểu cho nội dung ẩn/hiện */
+.toggle-content {
+  padding-top: 5px; /* Thêm chút khoảng cách trên */
+}
+
+/* Căn chỉnh mũi tên (Ngay sau text) */
+.toggle-header::after {
+  content: ' ▶'; /* Mũi tên mặc định (đóng) */
+  font-size: 0.8em;
+  margin-left: 8px; /* Khoảng cách với text */
+  /* float: right; ĐÃ XÓA */
+  transition: transform 0.2s ease-in-out;
+}
+.toggle-header.active::after {
+  content: ' ▼'; /* Mũi tên khi mở */
+}
+
+/* Dark mode (Giữ nguyên nền xanh) */
+.dark-mode .toggle-header {
+   background-color: var(--primary-color);
+   color: white;
+}
+.dark-mode .toggle-header:hover {
+   background-color: #0056b3;
+}
+/* Bảng KTV trả hàng */
+#ktvReturnItemsTable .ktv-return-input {
+  width: 80px;
+  max-width: 100px;
+  padding: 8px;
+  text-align: center;
+}
+#ktvReturnItemsTable td:nth-child(3) { /* Cột "Đang nợ" */
+  text-align: center;
+  font-weight: bold;
+}
+
+/* Data labels cho bảng mới trên di động */
+@media (max-width: 768px) {
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3):before { content: "Đang nợ"; }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(4):before { content: "Số lượng trả"; }
+
+  /* Căn giữa cột "Đang nợ" trong card view */
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3) {
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  body.card-view-mobile #ktvReturnItemsTable td:nth-child(3):before {
+    display: none;
+  }
+}
+@media (max-width: 768px) {
+  body.card-view-mobile #unusedItemsTable td:nth-child(1):before { content: "Tên vật tư"; }
+  body.card-view-mobile #unusedItemsTable td:nth-child(2):before { content: "Mã vật tư"; }
+  body.card-view-mobile #unusedItemsTable td:nth-child(3):before { content: "Đang nợ"; } /* <<< SỬA LABEL */
+  body.card-view-mobile #unusedItemsTable td:nth-child(4):before { content: "Số lượng trả"; }
+}
+/* Đánh dấu vật tư KTV yêu cầu trả */
+#unusedItemsTable tr.requested-return td {
+    background-color: #e9f5ff; /* Màu nền xanh nhạt */
+}
+#unusedItemsTable tr.requested-return input.quantity-return-input {
+    border: 2px solid var(--primary-color); /* Viền xanh */
+}
+.dark-mode #unusedItemsTable tr.requested-return td {
+    background-color: #2a3b4d;
+}
+/* Bảng danh sách trả (mới) của Quản lý */
+#managerReturnListTable {
+  margin-top: 15px;
+  border: 1px dashed var(--primary-color);
+}
+#managerReturnListTable th {
+  background-color: #f0f8ff;
+  color: var(--primary-color);
+  font-size: 13px;
+}
+.dark-mode #managerReturnListTable th {
+  background-color: #003366;
+  color: #cceeff;
+}
+
+/* Tô sáng hàng KTV yêu cầu trả (khi duyệt note) */
+#unusedItemsTable tr.requested-return {
+    background-color: #fff3cd; /* Màu vàng nhạt */
+}
+.dark-mode #unusedItemsTable tr.requested-return {
+    background-color: #533f00;
+}
+/* Animation cho hàng mới thêm vào bảng tạm */
+@keyframes highlight-row {
+  0% { background-color: var(--primary-color); color: white; }
+  100% { background-color: var(--card-background); color: var(--text-color); }
+}
+
+.dark-mode @keyframes highlight-row {
+  0% { background-color: #007bff; color: white; }
+  100% { background-color: var(--card-background); color: #e0e0e0; }
+}
+
+/* Class để kích hoạt animation */
+.row-highlight {
+  /* Chạy animation tên highlight-row, 1.5 giây, 1 lần */
+  animation: highlight-row 1.5s ease-out;
+}
+.load-more-button {
+  /* Kế thừa kiểu 'button' chính */
+  margin-top: 15px;
+  background-color: var(--secondary-color) !important; /* Màu xám, ít nổi bật hơn */
+  width: 100%;
+  max-width: 300px; /* Giới hạn chiều rộng */
+  display: block; /* Hiển thị dạng block */
+  margin-left: auto;
+  margin-right: auto;
+}
+.load-more-button:hover {
+  background-color: #5a6268 !important;
+}
+.load-more-button:disabled {
+  background-color: #ccc !important;
+  cursor: not-allowed;
+}
+.item-quantity-in-card {
+  font-weight: 600; /* Làm đậm số lượng */
+  color: var(--primary-color);
+}
+.dark-mode .item-quantity-in-card {
+  color: #58a6ff;
+}
+
+/* Giao diện Phân quyền */
+.role-checkbox-group label {
+  display: flex; /* Sắp xếp checkbox và text trên 1 hàng */
+  align-items: center; /* Căn giữa dọc */
+  margin-bottom: 10px;
+  font-weight: 400; /* Chữ thường, không đậm */
+}
+
+.role-checkbox-group input[type="checkbox"] {
+  width: auto; /* Thu nhỏ checkbox */
+  max-width: none;
+  height: 18px;
+  width: 18px;
+  margin-right: 10px; /* Khoảng cách với text */
+  margin-bottom: 0; /* Xóa margin-bottom mặc định của input */
+  flex-shrink: 0; /* Không co lại */
+}
+/* === CSS CHO QR CODE MODAL === */
+
+/* Lớp phủ nền mờ toàn màn hình */
+#qr-scanner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 15px;
+}
+
+/* Khung trắng chứa camera (đã ở giữa) */
+#qr-reader-container {
+  background-color: var(--card-background);
+  border-radius: 12px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tiêu đề của modal */
+#qr-reader-header {
+  font-size: 1.2em;
+  font-weight: 600;
+  padding: 15px;
+  text-align: center;
+  background-color: var(--background-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.dark-mode #qr-reader-header {
+  background-color: #2a2a2a;
+}
+
+/* === SỬA LỖI CHIỀU CAO (HEIGHT: 0) === */
+#qr-reader {
+  width: 100%;
+  aspect-ratio: 4 / 3; /* Ưu tiên tỷ lệ 4:3 cho webcam USB */
+  min-height: 250px; /* Chiều cao tối thiểu */
+  background-color: #000; /* Nền đen để thấy rõ khung */
+}
+/* Đảm bảo video lấp đầy khung */
+#qr-reader video {
+  width: 100%;
+  height: 100%;
+}
+/* === KẾT THÚC SỬA LỖI === */
+
+/* Nơi báo lỗi (bên trong modal) */
+#qr-scan-error {
+  margin: 10px;
+}
+
+/* Nút đóng/hủy */
+#qr-reader-close-btn {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  border-radius: 0 0 12px 12px;
+  background-color: var(--secondary-color) !important;
+  font-weight: 600;
+  border-top: 1px solid var(--border-color);
+}
+#qr-reader-close-btn:hover {
+  background-color: #5a6268 !important;
+}
+
+/* Sắp xếp ô tìm kiếm và nút quét QR (Giữ nguyên) */
+.qr-button-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.qr-button-container input[type="text"] {
+  flex-grow: 1;
+  margin-bottom: 0;
+}
+.qr-button-container button {
+  flex-shrink: 0;
+  width: auto; 
+  padding: 12px 15px;
+  margin: 0;
+}
+/* --- GIAO DIỆN QUẢN LÝ MỚI (2 CỘT) --- */
+.borrow-layout {
+    display: grid;
+    grid-template-columns: 350px 1fr; /* Cột trái cố định, cột phải giãn */
+    gap: 25px;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .borrow-layout { grid-template-columns: 1fr; } /* Mobile về 1 cột */
+}
+
+/* Tabs chuyển chế độ */
+.mode-tabs {
+    display: flex;
+    margin-bottom: 20px;
+    background: #e9ecef;
+    padding: 5px;
+    border-radius: 10px;
+}
+.mode-tab {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    cursor: pointer;
+    border-radius: 8px;
+    font-weight: 600;
+    color: var(--secondary-color);
+    transition: all 0.2s;
+}
+.mode-tab.active {
+    background: white;
+    color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* Các khung nhập liệu gọn gàng */
+.control-group {
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+}
+.control-group h4 { margin-top: 0; font-size: 0.95em; color: #666; text-transform: uppercase; }
+
+/* Nhập liệu trên 1 dòng */
+.input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: stretch;
+}
+.input-row input { margin-bottom: 0; }
+.btn-icon {
+    padding: 10px 15px;
+    background-color: #6c757d !important;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.btn-add {
+    background-color: var(--success-color) !important;
+    font-size: 1.2em;
+    padding: 0 20px;
+    line-height: 1;
+}
+
+/* Bảng danh sách cuộn */
+.table-scroll-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+.table-scroll-container table { margin-bottom: 0; border: none; box-shadow: none; }
+.table-scroll-container th { position: sticky; top: 0; z-index: 1; }
+
+/* Footer nút bấm */
+.action-footer {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+/* --- HEADER MỚI GỌN GÀNG --- */
+.main-header {
+    background: var(--card-background);
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+}
+
+/* Hàng trên: Logo - Tên - Đăng xuất */
+.brand-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.brand-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.header-logo {
+    height: 40px; /* Logo nhỏ lại */
+    width: auto;
+}
+
+.header-title {
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 1.1em;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* Nút Đăng xuất nhỏ gọn */
+.btn-logout {
+    padding: 5px 12px !important;
+    font-size: 13px !important;
+    height: 32px;
+    background-color: #fff1f0 !important; /* Nền đỏ nhạt */
+    color: #dc3545 !important; /* Chữ đỏ */
+    border: 1px solid #ffccc7 !important;
+    width: auto !important;
+    margin: 0 !important;
+    border-radius: 6px;
+}
+.btn-login {
+    padding: 5px 12px !important;
+    height: 32px;
+    font-size: 13px !important;
+    width: auto !important;
+    margin: 0 !important;
+}
+
+/* Hàng dưới: Các nút điều hướng */
+.nav-grid {
+    display: flex;
+    gap: 10px;
+    align-items: stretch; /* Kéo dãn chiều cao bằng nhau */
+}
+
+.nav-item-link {
+    flex: 1; /* Chia đều chiều rộng */
+    text-decoration: none;
+    display: block; /* Để ẩn hiện button bên trong hoạt động đúng */
+}
+
+.nav-btn {
+    width: 100%;
+    padding: 10px !important;
+    font-size: 14px !important;
+    margin: 0 !important;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    box-shadow: none;
+}
+.nav-btn {
+    height: 100%; /* Chiều cao ăn theo cha */
+    min-height: 45px;
+    white-space: nowrap; /* Không cho chữ xuống dòng */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Màu sắc riêng */
+.btn-manager { background-color: #007bff !important; }
+.btn-auditor { background-color: #17a2b8 !important; }
+/* Khi Inventory Manager vào (Chế độ 1 cột) */
+.borrow-layout.single-column {
+    display: block; /* Hủy bỏ Grid 2 cột */
+}
+
+.borrow-layout.single-column .left-panel {
+    display: none !important; /* Ẩn hoàn toàn cột trái (Cấu hình) */
+}
+
+.borrow-layout.single-column .right-panel {
+    width: 100%; /* Mở rộng cột phải full màn hình */
+}
+/* --- CSS CHO MODULE SỬA CHỮA --- */
+
+/* Thanh bộ lọc danh sách */
+.filter-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+    align-items: center; /* QUAN TRỌNG: Căn giữa theo chiều dọc */
+}
+
+/* Nhóm checkbox phụ kiện */
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 6px;
+    border: 1px solid #eee;
+}
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    font-weight: normal;
+    cursor: pointer;
+    margin-bottom: 0;
+}
+.checkbox-group input {
+    width: 18px;
+    height: 18px;
+    margin-right: 5px;
+    margin-bottom: 0;
+}
+
+/* Lưới hiển thị ảnh (Photo Grid) */
+.photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+.photo-item {
+    position: relative;
+    width: 100%;
+    padding-top: 100%; /* Tạo hình vuông */
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #ddd;
+}
+.photo-item img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.photo-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: rgba(255, 0, 0, 0.8);
+    color: white;
+    border: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0 !important;
+}
+/* Đảm bảo các ô input và select trong thanh lọc có chiều cao bằng nhau */
+.filter-bar input, 
+.filter-bar select {
+    margin-bottom: 0; /* Xóa margin dưới để căn đều với nút */
+    height: 45px; /* Chiều cao cố định */
+}
+
+/* Nút Lọc */
+.filter-bar button {
+    height: 45px; /* Bằng chiều cao input */
+    margin: 0;
+    padding: 0 25px; /* Mở rộng chiều ngang nút một chút */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+/* Nút Trang chủ: Cố định chiều rộng tối thiểu để không bị bé */
+.nav-grid .nav-item-link {
+    flex: 0 0 auto; /* Không co giãn */
+    min-width: 140px; /* Chiều rộng tối thiểu cho đẹp */
+}
+
+/* Nút Tạo phiếu / Danh sách: Chiếm hết khoảng trống còn lại */
+.nav-grid #btnShowCreate,
+.nav-grid #btnShowList {
+    flex: 1; /* Tự động giãn rộng */
+    width: 100%;
+}
+/* --- CSS TRẠNG THÁI PHIẾU SỬA CHỮA --- */
+.badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+    white-space: nowrap;
+}
+.status-new { background-color: #e3f2fd; color: #0d47a1; border: 1px solid #b3e5fc; }
+.status-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+.status-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.status-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+/* --- TIMELINE SỬA CHỮA --- */
+.timeline-wrapper {
+    width: 100%;
+    position: relative;
+}
+.timeline-steps {
+    display: flex;
+    justify-content: space-between;
+    position: relative;
+}
+/* Đường kẻ ngang nối các bước */
+.timeline-steps::before {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background-color: #e9ecef;
+    z-index: 0;
+}
+.step {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    width: 80px; /* Chiều rộng mỗi bước */
+    opacity: 0.5; /* Mờ khi chưa active */
+    transition: all 0.3s;
+}
+.step.active {
+    opacity: 1;
+}
+.step-circle {
+    width: 34px;
+    height: 34px;
+    background-color: #fff;
+    border: 4px solid #e9ecef;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 8px;
+    font-weight: bold;
+    color: #666;
+    font-size: 14px;
+}
+.step.active .step-circle {
+    border-color: var(--primary-color);
+    background-color: var(--primary-color);
+    color: white;
+    box-shadow: 0 0 0 3px rgba(0,123,255,0.2);
+}
+.step-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+}
+/* Nút nhỏ trong card */
+.btn-sm {
+    padding: 5px 10px !important;
+    font-size: 12px !important;
+    height: auto !important;
+    width: auto !important;
+}
+/* CSS MODAL */
+.modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+}
+.modal-content {
+    background: white; padding: 20px; border-radius: 8px;
+    width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+}
+/* --- TỐI ƯU BẢNG BÁO GIÁ TRÊN MOBILE (DẠNG THẺ) --- */
+@media (max-width: 768px) {
+    
+    /* 1. Ẩn tiêu đề bảng (vì giao diện sẽ đổi dạng) */
+    #modalQuote table thead {
+        display: none;
+    }
+
+    /* 2. Biến mỗi dòng (tr) thành một lưới (Grid) 2 tầng */
+    #quoteItemsBody tr {
+        display: grid;
+        /* Định nghĩa 3 cột cho hàng dưới: SL (70px) - Giá (Tự giãn) - Xóa (30px) */
+        grid-template-columns: 70px 1fr 30px; 
+        gap: 8px; /* Khoảng cách giữa các ô */
+        
+        /* Trang trí khung thẻ */
+        background: #fff;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: 10px; /* Cách nhau ra */
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+
+    /* 3. Ô Tên linh kiện (Cột 1): Chiếm trọn hàng trên cùng */
+    #quoteItemsBody td:nth-child(1) {
+        grid-column: 1 / -1; /* Span toàn bộ chiều ngang */
+        width: 100%;
+        padding: 0 0 5px 0; /* Chừa chút khoảng trống bên dưới */
+        border: none;
+    }
+
+    /* 4. Các ô còn lại (SL, Giá, Xóa): Nằm ở hàng dưới theo cột đã định nghĩa */
+    #quoteItemsBody td {
+        border: none; /* Xóa viền bảng mặc định */
+        padding: 0;
+        display: flex; /* Để căn giữa nội dung bên trong */
+        align-items: center;
+    }
+
+    /* Tùy chỉnh ô input bên trong cho đẹp */
+    #quoteItemsBody input {
+        margin-bottom: 0 !important; /* Xóa khoảng trắng thừa */
+        height: 40px; /* Chiều cao chuẩn dễ bấm */
+    }
+    
+    /* Ô Số lượng: Căn giữa chữ */
+    #quoteItemsBody .q-qty {
+        text-align: center;
+        padding: 5px;
+    }
+    
+    /* Nút Xóa: Căn giữa */
+    #quoteItemsBody td:last-child {
+        justify-content: center;
+    }
+}
+/* --- GIAO DIỆN DANH SÁCH PHIẾU TRÊN MOBILE (DẠNG THẺ CAO CẤP) --- */
+
+@media (max-width: 768px) {
+    /* Ẩn tiêu đề bảng */
+    #ticketTable thead { display: none; }
+
+    /* Reset bảng */
+    #ticketTable { border: none; background: transparent; box-shadow: none; }
+    #ticketTable tbody { display: block; }
+
+    /* Biến mỗi dòng (tr) thành một Card */
+    #ticketTable tr {
+        display: grid;
+        grid-template-columns: 1fr auto; /* Cột trái (Info) - Cột phải (Status/Btn) */
+        grid-template-areas:
+            "id status"
+            "cust cust"
+            "device device"
+            "footer footer";
+        gap: 10px;
+        
+        background: #fff;
+        margin-bottom: 16px;
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Bóng mềm hơn */
+        border: 1px solid #f0f0f0;
+    }
+
+    /* Reset style cho tất cả các ô td */
+    #ticketTable td {
+        display: block;
+        border: none;
+        padding: 0;
+        white-space: normal;
+    }
+
+    /* 1. MÃ PHIẾU (Góc trên trái) */
+    #ticketTable td:nth-child(1) {
+        grid-area: id;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--primary-color);
+        letter-spacing: 0.5px;
+    }
+
+    /* 2. TRẠNG THÁI (Góc trên phải) */
+    #ticketTable td:nth-child(4) {
+        grid-area: status;
+        text-align: right;
+    }
+    /* Chỉnh badge nhỏ lại xíu cho gọn */
+    #ticketTable td:nth-child(4) .badge {
+        font-size: 11px;
+        padding: 4px 10px;
+    }
+
+    /* 3. KHÁCH HÀNG (Dòng 2 - Chiếm hết chiều ngang) */
+    #ticketTable td:nth-child(2) {
+        grid-area: cust;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        border-top: 1px dashed #eee; /* Đường kẻ ngăn cách */
+    }
+    /* Sửa lỗi dính chữ: Ép các div con xuống dòng */
+    #ticketTable td:nth-child(2) div {
+        display: block;
+        line-height: 1.4;
+    }
+    #ticketTable td:nth-child(2) div:first-child {
+        font-size: 15px;
+        font-weight: 600;
+        color: #333;
+    }
+    #ticketTable td:nth-child(2) div:last-child {
+        font-size: 14px;
+        color: #666;
+        margin-top: 2px;
+    }
+    /* Thêm icon người */
+    #ticketTable td:nth-child(2):before {
+        content: '👤 Khách: ';
+        font-size: 12px;
+        color: #999;
+        text-transform: uppercase;
+        display: block;
+        margin-bottom: 3px;
+    }
+
+    /* 4. THIẾT BỊ (Dòng 3 - Nền xám nổi bật) */
+    #ticketTable td:nth-child(3) {
+        grid-area: device;
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #444;
+    }
+    #ticketTable td:nth-child(3):before {
+        content: '💻 ';
+        opacity: 0.7;
+    }
+    #ticketTable td:nth-child(3) div:last-child {
+        font-size: 12px;
+        color: #888;
+        margin-top: 2px;
+    }
+
+    /* 5. FOOTER (Ngày tháng + Nút Xem) */
+    /* Chúng ta gộp ô Ngày (5) và Nút (6) vào khu vực footer bằng CSS Grid không tiện, 
+       nên ta dùng absolute hoặc flex trong từng ô */
+    
+    /* Ngày tháng */
+    #ticketTable td:nth-child(5) {
+        grid-area: footer;
+        align-self: end;
+        font-size: 12px;
+        color: #aaa;
+        font-style: italic;
+    }
+
+    /* Nút Xem */
+    #ticketTable td:nth-child(6) {
+        grid-area: footer;
+        justify-self: end; /* Căn phải trong vùng footer */
+        align-self: end;
+    }
+    
+    #ticketTable td:nth-child(6) button {
+        padding: 6px 20px !important;
+        font-size: 13px;
+        border-radius: 20px;
+        background-color: #fff !important;
+        color: var(--primary-color) !important;
+        border: 1px solid var(--primary-color) !important;
+        box-shadow: none;
+    }
+    #ticketTable td:nth-child(6) button:active {
+        background-color: var(--primary-color) !important;
+        color: #fff !important;
+    }
+    /* --- CẬP NHẬT DANH SÁCH PHIẾU TRÊN MOBILE --- */
+    /* 1. Ẩn Serial Number */
+    .ticket-sn {
+        display: none !important;
+    }
+
+    /* 2. Hiện các nhãn tiêu đề (Tên máy:, Lỗi:) */
+    .mobile-label {
+        display: inline-block !important;
+        min-width: 60px; /* Căn thẳng hàng */
+    }
+
+    /* 3. Xóa icon máy tính cũ (💻) để đỡ rối */
+    #ticketTable td:nth-child(3):before {
+        content: none !important;
+    }
+
+    /* 4. Tăng khoảng cách cho dễ nhìn */
+    #ticketTable td:nth-child(3) {
+        padding: 10px 0;
+    }
+    
+    /* Giới hạn độ dài mô tả lỗi (nếu quá dài) */
+    .ticket-issue {
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* Hiện tối đa 2 dòng */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+}
+/* --- TÙY CHỈNH NÚT XEM CHI TIẾT --- */
+
+/* Style chung cho nút (Nền trắng - Chữ xanh) */
+.btn-view-detail {
+    background-color: #fff !important;      /* Nền trắng */
+    color: var(--primary-color) !important; /* Chữ xanh dương */
+    border: 1px solid var(--primary-color) !important; /* Viền xanh */
+    padding: 5px 15px !important;
+    width: auto !important;
+    font-weight: 600;
+    box-shadow: none !important;
+    transition: all 0.2s;
+    /* Căn giữa nội dung */
+    display: inline-flex !important; 
+    align-items: center;
+    justify-content: center;
+}
+
+/* Hiệu ứng khi di chuột */
+.btn-view-detail:hover {
+    background-color: #e3f2fd !important; /* Nền xanh nhạt khi hover */
+}
+
+/* Mặc định trên Máy tính */
+.text-mobile { display: none; }   /* Ẩn chữ "Chi tiết" */
+.text-desktop { display: inline; } /* Hiện chữ "Xem" */
+
+/* --- TRÊN ĐIỆN THOẠI (Màn hình nhỏ) --- */
+@media (max-width: 768px) {
+    .text-desktop { display: none; }   /* Ẩn chữ "Xem" */
+    .text-mobile { display: inline; }  /* Hiện chữ "Chi tiết" */
+    
+    /* Làm nút to hơn chút trên điện thoại cho dễ bấm */
+    .btn-view-detail {
+        width: 100% !important; /* Nút rộng full ô */
+        padding: 8px 0 !important;
+    }
+}
+/* --- TÙY CHỈNH HIỂN THỊ DANH SÁCH --- */
+
+/* Mặc định trên Máy tính: Ẩn dòng lỗi khách báo */
+.mobile-only-issue {
+    display: none;
+}
+
+/* Trên Điện thoại: Hiện dòng lỗi lên */
+@media (max-width: 768px) {
+    .mobile-only-issue {
+        display: -webkit-box; /* Hiện lại dạng box */
+        /* Các thuộc tính cắt dòng đã có ở code cũ, 
+           nhưng để chắc chắn, ta khai báo lại ở đây */
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+}
+/* --- CSS CHO LIGHTBOX ẢNH --- */
+.image-modal {
+  display: none; /* Mặc định ẩn */
+  position: fixed;
+  z-index: 3000; /* Cao hơn mọi thứ */
+  padding-top: 50px;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.9); /* Nền đen mờ 90% */
+  justify-content: center;
+  align-items: center;
+}
+
+/* Ảnh phóng to */
+.image-modal-content {
+  margin: auto;
+  display: block;
+  max-width: 90%;
+  max-height: 90vh;
+  border-radius: 5px;
+  object-fit: contain;
+  animation: zoomIn 0.3s; /* Hiệu ứng zoom */
+}
+
+@keyframes zoomIn {
+  from {transform:scale(0)}
+  to {transform:scale(1)}
+}
+
+/* Nút đóng (x) */
+.close-img {
+  position: absolute;
+  top: 15px;
+  right: 35px;
+  color: #f1f1f1;
+  font-size: 40px;
+  font-weight: bold;
+  transition: 0.3s;
+  cursor: pointer;
+  z-index: 3001;
+}
+.close-img:hover,
+.close-img:focus {
+  color: #bbb;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Mobile: Nút đóng to hơn chút */
+@media only screen and (max-width: 700px){
+  .image-modal-content {
+    width: 100%;
+  }
+  .close-img {
+    top: 10px;
+    right: 20px;
+  }
+}
+/* --- ACTION SHEET (MENU CHỌN ẢNH) --- */
+.action-sheet-content {
+    background: white;
+    width: 100%;
+    max-width: 600px; /* Giới hạn trên PC */
+    margin: 0 auto;
+    border-radius: 15px 15px 0 0;
+    padding: 20px;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+.sheet-btn {
+    width: 100%;
+    padding: 15px;
+    margin-bottom: 10px;
+    border: 1px solid #eee !important;
+    background: #f8f9fa !important;
+    color: #333 !important;
+    font-size: 16px;
+    border-radius: 8px;
+    text-align: left;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+.sheet-btn:active {
+    background: #e2e6ea !important;
+}
+
+.sheet-btn.cancel {
+    background: white !important;
+    border: none !important;
+    color: #dc3545 !important;
+    text-align: center;
+    justify-content: center;
+    margin-bottom: 0;
+}
+/* --- HIỆU ỨNG XEN KẼ MÀU CHO THẺ PHIẾU (MOBILE) --- */
+
+@media (max-width: 768px) {
+    /* 1. Các phiếu thứ tự LẺ (1, 3, 5...) -> Giữ nền trắng nổi bật */
+    #ticketTable tr:nth-child(odd) {
+        background-color: #ffffff;
+        border-left: 5px solid var(--primary-color); /* Thêm vạch màu xanh bên trái cho đẹp */
+    }
+
+    /* 2. Các phiếu thứ tự CHẴN (2, 4, 6...) -> Nền xám xanh nhạt */
+    #ticketTable tr:nth-child(even) {
+        background-color: #f4f6f8; /* Màu xám xanh rất nhạt, dịu mắt */
+        border: 1px solid #dae0e5; /* Viền tối hơn 1 chút */
+        border-left: 5px solid #6c757d; /* Vạch màu xám bên trái */
+    }
+}
+/* --- SỬA LỖI RADIO BUTTON (BÁO GIÁ) --- */
+
+/* Khung chứa toàn bộ nhóm radio */
+.radio-group-container {
+    margin-bottom: 15px; 
+    padding-bottom: 10px; 
+    border-bottom: 1px dashed #ccc;
+}
+
+/* Nhãn tiêu đề (Hình thức xử lý:) */
+.group-label {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+/* Flex container chứa các lựa chọn */
+.radio-options {
+    display: flex;
+    flex-wrap: wrap; /* Cho phép xuống dòng nếu màn hình quá bé */
+    gap: 20px;       /* Khoảng cách giữa 2 lựa chọn */
+    align-items: center;
+}
+
+/* Từng lựa chọn (Nút + Chữ) */
+.radio-item {
+    display: flex !important; /* Ép dùng Flex */
+    align-items: center !important; /* Căn giữa dọc */
+    cursor: pointer;
+    margin-bottom: 0 !important;
+    font-weight: normal !important;
+}
+
+/* Ô tròn radio */
+.radio-item input[type="radio"] {
+    margin: 0 8px 0 0 !important; /* Cách chữ ra một chút */
+    width: 20px !important;
+    height: 20px !important;
+    /* Reset các style mặc định gây lệch */
+    vertical-align: middle;
+    position: relative;
+    top: -1px; 
+}
+/* --- LOGIC ẨN/HIỆN CỘT GIÁ GỐC --- */
+
+/* Mặc định ẩn các thành phần External */
+.ext-only {
+    display: none !important;
+}
+
+/* Khi container có class .mode-external thì hiện lên */
+.mode-external .ext-only {
+    display: table-cell !important; /* Dùng cho td/th */
+}
+div.mode-external .ext-only {
+    display: flex !important; /* Dùng cho div input */
+}
+
+/* Mobile: Tùy chỉnh lại layout thẻ báo giá */
+@media (max-width: 768px) {
+    .mode-external #quoteItemsBody tr {
+        /* Tăng số cột lưới khi có thêm Giá Gốc */
+        grid-template-columns: 60px 1fr 1fr 30px; 
+    }
+    /* Màu sắc phân biệt */
+    .q-cost { background-color: #fff3e0; color: #e65100; border: 1px dashed #ff9800; }
+    .q-price { background-color: #e8f5e9; color: #1b5e20; font-weight: bold; }
+}

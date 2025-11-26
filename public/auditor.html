@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Kiểm Duyệt - Lịch sử Giao dịch</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="icon" href="/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/logo.png">
+
+  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  
+  <script>
+    // Copy cấu hình Firebase Config từ index.html
+    const firebaseConfig = {
+        apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+        authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+        projectId: "quan-ly-vat-tu-backend",
+        storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+        messagingSenderId: "323292129107",
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
+        measurementId: "G-N3VLYSXTR8"
+    };
+    const firebaseApp = firebase.initializeApp(firebaseConfig);
+    const auth = firebaseApp.auth();
+    const provider = new firebase.auth.GoogleAuthProvider();
+  </script>
+</head>
+<body>
+  <div class="main-header">
+    <div class="brand-row">
+        <div class="brand-left">
+            <img src="logo.png" alt="Logo" class="header-logo">
+            <h3 class="header-title">Trang Kiểm Duyệt</h3>
+        </div>
+        <div class="brand-right">
+             <button id="authButton" class="btn-login" style="display:none;">Đăng nhập</button>
+             <button id="signOutButton" class="btn-logout" style="display:none;" onclick="firebase.auth().signOut().then(() => { window.location.href = 'index.html'; })">
+                Đăng xuất
+             </button>
+        </div>
+    </div>
+
+    <div class="nav-grid">
+        <a href="index.html" class="nav-item-link">
+            <button class="nav-btn" style="background-color: var(--secondary-color) !important;">
+                < Quay lại Trang Chính
+            </button>
+        </a>
+    </div>
+
+    <button id="darkModeToggle" onclick="toggleDarkMode()" style="display:none;"></button> 
+  </div>
+
+  <div id="auditorPage" class="form-section" style="display:none; margin-top: 20px;">
+    <p>Xem lịch sử giao dịch của tất cả Kỹ thuật viên.</p>
+    <button id="audioToggleBtn" onclick="toggleAudio()" style="background-color: #ffc107; color: #212529;">
+      Bật Âm thanh Thông báo
+    </button>
+    <div id="auditorHistorySection" class="form-section"> <h3>Lịch sử Giao dịch</h3>
+
+      <label for="auditorHistoryFilterType">Lọc theo loại:</label> <select id="auditorHistoryFilterType" onchange="listenForAuditorHistory()"> <option value="Tất cả">Tất cả</option>
+        <option value="Mượn">Mượn</option>
+        <option value="Trả">Trả</option>
+      </select>
+
+      <label for="auditorHistoryFilterTech">Lọc theo Kỹ thuật viên:</label> <select id="auditorHistoryFilterTech" onchange="listenForAuditorHistory()"> <option value="Tất cả">Tất cả KTV</option>
+        </select>
+      
+      <div id="auditorHistorySpinner" style="display:none; text-align:center;"> <div class="spinner"></div><p>Đang tải lịch sử...</p>
+      </div>
+
+      <table id="auditorHistoryTable"> <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Loại</th>
+            <th>Nội dung</th> </tr>
+        </thead>
+        <tbody id="auditorHistoryBody"> <tr><td colspan="3">Đang tải...</td></tr>
+        </tbody>
+      </table>
+      <button id="loadMoreAuditorHistory" class="load-more-button" onclick="loadMoreAuditorHistory()" style="display:none; margin-top: 10px;">Tải thêm</button>
+    </div>
+  </div> 
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="common.js"></script><script src="auditor.js"></script>
+</body>
+</html>
