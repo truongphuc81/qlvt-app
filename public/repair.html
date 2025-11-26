@@ -321,129 +321,68 @@
     </div>
 </div>
         <div id="modalQuote" class="modal-overlay" style="display:none;">
-            <div class="modal-content" style="max-width: 800px;"> <h3>💰 Lên Báo Giá Chi Tiết</h3>
-                
-                <div class="radio-group-container">
-                    <label class="group-label">Hình thức xử lý:</label>
-                    <div class="radio-options">
-                        <label class="radio-item">
-                            <input type="radio" name="quoteType" value="INTERNAL" checked onchange="toggleQuoteType()"> 
-                            Sửa tại chỗ
-                        </label>
-                        <label class="radio-item">
-                            <input type="radio" name="quoteType" value="EXTERNAL" onchange="toggleQuoteType()"> 
-                            Gửi đơn vị ngoài
-                        </label>
-                    </div>
-                </div>
-                
-                <div id="ext_unit_div" class="control-group ext-only" style="margin-bottom:10px; background:#fff3e0; border:1px solid #ffe0b2;">
-                    <label>Tên đơn vị sửa chữa / Hãng:</label>
-                    <input type="text" id="q_ext_unit" placeholder="VD: Trung tâm bảo hành Dell..." style="margin-bottom:0;">
-                </div>
-
-                <div id="quoteTableContainer">
-                    <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-                        <thead>
-                            <tr style="background: #f1f1f1;">
-                                <th>Tên linh kiện / Dịch vụ</th>
-                                <th style="width: 60px;">SL</th>
-                                <th class="ext-only" style="width: 130px; color:#e65100;">Giá Gốc (A)</th>
-                                <th style="width: 130px; color:#2e7d32;">Giá Bán (B)</th>
-                                <th style="width: 30px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="quoteItemsBody"></tbody>
-                    </table>
-                </div>
-                
-                <button onclick="addQuoteRow()" class="btn-sm" style="background: var(--secondary-color); margin-bottom: 15px;">+ Thêm dòng</button>
-
-                <div id="ext_ship_div" class="ext-only" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px; gap:10px;">
-                    <label style="margin:0; color:#666;">+ Phí vận chuyển (Nội bộ):</label>
-                    <input type="number" id="q_ext_ship" class="calc-input" placeholder="0" oninput="calculateQuoteTotal()" style="width:120px; text-align:right; margin:0;">
-                </div>
-
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-size:1.1em;">Tổng Báo Khách (B):</span>
-                        <strong id="quote_total_display" style="font-size: 1.4em; color: #2e7d32;">0 đ</strong>
-                    </div>
-                    
-                    <div id="profit_display_div" class="ext-only" style="display:flex; justify-content: space-between; align-items: center; margin-top:5px; font-size:13px; color:#666; border-top:1px dashed #ccc; padding-top:5px;">
-                        <span>Lợi nhuận dự kiến (B - A - Ship):</span>
-                        <strong id="quote_profit_display" style="color: #e65100;">0 đ</strong>
-                    </div>
-                </div>
-                
-                <div class="input-row">
-                    <div style="flex:1">
-                        <label>Bảo hành:</label>
-                        <input type="text" id="quote_warranty" placeholder="VD: 3 tháng...">
-                    </div>
-                </div>
-                
-                <label>Ghi chú thêm (Option):</label>
-                <textarea id="quote_notes" rows="2" placeholder="VD: Giá chưa bao gồm VAT..."></textarea>
-
-                <div class="action-footer" style="margin-top:20px;">
-                    <button onclick="closeModal('modalQuote')" style="background:#ccc; color:#333;">Hủy</button>
-                    <button onclick="submitQuote()" style="background:var(--primary-color);">Gửi Báo Giá</button>
-                </div>
+    <div class="modal-content" style="max-width: 800px;">
+        <h3>💰 Lên Báo Giá Chi Tiết</h3>
+        
+        <div class="radio-group-container">
+            <label class="group-label">Hình thức xử lý:</label>
+            <div class="radio-options">
+                <label class="radio-item">
+                    <input type="radio" name="quoteType" value="INTERNAL" checked onchange="toggleQuoteType()"> 
+                    Sửa tại chỗ
+                </label>
+                <label class="radio-item">
+                    <input type="radio" name="quoteType" value="EXTERNAL" onchange="toggleQuoteType()"> 
+                    Gửi đơn vị ngoài
+                </label>
             </div>
         </div>
-
-        <div id="external_cost_block" style="display:none; background: #fff3e0; padding: 10px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ffe0b2;">
-            <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #e65100;">Tính toán giá vốn (Nội bộ)</h4>
-            <div class="input-row">
-                <div style="flex:1">
-                    <label>Tên đơn vị ngoài:</label>
-                    <input type="text" id="q_ext_unit" placeholder="VD: Hãng, Cửa hàng A...">
-                </div>
-                <div style="flex:1">
-                    <label>Giá họ báo (A):</label>
-                    <input type="number" id="q_ext_cost" class="calc-input" placeholder="0">
-                </div>
-            </div>
-            <div class="input-row">
-                <div style="flex:1">
-                    <label>Phí vận chuyển (B):</label>
-                    <input type="number" id="q_ext_ship" class="calc-input" placeholder="0">
-                </div>
-                <div style="flex:1">
-                    <label>Công ty lời (C):</label>
-                    <input type="number" id="q_ext_profit" class="calc-input" placeholder="0">
-                </div>
-            </div>
-            <div style="text-align: right; font-size: 13px; color: #666;">
-                Giá báo khách (A + B + C) = <strong id="q_ext_total_preview" style="color: #d32f2f; font-size: 16px;">0</strong>
-            </div>
-            <div style="text-align: right; margin-top: 5px;">
-                <button class="btn-sm" onclick="applyExternalPriceToTable()">⬇ Áp dụng giá này xuống bảng</button>
-            </div>
+        
+        <div id="ext_unit_div" class="ext-only" style="margin-bottom: 15px; background: #fff8e1; border: 1px solid #ffe0b2; padding: 12px; border-radius: 6px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #e65100;">
+                Tên đơn vị sửa chữa / Hãng:
+            </label>
+            <input type="text" id="q_ext_unit" 
+                placeholder="VD: Trung tâm bảo hành Dell..." 
+                style="width: 100%; box-sizing: border-box; height: 40px; border: 1px solid #e65100; padding: 0 10px; border-radius: 4px;">
         </div>
+
         <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 13px;">
             <strong>Đề xuất từ KTV:</strong> <span id="quote_tech_summary">...</span>
         </div>
 
-        <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-            <thead>
-                <tr style="background: #f1f1f1;">
-                    <th>Tên linh kiện / Dịch vụ</th>
-                    <th style="width: 100px;">SL</th>
-                    <th style="width: 160px;">Đơn giá</th>
-                    <th style="width: 40px;"></th>
-                </tr>
-            </thead>
-            <tbody id="quoteItemsBody">
-                </tbody>
-        </table>
+        <div id="quoteTableContainer">
+            <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
+                <thead>
+                    <tr style="background: #f1f1f1;">
+                        <th>Tên linh kiện / Dịch vụ</th>
+                        <th style="width: 90px;">SL</th>
+                        <th class="ext-only" style="width: 130px; color:#e65100;">Giá Gốc (A)</th>
+                        <th style="width: 130px; color:#2e7d32;">Giá Bán (B)</th>
+                        <th style="width: 30px;"></th>
+                    </tr>
+                </thead>
+                <tbody id="quoteItemsBody"></tbody>
+            </table>
+        </div>
         
         <button onclick="addQuoteRow()" class="btn-sm" style="background: var(--secondary-color); margin-bottom: 15px;">+ Thêm dòng</button>
 
-        <div style="display: flex; justify-content: space-between; align-items: center; background: #fff3cd; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-            <strong>TỔNG CỘNG:</strong>
-            <strong id="quote_total_display" style="font-size: 1.2em; color: #d32f2f;">0 đ</strong>
+        <div id="ext_ship_div" class="ext-only" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px; gap:10px;">
+            <label style="margin:0; color:#666;">+ Phí vận chuyển (Nội bộ):</label>
+            <input type="number" id="q_ext_ship" class="calc-input" placeholder="0" oninput="calculateQuoteTotal()" style="width:120px; text-align:right; margin:0;">
+        </div>
+
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size:1.1em;">Tổng Báo Khách (B):</span>
+                <strong id="quote_total_display" style="font-size: 1.4em; color: #2e7d32;">0 đ</strong>
+            </div>
+            
+            <div id="profit_display_div" class="ext-only" style="display:flex; justify-content: space-between; align-items: center; margin-top:5px; font-size:13px; color:#666; border-top:1px dashed #ccc; padding-top:5px;">
+                <span>Lợi nhuận dự kiến (B - A - Ship):</span>
+                <strong id="quote_profit_display" style="color: #e65100;">0 đ</strong>
+            </div>
         </div>
         
         <div class="input-row">
