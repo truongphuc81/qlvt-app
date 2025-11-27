@@ -1801,16 +1801,33 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
 
         if (isAgreed && !isUnrepairable) {
             // === TRƯỜNG HỢP 1: ĐỒNG Ý SỬA ===
+            
+            // TỰ ĐỘNG GIAO VIỆC SỬA CHỮA CHO NGƯỜI ĐÃ KIỂM TRA
+            // (Nếu phiếu này đã có người nhận kiểm tra trước đó)
+            let autoAssignData = {};
+            if (currentTicket.assignedTechCheck) {
+                autoAssignData = {
+                    assignedRepair: {
+                        name: currentTicket.assignedTechCheck.name,
+                        email: currentTicket.assignedTechCheck.email,
+                        assignedBy: 'System (Auto)', // Đánh dấu là hệ thống tự gán
+                        assignedAt: new Date().toISOString()
+                    }
+                };
+            }
+
             updateData = {
                 currentStatus: isExternal ? 'Đang sửa ngoài' : 'Đang sửa',
                 customerConfirm: {
                     date: new Date().toISOString(),
                     result: 'Đồng ý sửa',
                     note: data.note
-                }
+                },
+                ...autoAssignData // Gộp thông tin gán thợ vào đây
             };
+            
             logAction = 'Khách xác nhận';
-            logDetails = 'Khách ĐỒNG Ý sửa chữa.';
+            logDetails = 'Khách ĐỒNG Ý sửa chữa. Hệ thống tự động chuyển giao cho KTV kiểm tra.';
         } else {
             // === TRƯỜNG HỢP 2: KHÔNG SỬA / TỪ CHỐI ===
             let resultText = !isAgreed ? 'Không sửa (Từ chối báo giá)' : 'Đồng ý nhận lại máy (Không sửa được)';

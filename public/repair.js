@@ -557,6 +557,12 @@ function renderTicketDetail(t) {
     if (btnUpdateCheck) btnUpdateCheck.style.display = isTicketLocked ? 'none' : 'block';
 
     if (t.techCheck) {
+        // === ƯU TIÊN LẤY TÊN TỪ THÔNG TIN GIAO VIỆC ===
+        const techName = (t.assignedTechCheck && t.assignedTechCheck.name) 
+                         ? t.assignedTechCheck.name 
+                         : (t.techCheck.technicianName || t.techCheck.technicianEmail);
+        // ===============================================
+
         let techPhotosHtml = '';
         if (t.techCheck.photos && t.techCheck.photos.length > 0) {
             techPhotosHtml = `<div class="photo-grid" style="grid-template-columns: repeat(4, 1fr); margin-top:10px; border-top:1px dashed #ddd; padding-top:10px;">`;
@@ -568,9 +574,7 @@ function renderTicketDetail(t) {
 
         techBlock.innerHTML = `
             <div style="background:#f9f9f9; padding:10px; border-radius:6px; border-left:4px solid var(--primary-color);">
-                <div><strong>KTV:</strong> ${t.techCheck.technicianName || t.techCheck.technicianEmail}</div>
-                
-                <div style="margin-top:5px;"><strong>Nguyên nhân:</strong> ${t.techCheck.cause}</div>
+                <div><strong>KTV:</strong> ${techName}</div> <div style="margin-top:5px;"><strong>Nguyên nhân:</strong> ${t.techCheck.cause}</div>
                 <div><strong>Đề xuất:</strong> ${t.techCheck.solution}</div>
                 <div><strong>Linh kiện:</strong> ${t.techCheck.components || 'Không'}</div>
                 ${techPhotosHtml} 
@@ -807,8 +811,9 @@ function renderTicketDetail(t) {
                      <strong>BH:</strong> ${t.quotation.warranty || '---'} <br>
                      <em>${t.quotation.notes ? 'Ghi chú: ' + t.quotation.notes : ''}</em>
                 </div>
+
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Sale: ${t.quotation.saleName}
+                    Sale: <strong>${t.quotation.saleName || t.quotation.saleEmail}</strong>
                 </div>
             </div>
         `;
@@ -982,13 +987,25 @@ function renderTicketDetail(t) {
                 `;
             }
         } else {
-            // === B. LOGIC SỬA TẠI CHỖ (CẬP NHẬT GIAO VIỆC) ===
+            // === B. LOGIC SỬA TẠI CHỖ (Bình thường) ===
             
+            // 1. ĐỊNH NGHĨA NÚT ĐẶT HÀNG (Khôi phục lại đoạn bị thiếu)
+            let orderBtn = '';
+            // Biến canOrder đã được khai báo ở đầu khối 5
+            if (canOrder) {
+                orderBtn = `
+                    <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
+                         <button onclick="triggerOrderParts()" style="background:none; border:1px solid #f57c00; color:#f57c00; padding:5px 10px; font-size:12px; border-radius:4px; cursor:pointer;">
+                            📦 Thiếu đồ? Đặt linh kiện ngay
+                        </button>
+                    </div>`;
+            }
+
+            // 2. LOGIC HIỂN THỊ NGƯỜI ĐANG SỬA
             let workerHtml = '';
             if (t.assignedRepair) {
                 // Đã giao
                 const assignee = t.assignedRepair;
-                const isMe = (assignee.email === myEmail);
                 
                 workerHtml = `
                     <div style="margin-bottom:10px; font-size:13px; color:#004085; background:#cce5ff; padding:5px; border-radius:4px; border-left: 3px solid #007bff;">
@@ -996,9 +1013,7 @@ function renderTicketDetail(t) {
                     </div>
                 `;
                 
-                // Nếu là Chính chủ hoặc Quản lý -> Hiện nút Hoàn tất
-                // (Lưu ý: Nút Hoàn tất nằm sẵn trong HTML string bên dưới, ta chỉ cần không ẩn nó đi là được)
-                
+                // Nút Giao lại (Chỉ Quản lý thấy)
                 if (isManager) {
                      workerHtml += `
                         <div style="text-align:right; margin-bottom:5px;">
@@ -1009,39 +1024,45 @@ function renderTicketDetail(t) {
                 }
 
             } else {
-                // Chưa giao
+                // Chưa giao -> Hiện nút Giao (Chỉ Quản lý thấy)
                 if (isManager) {
                     workerHtml = `
                         <div style="margin-bottom:10px;">
                             <button onclick="openAssignModal('REPAIR')" class="btn-sm" style="background:#673ab7;">👉 Giao KTV Sửa Chữa</button>
                         </div>
                     `;
+                } else {
+                    workerHtml = `<div style="color:#999; margin-bottom:10px; font-style:italic;">(Chưa phân công KTV)</div>`;
                 }
             }
             
-            // Chỉ hiện nút Báo cáo hoàn tất nếu Đã giao cho Mình hoặc là Quản lý
-            // Nếu chưa giao ai -> Ẩn nút hoàn tất (để ép phải giao trước)
+            // 3. NÚT HOÀN TẤT (Chỉ hiện nếu Đã giao cho Mình hoặc là Quản lý)
             const showCompleteBtn = (t.assignedRepair && (t.assignedRepair.email === myEmail || isManager));
             const completeBtnHtml = showCompleteBtn 
                 ? `<button onclick="openUpdateModal('repair')" class="btn-sm" style="background:#007bff; padding:10px 20px; font-size:14px;">✅ Báo Cáo Hoàn Tất</button>`
-                : `<span style="font-size:12px; color:#999;">(Cần giao việc để báo cáo)</span>`;
+                : `<span style="font-size:12px; color:#999;">(Cần được giao việc để báo cáo)</span>`;
 
+            // 4. HIỂN THỊ RA MÀN HÌNH
             repairBlock.innerHTML = `
                 ${confirmInfo}
                 <div style="text-align:center; padding:15px; border:2px dashed #ffc107; background:#fff3cd; border-radius:8px;">
                     <h4 style="margin-top:0; color:#856404;">🔧 Đang tiến hành sửa chữa...</h4>
                     ${workerHtml}
                     ${completeBtnHtml}
-                    ${orderBtn}
-                </div>
+                    ${orderBtn} </div>
             `;
         }
 
     } else if (t.repair) {
-        // --- TRƯỜNG HỢP 5: ĐÃ SỬA XONG (Dữ liệu đã có) ---
+        // --- TRƯỜNG HỢP 5: ĐÃ SỬA XONG ---
         repairContainer.style.opacity = '1';
         
-        // Hiển thị ảnh (nếu có)
+        // === ƯU TIÊN LẤY TÊN TỪ THÔNG TIN GIAO VIỆC ===
+        const repairName = (t.assignedRepair && t.assignedRepair.name)
+                           ? t.assignedRepair.name
+                           : (t.repair.technicianName || t.repair.technicianEmail);
+        // ===============================================
+
         let photosHtml = '';
         if (t.repair.photos && t.repair.photos.length > 0) {
             photosHtml = `<div class="photo-grid" style="grid-template-columns: repeat(4, 1fr); margin-top:10px;">`;
@@ -1054,8 +1075,7 @@ function renderTicketDetail(t) {
         repairBlock.innerHTML = `
             <div style="background:#d4edda; padding:10px; border-radius:6px; border-left:4px solid #28a745;">
                 <div style="color:#155724; font-weight:bold; margin-bottom:5px;">✅ Đã sửa xong</div>
-                <div><strong>KTV:</strong> ${t.repair.technicianName || t.repair.technicianEmail}</div>
-                <div><strong>Công việc:</strong> ${t.repair.workDescription}</div>
+                <div><strong>KTV:</strong> ${repairName}</div> <div><strong>Công việc:</strong> ${t.repair.workDescription}</div>
                 <div><strong>Bảo hành:</strong> ${t.repair.warranty || 'Không'}</div>
                 ${photosHtml}
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
@@ -1107,12 +1127,14 @@ function renderTicketDetail(t) {
                     <span style="font-weight:bold; color:#1b5e20;">ĐÃ THU TIỀN:</span>
                     <span style="font-weight:bold; font-size:1.2em; color:#d32f2f;">${amount}</span>
                 </div>
+                
                 <div><strong>Hình thức:</strong> ${t.payment.method}</div>
                 <div><strong>Số sổ 3 liên:</strong> ${t.payment.ticketNumber}</div>
                 <div><strong>Ghi chú:</strong> ${t.payment.note || 'Không'}</div>
                 ${photosHtml}
+                
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Thu ngân: ${t.payment.staffName || t.payment.staffEmail} - ${new Date(t.payment.date).toLocaleString('vi-VN')}
+                    Thu ngân: <strong>${t.payment.staffName || t.payment.staffEmail}</strong> - ${new Date(t.payment.date).toLocaleString('vi-VN')}
                 </div>
             </div>
         `;
