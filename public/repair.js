@@ -507,6 +507,8 @@ function viewTicketDetail(ticketId) {
 
 
 function renderTicketDetail(t) {
+    const isManager = userRoles.admin || userRoles.inventory_manager || userRoles.sale; // Cho phép Sale giao việc luôn nếu cần
+    const myEmail = userEmail;
     // 1. Điền thông tin chung
     document.getElementById('d_ticketId').innerText = t.ticketId;
     document.getElementById('d_createdAt').innerText = new Date(t.createdAt).toLocaleString('vi-VN');
@@ -575,13 +577,59 @@ function renderTicketDetail(t) {
             </div>
         `;
     } else {
+        // CHƯA CÓ KẾT QUẢ
         if (!isTicketLocked) {
-            if(btnUpdateCheck) btnUpdateCheck.style.display = 'none';
+            let assignHtml = '';
+            
+            if (t.assignedTechCheck) {
+                // ĐÃ GIAO CHO AI ĐÓ
+                const assignee = t.assignedTechCheck;
+                const isMe = (assignee.email === myEmail);
+                
+                assignHtml = `
+                    <div style="margin-bottom:10px; color:#0d47a1; background:#e3f2fd; padding:8px; border-radius:4px; border-left: 3px solid #2196f3;">
+                        👤 KTV: <strong>${assignee.name}</strong><br>
+                        <small style="color:#666;">Giao bởi ${assignee.assignedBy} lúc ${new Date(assignee.assignedAt).toLocaleString('vi-VN')}</small>
+                    </div>
+                `;
+
+                // Nút cập nhật: Chỉ hiện cho Chính chủ hoặc Quản lý
+                if (isMe || isManager) {
+                    if (btnUpdateCheck) {
+                        btnUpdateCheck.style.display = 'block';
+                        btnUpdateCheck.innerText = '📝 Báo Cáo Kết Quả';
+                    }
+                }
+                
+                // Nút Giao lại (Chỉ Quản lý thấy)
+                if (isManager) {
+                     assignHtml += `
+                        <div style="text-align:right; margin-bottom:5px;">
+                            <button onclick="openAssignModal('CHECK')" style="background:none; border:none; color:#2196f3; cursor:pointer; font-size:12px; text-decoration:underline;">
+                                🔄 Giao người khác
+                            </button>
+                        </div>`;
+                }
+
+            } else {
+                // CHƯA GIAO -> Hiện nút Giao (Chỉ Quản lý)
+                if (isManager) {
+                    assignHtml = `
+                        <div style="text-align:center; margin-bottom:10px;">
+                            <button onclick="openAssignModal('CHECK')" class="btn-sm" style="background:#673ab7; padding:8px 15px;">
+                                👉 Giao KTV Kiểm Tra
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    assignHtml = `<div style="color:#999; text-align:center; font-style:italic;">(Chưa phân công KTV)</div>`;
+                }
+            }
+
             techBlock.innerHTML = `
-                <div style="text-align:center; padding:15px; border:2px dashed #ccc; background:#fff; border-radius:8px;">
-                    <div style="color:#666; font-style:italic; margin-bottom:10px;">Chưa có kết quả kiểm tra.</div>
-                    <button onclick="openUpdateModal('check')" class="btn-sm" style="background:var(--primary-color); padding:8px 15px;">🛠️ Cập nhật Kết quả</button>
-                </div>`;
+                ${assignHtml}
+                <div style="color:#666; font-style:italic; text-align:center;">(Chờ kết quả kiểm tra...)</div>
+            `;
         } else {
             techBlock.innerHTML = '<div style="color:#666;">(Không có dữ liệu kiểm tra)</div>';
         }
@@ -934,26 +982,56 @@ function renderTicketDetail(t) {
                 `;
             }
         } else {
-            // === B. LOGIC SỬA TẠI CHỖ (Bình thường) ===
+            // === B. LOGIC SỬA TẠI CHỖ (CẬP NHẬT GIAO VIỆC) ===
             
-            // Nút đặt hàng (chỉ hiện nếu có quyền)
-            let orderBtn = '';
-            if (canOrder) {
-                orderBtn = `
-                    <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
-                         <button onclick="triggerOrderParts()" style="background:none; border:1px solid #f57c00; color:#f57c00; padding:5px 10px; font-size:12px; border-radius:4px; cursor:pointer;">
-                            📦 Thiếu đồ? Đặt linh kiện ngay
-                        </button>
-                    </div>`;
+            let workerHtml = '';
+            if (t.assignedRepair) {
+                // Đã giao
+                const assignee = t.assignedRepair;
+                const isMe = (assignee.email === myEmail);
+                
+                workerHtml = `
+                    <div style="margin-bottom:10px; font-size:13px; color:#004085; background:#cce5ff; padding:5px; border-radius:4px; border-left: 3px solid #007bff;">
+                        🔧 KTV: <strong>${assignee.name}</strong> đang sửa
+                    </div>
+                `;
+                
+                // Nếu là Chính chủ hoặc Quản lý -> Hiện nút Hoàn tất
+                // (Lưu ý: Nút Hoàn tất nằm sẵn trong HTML string bên dưới, ta chỉ cần không ẩn nó đi là được)
+                
+                if (isManager) {
+                     workerHtml += `
+                        <div style="text-align:right; margin-bottom:5px;">
+                            <button onclick="openAssignModal('REPAIR')" style="background:none; border:none; color:#007bff; cursor:pointer; font-size:12px; text-decoration:underline;">
+                                🔄 Giao người khác
+                            </button>
+                        </div>`;
+                }
+
+            } else {
+                // Chưa giao
+                if (isManager) {
+                    workerHtml = `
+                        <div style="margin-bottom:10px;">
+                            <button onclick="openAssignModal('REPAIR')" class="btn-sm" style="background:#673ab7;">👉 Giao KTV Sửa Chữa</button>
+                        </div>
+                    `;
+                }
             }
+            
+            // Chỉ hiện nút Báo cáo hoàn tất nếu Đã giao cho Mình hoặc là Quản lý
+            // Nếu chưa giao ai -> Ẩn nút hoàn tất (để ép phải giao trước)
+            const showCompleteBtn = (t.assignedRepair && (t.assignedRepair.email === myEmail || isManager));
+            const completeBtnHtml = showCompleteBtn 
+                ? `<button onclick="openUpdateModal('repair')" class="btn-sm" style="background:#007bff; padding:10px 20px; font-size:14px;">✅ Báo Cáo Hoàn Tất</button>`
+                : `<span style="font-size:12px; color:#999;">(Cần giao việc để báo cáo)</span>`;
 
             repairBlock.innerHTML = `
                 ${confirmInfo}
                 <div style="text-align:center; padding:15px; border:2px dashed #ffc107; background:#fff3cd; border-radius:8px;">
                     <h4 style="margin-top:0; color:#856404;">🔧 Đang tiến hành sửa chữa...</h4>
-                    <button onclick="openUpdateModal('repair')" class="btn-sm" style="background:#007bff; padding:10px 20px; font-size:14px;">
-                        ✅ Báo Cáo Hoàn Tất
-                    </button>
+                    ${workerHtml}
+                    ${completeBtnHtml}
                     ${orderBtn}
                 </div>
             `;
@@ -1805,6 +1883,70 @@ async function triggerPartsArrived() {
         })
         .catch(err => alert("Lỗi: " + err.message))
         .finally(() => { if(spinner) spinner.style.display = 'none'; });
+}
+
+let currentAssignStep = ''; // Lưu bước đang giao (CHECK/REPAIR)
+
+async function openAssignModal(step) {
+    currentAssignStep = step;
+    const select = document.getElementById('assign_tech_select');
+    select.innerHTML = '<option>Đang tải...</option>';
+    
+    document.getElementById('modalAssign').style.display = 'flex';
+
+    try {
+        // Gọi API lấy danh sách KTV (Đã có sẵn từ auditor.js, dùng lại)
+        const techs = await callApi('/public/technicians');
+        
+        select.innerHTML = '<option value="">-- Chọn KTV --</option>';
+        techs.forEach(t => {
+            const option = document.createElement('option');
+            option.value = t.email;
+            option.text = t.name || t.email;
+            // Lưu thêm tên vào data attribute để tiện lấy
+            option.setAttribute('data-name', t.name || t.email);
+            select.appendChild(option);
+        });
+    } catch (err) {
+        alert("Lỗi tải danh sách KTV: " + err.message);
+        closeModal('modalAssign');
+    }
+}
+
+async function submitAssignWork() {
+    const select = document.getElementById('assign_tech_select');
+    const email = select.value;
+    const name = select.options[select.selectedIndex].getAttribute('data-name');
+
+    if (!email) {
+        alert("Vui lòng chọn Kỹ thuật viên.");
+        return;
+    }
+
+    const btn = document.querySelector('#modalAssign button[onclick="submitAssignWork()"]');
+    btn.innerText = 'Đang giao...';
+    btn.disabled = true;
+
+    const data = {
+        ticketId: currentTicketId,
+        action: 'MANAGER_ASSIGN',
+        data: {
+            step: currentAssignStep, // 'CHECK' hoặc 'REPAIR'
+            assignee: { email: email, name: name }
+        }
+    };
+
+    callApi('/repair/update', data)
+        .then(() => {
+            alert(`Đã giao việc cho ${name}!`);
+            closeModal('modalAssign');
+            viewTicketDetail(currentTicketId);
+        })
+        .catch(err => alert("Lỗi: " + err.message))
+        .finally(() => {
+            btn.innerText = 'Xác nhận Giao';
+            btn.disabled = false;
+        });
 }
 
 // --- LOGIC ACTION SHEET ẢNH ---

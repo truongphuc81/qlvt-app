@@ -548,6 +548,21 @@
         </div>
     </div>
 </div>
+<div id="modalAssign" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>👉 Phân Công Kỹ Thuật</h3>
+        <p>Chọn nhân sự thực hiện công đoạn này:</p>
+        
+        <select id="assign_tech_select" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;">
+            <option value="">-- Đang tải danh sách... --</option>
+        </select>
+
+        <div class="action-footer">
+            <button onclick="closeModal('modalAssign')" style="background:#ccc; color:#333;">Hủy</button>
+            <button onclick="submitAssignWork()" style="background:var(--primary-color);">Xác nhận Giao</button>
+        </div>
+    </div>
+</div>
   </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
   <script src="common.js"></script>

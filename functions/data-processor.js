@@ -1977,6 +1977,37 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
         logAction = 'Trả máy & Thu tiền';
         logDetails = `Thu: ${moneyFormatted}. Sổ: ${data.ticketNumber}. HT: ${data.method}`;
     }
+    else if (action === 'MANAGER_ASSIGN') {
+        const step = data.step; // 'CHECK' hoặc 'REPAIR'
+        const assignee = data.assignee; // Object { email, name }
+        
+        if (step === 'CHECK') {
+            updateData = {
+                currentStatus: 'Đang kiểm tra',
+                assignedTechCheck: {
+                    name: assignee.name,
+                    email: assignee.email,
+                    assignedBy: userName, // Người giao việc
+                    assignedAt: new Date().toISOString()
+                }
+            };
+            logAction = 'Giao việc Kiểm tra';
+            logDetails = `${userName} giao cho ${assignee.name}`;
+        } 
+        else if (step === 'REPAIR') {
+            updateData = {
+                currentStatus: 'Đang sửa',
+                assignedRepair: {
+                    name: assignee.name,
+                    email: assignee.email,
+                    assignedBy: userName,
+                    assignedAt: new Date().toISOString()
+                }
+            };
+            logAction = 'Giao việc Sửa chữa';
+            logDetails = `${userName} giao cho ${assignee.name}`;
+        }
+    }
 
     // Cập nhật Firestore
     if (Object.keys(updateData).length > 0) {
