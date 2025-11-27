@@ -1894,3 +1894,9 @@ div.mode-external .ext-only {
     .q-cost { background-color: #fff3e0; color: #e65100; border: 1px dashed #ff9800; }
     .q-price { background-color: #e8f5e9; color: #1b5e20; font-weight: bold; }
 }
+/* 1. HIỂN THỊ FULL TRANG (Bỏ thanh cuộn trong khối) */
+.table-scroll-container {
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+}

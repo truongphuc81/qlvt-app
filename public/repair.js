@@ -42,8 +42,13 @@ document.addEventListener('DOMContentLoaded', function(){
                 });
                 console.log("User Map loaded:", Object.keys(userMap).length);
                 
-                // Sau khi có từ điển thì mới load danh sách phiếu (để hiển thị tên cho đẹp)
-                loadTickets(); 
+                // Sau khi có từ điển tên thì mới tải lại danh sách phiếu để cập nhật tên hiển thị
+                // (Nếu đang ở trang chi tiết thì tải lại chi tiết)
+                if (currentTicketId) {
+                    viewTicketDetail(currentTicketId);
+                } else {
+                    loadTickets(); 
+                } 
             });
 
             showView('list');
@@ -442,11 +447,31 @@ function fetchTicketsAPI(isLoadMore) {
                 
                 // Màu sắc trạng thái
                 let statusClass = 'status-new'; 
-                if (t.currentStatus === 'Đang sửa') statusClass = 'status-warning'; 
+                if (t.currentStatus === 'Đang sửa' || t.currentStatus === 'Đang sửa ngoài') statusClass = 'status-warning'; 
                 if (t.currentStatus === 'Hoàn tất' || t.currentStatus === 'Đã trả') statusClass = 'status-success';
                 if (t.currentStatus === 'Trả máy không sửa') statusClass = 'status-danger';
                 
                 const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleString('vi-VN') : '';
+
+                // === [MỚI] LOGIC KIỂM TRA GIAO VIỆC ===
+                const myEmail = userEmail; // Email người đang đăng nhập
+                let myTaskLabel = '';
+                let rowStyle = '';
+
+                // 1. Kiểm tra: Được giao Kiểm tra VÀ đang ở trạng thái Kiểm tra
+                if (t.assignedTechCheck && t.assignedTechCheck.email === myEmail && t.currentStatus === 'Đang kiểm tra') {
+                    myTaskLabel = `<div style="margin-top:5px;"><span class="badge" style="background:#673ab7; color:#fff; font-size:11px;">👋 Cần bạn Kiểm tra</span></div>`;
+                    rowStyle = 'background-color: #f3e5f5;'; // Nền tím nhạt
+                }
+                // 2. Kiểm tra: Được giao Sửa chữa VÀ đang ở trạng thái Sửa
+                else if (t.assignedRepair && t.assignedRepair.email === myEmail && t.currentStatus === 'Đang sửa') {
+                    myTaskLabel = `<div style="margin-top:5px;"><span class="badge" style="background:#198754; color:#fff; font-size:11px;">👋 Cần bạn Sửa chữa</span></div>`;
+                    rowStyle = 'background-color: #e8f5e9;'; // Nền xanh nhạt
+                }
+                // ======================================
+
+                // Áp dụng màu nền nếu có việc
+                if(rowStyle) tr.setAttribute('style', rowStyle);
 
                 tr.innerHTML = `
                     <td style="font-weight:bold; color:var(--primary-color);">${t.ticketId}</td>
@@ -472,7 +497,9 @@ function fetchTicketsAPI(isLoadMore) {
                         </div>
                     </td>
                     
-                    <td><span class="badge ${statusClass}">${t.currentStatus}</span></td>
+                    <td>
+                        <span class="badge ${statusClass}">${t.currentStatus}</span>
+                        ${myTaskLabel} </td>
                     <td>${dateStr}</td>
                     <td>
                         <button class="btn-icon btn-view-detail" onclick="viewTicketDetail('${t.ticketId}')">
@@ -727,7 +754,6 @@ function renderTicketDetail(t) {
     const quoteBlock = document.getElementById('content_quotation');
     const quoteContainer = document.getElementById('block_quotation');
     const btnUpdateQuote = document.getElementById('btn_update_quote');
-    const saleLabel = t.quotation.saleName || userMap[t.quotation.saleEmail] || t.quotation.saleEmail;
     // 1. Kiểm tra Quyền hạn cơ bản
     const canUpdate = (userRoles.sale || userRoles.admin) && !isTicketLocked;
 
@@ -810,6 +836,13 @@ function renderTicketDetail(t) {
         }
         // ================================================
         const totalFormatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.quotation.totalPrice || 0);
+        // 1. Lấy thông tin an toàn
+        const qSaleEmail = t.quotation.saleEmail || '';
+        const qSaleName = t.quotation.saleName || '';
+        
+        // 2. Tra từ điển
+        const saleLabel = qSaleName || (userMap && userMap[qSaleEmail]) || qSaleEmail || '---';
+
         quoteBlock.innerHTML = `
             <div style="background:#fff3cd; padding:10px; border-radius:6px; border-left:4px solid #ffc107;">
                 <div style="margin-bottom:8px;">${itemsHtml}</div>
@@ -1121,7 +1154,6 @@ function renderTicketDetail(t) {
         rightPanel.appendChild(paymentContainer);
     }
     const paymentBlock = document.getElementById('content_payment');
-    const staffLabel = t.payment.staffName || userMap[t.payment.staffEmail] || t.payment.staffEmail;
     if ((t.currentStatus === 'Hoàn tất' || t.currentStatus === 'Đã trả') && t.payment) {
         paymentContainer.style.opacity = '1';
         const amount = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.payment.totalAmount);
@@ -1134,6 +1166,10 @@ function renderTicketDetail(t) {
             });
             photosHtml += `</div>`;
         }
+
+        const pStaffEmail = t.payment.staffEmail || '';
+        const pStaffName = t.payment.staffName || '';
+        const staffLabel = pStaffName || (userMap && userMap[pStaffEmail]) || pStaffEmail || '---';
 
         paymentBlock.innerHTML = `
             <div style="background:#e8f5e9; padding:10px; border-radius:6px; border-left:4px solid #2e7d32;">
@@ -1300,9 +1336,9 @@ function openUpdateModal(type) {
     else if (type === 'repair') {
         document.getElementById('repair_work').value = '';
         // Tự động điền bảo hành từ báo giá (nếu có)
-        if (currentTicketData && currentTicketData.quotation) {
-            document.getElementById('repair_warranty').value = currentTicketData.quotation.warranty || '';
-        }
+        // if (currentTicketData && currentTicketData.quotation) {
+        //     document.getElementById('repair_warranty').value = currentTicketData.quotation.warranty || '';
+        // }
         
         repairPhotos = [];
         document.getElementById('repairPhotoGrid').innerHTML = '';
@@ -1607,7 +1643,11 @@ function handleRepairPhotoSelect(input) {
 }
 async function submitRepairComplete() {
     const work = document.getElementById('repair_work').value.trim();
-    const warranty = document.getElementById('repair_warranty').value.trim();
+    // Mặc định lấy từ báo giá, nếu không có thì để trống
+    const warranty = (currentTicketData.quotation && currentTicketData.quotation.warranty) 
+                     ? currentTicketData.quotation.warranty 
+                     : "Theo quy định";
+    // --------------------------------------------------------------
     
     // Lấy nút bấm
     const btn = document.querySelector('#modalRepair button[onclick="submitRepairComplete()"]');
