@@ -12,6 +12,7 @@ let currentTicketData = null;
 let ticketQrScanner = null;
 let lastLoadedTicketId = null
 let userRoles = {};
+let userMap = {};
 // === AUTH & INIT ===
 document.addEventListener('DOMContentLoaded', function(){ 
     const authButton = document.getElementById('authButton');
@@ -25,14 +26,27 @@ document.addEventListener('DOMContentLoaded', function(){
             if (authButton) authButton.style.display = 'none';
             if (signOutButton) signOutButton.style.display = 'inline-block';
             document.getElementById('app-container').style.display = 'block';
+            // 1. Lấy Quyền
             callApi('/auth/getSelfRoles', {})
             .then(roles => {
                 userRoles = roles; // Lưu quyền vào biến toàn cục
                 console.log("User Roles:", userRoles);
                 // Sau khi có quyền thì mới load ticket (hoặc load lại giao diện nếu cần)
             });
+            // 2. [MỚI] Lấy Danh sách nhân viên để tra tên
+            callApi('/public/technicians')
+            .then(users => {
+                // Biến đổi mảng thành object cho dễ tra cứu: { 'a@gmail.com': 'Nguyễn Văn A' }
+                users.forEach(u => { 
+                    if(u.email && u.name) userMap[u.email] = u.name; 
+                });
+                console.log("User Map loaded:", Object.keys(userMap).length);
+                
+                // Sau khi có từ điển thì mới load danh sách phiếu (để hiển thị tên cho đẹp)
+                loadTickets(); 
+            });
+
             showView('list');
-            loadTickets();
         } else {
             if (authButton) {
                 authButton.style.display = 'inline-block';
@@ -713,7 +727,7 @@ function renderTicketDetail(t) {
     const quoteBlock = document.getElementById('content_quotation');
     const quoteContainer = document.getElementById('block_quotation');
     const btnUpdateQuote = document.getElementById('btn_update_quote');
-    
+    const saleLabel = t.quotation.saleName || userMap[t.quotation.saleEmail] || t.quotation.saleEmail;
     // 1. Kiểm tra Quyền hạn cơ bản
     const canUpdate = (userRoles.sale || userRoles.admin) && !isTicketLocked;
 
@@ -813,7 +827,7 @@ function renderTicketDetail(t) {
                 </div>
 
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Sale: <strong>${t.quotation.saleName || t.quotation.saleEmail}</strong>
+                    Sale: <strong>${saleLabel}</strong>
                 </div>
             </div>
         `;
@@ -1107,7 +1121,7 @@ function renderTicketDetail(t) {
         rightPanel.appendChild(paymentContainer);
     }
     const paymentBlock = document.getElementById('content_payment');
-
+    const staffLabel = t.payment.staffName || userMap[t.payment.staffEmail] || t.payment.staffEmail;
     if ((t.currentStatus === 'Hoàn tất' || t.currentStatus === 'Đã trả') && t.payment) {
         paymentContainer.style.opacity = '1';
         const amount = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.payment.totalAmount);
@@ -1134,7 +1148,7 @@ function renderTicketDetail(t) {
                 ${photosHtml}
                 
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Thu ngân: <strong>${t.payment.staffName || t.payment.staffEmail}</strong> - ${new Date(t.payment.date).toLocaleString('vi-VN')}
+                    Thu ngân: <strong>${staffLabel}</strong> - ${new Date(t.payment.date).toLocaleString('vi-VN')}
                 </div>
             </div>
         `;
