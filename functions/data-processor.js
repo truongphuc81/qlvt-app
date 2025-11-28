@@ -2163,3 +2163,177 @@ module.exports = {
     uploadInventoryBatch,
     getInventoryFromFirestore
 };
+
+/**
+ * [AUDIT] Cập nhật số lượng một vật tư trong phiên kiểm kho
+ */
+async function updateAuditItem({ db, auditId, itemCode, quantity, user }) {
+    if (!auditId || !itemCode || quantity === undefined) {
+        throw new Error("Thiếu thông tin auditId, itemCode hoặc quantity.");
+    }
+
+    const auditRef = db.collection('audit_sessions').doc(auditId);
+    const itemRef = auditRef.collection('items').doc(itemCode);
+
+    await db.runTransaction(async (transaction) => {
+        const itemDoc = await transaction.get(itemRef);
+
+        if (!itemDoc.exists) {
+            // Nếu vật tư chưa có trong phiên, tạo mới
+            transaction.set(itemRef, {
+                code: itemCode,
+                quantity: Number(quantity),
+                scannedBy: {
+                    [user.uid]: {
+                        email: user.email,
+                        quantity: Number(quantity)
+                    }
+                }
+            });
+        } else {
+            // Nếu vật tư đã có, cập nhật
+            const newQuantity = (itemDoc.data().quantity || 0) + Number(quantity);
+            const scannedByUpdate = {
+                [`scannedBy.${user.uid}.email`]: user.email,
+                [`scannedBy.${user.uid}.quantity`]: admin.firestore.FieldValue.increment(Number(quantity))
+            };
+            
+            transaction.update(itemRef, {
+                quantity: newQuantity,
+                ...scannedByUpdate
+            });
+        }
+    });
+
+    return { ok: true, message: `Updated item ${itemCode} in audit ${auditId}` };
+}
+
+/**
+ * [AUDIT] Kết thúc phiên kiểm kho và điều chỉnh kho
+ */
+async function finishAuditSession({ db, auditId, user }) {
+    if (!auditId) {
+        throw new Error("Thiếu auditId.");
+    }
+
+    const auditRef = db.collection('audit_sessions').doc(auditId);
+    const auditSnapshot = await auditRef.get();
+
+    if (!auditSnapshot.exists) {
+        throw new Error("Phiên kiểm kho không tồn tại.");
+    }
+
+    const auditData = auditSnapshot.data();
+    if (auditData.status === 'finished') {
+        throw new Error("Phiên kiểm kho đã kết thúc.");
+    }
+
+    const itemsRef = auditRef.collection('items');
+    const itemsSnapshot = await itemsRef.get();
+
+    const adjustments = [];
+    itemsSnapshot.forEach(doc => {
+        const item = doc.data();
+        adjustments.push({
+            code: item.code,
+            name: item.name || item.code, // Lấy tên nếu có
+            auditedQuantity: item.quantity,
+        });
+    });
+
+    const inventoryRef = db.collection('inventory');
+    const batch = db.batch();
+
+    const finalAdjustments = []; // Will store adjustments with current quantity and diff for future processing
+
+    for (const adj of adjustments) {
+        const itemInventoryRef = inventoryRef.doc(adj.code);
+        const itemInventorySnapshot = await itemInventoryRef.get();
+        const currentQuantity = itemInventorySnapshot.exists ? (itemInventorySnapshot.data().quantity || 0) : 0;
+        
+        const diff = adj.auditedQuantity - currentQuantity;
+
+        finalAdjustments.push({
+            code: adj.code,
+            name: adj.name,
+            auditedQuantity: adj.auditedQuantity,
+            currentSystemQuantity: currentQuantity, // Store current system quantity
+            difference: diff // Store the calculated difference
+        });
+
+        // REMOVED: Direct update to inventory collection and history_transactions
+        // This logic is now intended to be handled by a separate business process
+    }
+
+    // Đánh dấu phiên kiểm kho đã hoàn thành
+    batch.update(auditRef, {
+        status: 'finished',
+        finishedAt: new Date().toISOString(),
+        finishedBy: user.email,
+        finalAuditedItems: finalAdjustments // Store the audited items for later processing
+    });
+
+    await batch.commit();
+
+    return { ok: true, message: `Phiên kiểm kho ${auditId} đã kết thúc. Kết quả được lưu chờ xử lý nghiệp vụ.` };
+}
+
+// Xuất module
+module.exports = {
+    getTechnicianDashboardData,
+    getTechnicians,
+    getItemList,
+    submitTransaction,
+    getBorrowHistory,
+    getTicketRanges,
+    saveTicketRanges,
+    submitErrorReport,
+    processExcelData, 
+    saveExcelData, 
+    // consumeBorrowNote, // (Hàm này không còn cần thiết, logic đã gộp vào submitTransaction)
+    verifyAndRegisterUser,
+    rejectReturnNote,
+    getReturnHistory,
+    rejectBorrowNote,
+    getPendingCounts,
+    getSpeechAudio,
+    managerTransferItems,
+    getGlobalInventoryOverview,
+    fixNegativeInventory,
+    fixNegativeInventoryBatch, 
+    createRepairTicket,
+    getRepairTickets,
+    getRepairTicket, 
+    updateRepairTicket, // <-- THÊM DÒNG NÀY
+    updateTechnicianAvatar,
+    uploadInventoryBatch,
+    getInventoryFromFirestore,
+    updateAuditItem,
+    finishAuditSession,
+    resetAuditSession
+};
+
+/**
+ * [AUDIT] Xóa toàn bộ kết quả kiểm kê của một phiên
+ */
+async function resetAuditSession({ db, auditId }) {
+    if (!auditId) {
+        throw new Error("Thiếu auditId.");
+    }
+
+    const itemsRef = db.collection('audit_sessions').doc(auditId).collection('items');
+    const itemsSnapshot = await itemsRef.get();
+
+    if (itemsSnapshot.empty) {
+        return { ok: true, message: "Phiên kiểm kho đã trống." };
+    }
+
+    const batch = db.batch();
+    itemsSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+
+    await batch.commit();
+
+    return { ok: true, message: `Đã xóa toàn bộ ${itemsSnapshot.size} vật tư khỏi phiên kiểm kho ${auditId}.` };
+}

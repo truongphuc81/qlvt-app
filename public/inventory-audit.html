@@ -95,7 +95,9 @@
                             </li>
                         </ul>
                         <div class="d-grid gap-2 mt-3">
-                            <button class="btn btn-success" onclick="finishAudit()">✅ Hoàn Tất & Lưu Kết Quả</button>
+                            <button class="btn btn-success" id="finishAuditBtn" onclick="finishAudit()">✅ Hoàn Tất & Lưu Kết Quả</button>
+                            <button class="btn btn-info mt-2" id="exportDiffExcelBtn" onclick="exportDifferencesToExcel()" style="display:none;">📊 Xuất Excel Chênh Lệch</button>
+                            <button class="btn btn-primary mt-2" id="newAuditBtn" onclick="startNewAuditSession()" style="display:none;">✨ Kiểm Kê Mới</button>
                             <button class="btn btn-secondary" onclick="resetAudit()">🔄 Làm Lại</button>
                         </div>
                     </div>

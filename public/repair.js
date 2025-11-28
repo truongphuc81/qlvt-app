@@ -103,29 +103,29 @@ function showView(viewName) {
     const btnShowCreate = document.getElementById('btnShowCreate');
 
     // 1. Ẩn tất cả các view trước
-    listView.style.display = 'none';
-    createView.style.display = 'none';
+    if (listView) listView.style.display = 'none';
+    if (createView) createView.style.display = 'none';
     if (detailView) detailView.style.display = 'none';
 
     // 2. Xử lý hiển thị theo từng View
     if (viewName === 'list') {
         // --- ĐANG Ở DANH SÁCH ---
-        listView.style.display = 'block';
+        if (listView) listView.style.display = 'block';
         
         // Header: Hiện nút "+ Tạo Mới", Ẩn nút "Danh sách" (vì đang ở đây rồi)
-        btnShowCreate.style.display = 'inline-block';
-        btnShowList.style.display = 'none';
+        if (btnShowCreate) btnShowCreate.style.display = 'inline-block';
+        if (btnShowList) btnShowList.style.display = 'none';
         
         fetchTicketsAPI(false); 
     } 
     else if (viewName === 'create') {
         // --- ĐANG TẠO MỚI ---
-        createView.style.display = 'block';
+        if (createView) createView.style.display = 'block';
         
         // Header: Ẩn HẾT nút điều hướng cho gọn
         // (Người dùng sẽ bấm nút "Hủy" ở cuối form để quay lại)
-        btnShowCreate.style.display = 'none';
-        btnShowList.style.display = 'none';
+        if (btnShowCreate) btnShowCreate.style.display = 'none';
+        if (btnShowList) btnShowList.style.display = 'none';
         
         resetCreateForm();
     } else if (viewName === 'detail') {
@@ -133,10 +133,10 @@ function showView(viewName) {
         if (detailView) detailView.style.display = 'block';
         
         // Hiện nút Tạo Mới (để tạo nhanh)
-        btnShowCreate.style.display = 'inline-block'; // <-- HIỆN LẠI
+        if (btnShowCreate) btnShowCreate.style.display = 'inline-block'; // <-- HIỆN LẠI
         
         // Vẫn ẩn nút Danh sách (để đỡ chật, dùng nút Quay lại ở dưới)
-        btnShowList.style.display = 'none';
+        if (btnShowList) btnShowList.style.display = 'none';
     }
 }
 
@@ -169,7 +169,7 @@ function handlePhotoSelect(input) {
 
     // Giới hạn tối đa 5 ảnh
     if (selectedPhotos.length + files.length > 5) {
-        alert("Chỉ được phép tải lên tối đa 5 ảnh.");
+        Swal.fire("Chỉ được phép tải lên tối đa 5 ảnh.");
         return;
     }
 
@@ -252,7 +252,7 @@ async function submitTicket(isPrint) {
     const customerDesc = document.getElementById('customerDesc').value.trim();
     
     if (!custName || !custPhone || !customerDesc) {
-        alert("Vui lòng nhập Tên khách, SĐT và Lỗi mô tả (*)");
+        Swal.fire("Vui lòng nhập Tên khách, SĐT và Lỗi mô tả (*)");
         return;
     }
 
@@ -313,7 +313,7 @@ async function submitTicket(isPrint) {
         // 4. Gọi API Backend
         const result = await callApi('/repair/create', ticketData);
         
-        alert(`Tạo phiếu thành công! Mã phiếu: ${result.ticketId}`);
+        Swal.fire("Thành công", `Tạo phiếu thành công! Mã phiếu: ${result.ticketId}`, "success");
         
         if (isPrint) {
             callApi('/repair/detail', { ticketId: result.ticketId })
@@ -323,7 +323,7 @@ async function submitTicket(isPrint) {
             })
             .catch(err => {
                 console.error("Lỗi tải chi tiết phiếu để in:", err);
-                alert("Lỗi tải chi tiết phiếu để in: " + err.message);
+                Swal.fire("Lỗi", "Lỗi tải chi tiết phiếu để in: " + err.message);
             });
         }
         
@@ -331,7 +331,7 @@ async function submitTicket(isPrint) {
 
     } catch (error) {
         console.error("Lỗi tạo phiếu:", error);
-        alert("Lỗi tạo phiếu: " + error.message);
+        Swal.fire("Lỗi", "Lỗi tạo phiếu: " + error.message);
     } finally {
         spinner.style.display = 'none';
     }
@@ -479,7 +479,7 @@ function fetchTicketsAPI(isLoadMore) {
             if (!isLoadMore) {
                 tbody.innerHTML = `<tr><td colspan="6" class="text-center error">Lỗi tải dữ liệu: ${err.message}</td></tr>`;
             } else {
-                alert("Lỗi tải thêm: " + err.message);
+                Swal.fire("Lỗi", "Lỗi tải thêm: " + err.message, "error");
                 if (btnMore) {
                     btnMore.innerText = 'Tải thêm (Lỗi)';
                     btnMore.disabled = false;
@@ -504,7 +504,7 @@ function viewTicketDetail(ticketId) {
         })
         .catch(err => {
             console.error(err);
-            alert("Lỗi tải chi tiết phiếu: " + err.message);
+            Swal.fire("Lỗi", "Lỗi tải chi tiết phiếu: " + err.message, "error");
             showView('list'); // Quay về nếu lỗi
         });
 }
@@ -1264,7 +1264,7 @@ function openUpdateModal(type) {
         document.getElementById('checkPhotoGrid').innerHTML = '';
         
         // Mở Modal
-        document.getElementById('modalTechCheck').style.display = 'flex';
+        new bootstrap.Modal(document.getElementById('modalTechCheck')).show();
     }
     else if (type === 'quote') {
         const techInfo = document.getElementById('content_techCheck').innerText;
@@ -1273,7 +1273,7 @@ function openUpdateModal(type) {
         // Xóa trắng bảng cũ
         document.getElementById('quoteItemsBody').innerHTML = '';
         
-        const techSolution = currentTicketData.techCheck ? currentTicketData.techCheck.solution : '';
+        const techSolution = currentTicketData && currentTicketData.techCheck ? currentTicketData.techCheck.solution : '';
 
         // === LOGIC 1: TỰ ĐỘNG ĐIỀN CHO CA "KHÔNG SỬA ĐƯỢC" ===
         if (techSolution === 'Không sửa được') {
@@ -1353,7 +1353,7 @@ function openUpdateModal(type) {
         // ======================================================
 
         calculateQuoteTotal(); // Tính tổng tiền lần đầu
-        document.getElementById('modalQuote').style.display = 'flex'; // Hiện Modal
+        new bootstrap.Modal(document.getElementById('modalQuote')).show();
     }
     else if (type === 'repair') {
         document.getElementById('repair_work').value = '';
@@ -1365,7 +1365,7 @@ function openUpdateModal(type) {
         repairPhotos = [];
         document.getElementById('repairPhotoGrid').innerHTML = '';
         
-        document.getElementById('modalRepair').style.display = 'flex';
+        new bootstrap.Modal(document.getElementById('modalRepair')).show();
     }
     else if (type === 'return') {
         let finalPrice = 0;
@@ -1397,7 +1397,7 @@ function openUpdateModal(type) {
         returnPhotos = [];
         document.getElementById('returnPhotoGrid').innerHTML = '';
         
-        document.getElementById('modalReturn').style.display = 'flex';
+        new bootstrap.Modal(document.getElementById('modalReturn')).show();
     }
 }
 async function submitQuote() {
@@ -1420,7 +1420,7 @@ async function submitQuote() {
     });
 
     if (items.length === 0) {
-        alert("Vui lòng nhập ít nhất 1 linh kiện/dịch vụ.");
+        Swal.fire("Vui lòng nhập ít nhất 1 linh kiện/dịch vụ.");
         return;
     }
 
@@ -1456,11 +1456,11 @@ async function submitQuote() {
 
     callApi('/repair/update', data)
         .then(() => {
-            alert("Đã gửi báo giá thành công!");
+            Swal.fire("Đã gửi báo giá thành công!");
             closeModal('modalQuote');
             viewTicketDetail(currentTicketId);
         })
-        .catch(err => alert("Lỗi: " + err.message))
+        .catch(err => Swal.fire("Lỗi", "Lỗi: " + err.message, "error"))
         .finally(() => { 
             // === KẾT THÚC LOADING ===
             btn.disabled = false;
@@ -1468,7 +1468,11 @@ async function submitQuote() {
         });
 }
 function closeModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
+    const modalElement = document.getElementById(modalId);
+    const modalInstance = bootstrap.Modal.getInstance(modalElement);
+    if (modalInstance) {
+        modalInstance.hide();
+    }
 }
 
 // Xử lý ảnh cho Modal Kiểm tra (Tương tự ảnh lúc tạo)
@@ -1500,7 +1504,7 @@ async function submitTechCheck() {
     const originalText = btn.innerText;
 
     if (!cause) {
-        alert("Vui lòng nhập nguyên nhân lỗi.");
+        Swal.fire("Lỗi", "Vui lòng nhập nguyên nhân lỗi.", "warning");
         return;
     }
 
@@ -1535,13 +1539,13 @@ async function submitTechCheck() {
         
         await callApi('/repair/update', data);
         
-        alert("Cập nhật kiểm tra thành công!");
+        Swal.fire("Thành công", "Cập nhật kiểm tra thành công!", "success");
         closeModal('modalTechCheck');
         viewTicketDetail(currentTicketId);
 
     } catch (err) {
         console.error(err);
-        alert("Lỗi: " + err.message);
+        Swal.fire("Lỗi", "Lỗi: " + err.message, "error");
     } finally {
         // === KẾT THÚC LOADING ===
         btn.disabled = false;
@@ -1642,10 +1646,10 @@ async function confirmCustomerChoice(isAgreed) {
 
     callApi('/repair/update', data)
         .then(() => {
-            alert("Đã cập nhật trạng thái: " + actionName);
+            Swal.fire("Thành công", "Đã cập nhật trạng thái: " + actionName, "success");
             viewTicketDetail(currentTicketId); // Tải lại
         })
-        .catch(err => alert("Lỗi: " + err.message))
+        .catch(err => Swal.fire("Lỗi", "Lỗi: " + err.message, "error"))
         .finally(() => { if(spinner) spinner.style.display = 'none'; });
 }
 // Xử lý ảnh sửa chữa
@@ -1676,7 +1680,7 @@ async function submitRepairComplete() {
     const originalText = btn.innerText;
 
     if (!work) {
-        alert("Vui lòng nhập nội dung công việc đã làm.");
+        Swal.fire("Lỗi", "Vui lòng nhập nội dung công việc đã làm.", "warning");
         return;
     }
 
@@ -1709,12 +1713,11 @@ async function submitRepairComplete() {
 
         await callApi('/repair/update', data);
         
-        alert("Đã cập nhật trạng thái: Sửa xong / Chờ trả máy!");
+        Swal.fire("Thành công", "Đã cập nhật trạng thái: Sửa xong / Chờ trả máy!", "success");
         closeModal('modalRepair');
         viewTicketDetail(currentTicketId);
 
-    } catch(err) {
-        alert("Lỗi: " + err.message);
+Swal.fire("Lỗi", "Lỗi: " + err.message, "error");
     } finally {
         // === KẾT THÚC LOADING ===
         btn.disabled = false;
@@ -1745,8 +1748,8 @@ async function submitReturnDevice() {
     const btn = document.querySelector('#modalReturn button[onclick="submitReturnDevice()"]');
     const originalText = btn.innerText;
 
-    if (!amount) { alert("Vui lòng nhập số tiền thực thu."); return; }
-    if (!ticketNum) { alert("Vui lòng nhập Số sổ 3 liên."); return; }
+    if (!amount) { Swal.fire("Lỗi", "Vui lòng nhập số tiền thực thu.", "warning"); return; }
+    if (!ticketNum) { Swal.fire("Lỗi", "Vui lòng nhập Số sổ 3 liên.", "warning"); return; }
 
     // === BẮT ĐẦU LOADING ===
     btn.disabled = true;
@@ -1779,12 +1782,12 @@ async function submitReturnDevice() {
 
         await callApi('/repair/update', data);
         
-        alert("Đã trả máy thành công! Phiếu đã hoàn tất.");
+        Swal.fire("Thành công", "Đã trả máy thành công! Phiếu đã hoàn tất.", "success");
         closeModal('modalReturn');
         viewTicketDetail(currentTicketId);
 
     } catch (err) {
-        alert("Lỗi: " + err.message);
+        Swal.fire("Lỗi", "Lỗi: " + err.message, "error");
     } finally {
         // === KẾT THÚC LOADING ===
         btn.disabled = false;
@@ -1819,7 +1822,7 @@ function applyExternalPriceToTable() {
     
     const total = cost + ship + profit;
     
-    if (total <= 0) { alert("Vui lòng nhập chi phí."); return; }
+    if (total <= 0) { Swal.fire("Lỗi", "Vui lòng nhập chi phí.", "warning"); return; }
 
     // Xóa bảng cũ
     document.getElementById('quoteItemsBody').innerHTML = '';
@@ -1846,7 +1849,7 @@ function openExternalModal(type) {
         }
         document.getElementById('ext_send_unit').value = unitName;
         document.getElementById('ext_send_note').value = '';
-        document.getElementById('modalExtSend').style.display = 'flex';
+        new bootstrap.Modal(document.getElementById('modalExtSend')).show();
     } 
     else if (type === 'RECEIVE') {
         // Kiểm tra xem khách có hủy không
@@ -1896,7 +1899,7 @@ function openExternalModal(type) {
         }
 
         document.getElementById('ext_qc_note').value = '';
-        document.getElementById('modalExtReceive').style.display = 'flex';
+        new bootstrap.Modal(document.getElementById('modalExtReceive')).show();
     }
 }
 
@@ -1926,12 +1929,11 @@ async function submitExternalAction(subType) {
 
     callApi('/repair/update', data)
         .then(() => {
-            alert("Cập nhật trạng thái thành công!");
+            Swal.fire("Thành công", "Cập nhật trạng thái thành công!", "success");
             closeModal('modalExtSend');
-            closeModal('modalExtReceive');
             viewTicketDetail(currentTicketId);
         })
-        .catch(err => alert("Lỗi: " + err.message))
+        .catch(err => Swal.fire("Lỗi", "Lỗi: " + err.message, "error"))
         .finally(() => { if(spinner) spinner.style.display = 'none'; });
 }
 /**
@@ -1951,11 +1953,7 @@ async function triggerOrderParts() {
     };
 
     callApi('/repair/update', data)
-        .then(() => {
-            alert("Đã chuyển sang trạng thái: Chờ đặt hàng.");
-            viewTicketDetail(currentTicketId);
-        })
-        .catch(err => alert("Lỗi: " + err.message))
+        .catch(err => Swal.fire("Lỗi", "Lỗi: " + err.message, "error"))
         .finally(() => { if(spinner) spinner.style.display = 'none'; });
 }
 
@@ -1976,7 +1974,7 @@ async function triggerPartsArrived() {
 
     callApi('/repair/update', data)
         .then(() => {
-            alert("Đã cập nhật: Linh kiện đã về. KTV có thể sửa.");
+            Swal.fire("Thành công", "Đã cập nhật: Linh kiện đã về. KTV có thể sửa.", "success");
             viewTicketDetail(currentTicketId);
         })
         .catch(err => alert("Lỗi: " + err.message))
@@ -1990,7 +1988,7 @@ async function openAssignModal(step) {
     const select = document.getElementById('assign_tech_select');
     select.innerHTML = '<option>Đang tải...</option>';
     
-    document.getElementById('modalAssign').style.display = 'flex';
+    new bootstrap.Modal(document.getElementById('modalAssign')).show();
 
     try {
         // Gọi API lấy danh sách KTV (Đã có sẵn từ auditor.js, dùng lại)

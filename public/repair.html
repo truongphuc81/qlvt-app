@@ -1,573 +1,650 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <title>Quản Lý Sửa Chữa</title>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
-  <link rel="stylesheet" href="styles.css?v=2">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản Lý Dịch Vụ Sửa Chữa</title>
   <link rel="icon" href="/logo.png" type="image/png">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <link rel="stylesheet" href="styles2.css?v=3">
 
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <script>
-    // Copy cấu hình Firebase Config từ index.html
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+  <script>
+    // Config Firebase (Giữ nguyên)
     const firebaseConfig = {
         apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
         authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
         projectId: "quan-ly-vat-tu-backend",
         storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app", 
         messagingSenderId: "323292129107",
-        appId: "1:323292129107:web:8e467d10c217197b9b63a6",
-        measurementId: "G-N3VLYSXTR8"
+        appId: "1:323292129107:web:8e467d10c217197b9b63a6"
     };
-    const firebaseApp = firebase.initializeApp(firebaseConfig);
-    const auth = firebaseApp.auth();
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
     const db = firebase.firestore();
-    const storage = firebase.storage(); // Khởi tạo Storage
+    const storage = firebase.storage();
   </script>
 </head>
-<body>
-  <div class="main-header">
-    <div class="brand-row">
-        <div class="brand-left">
-            <img src="logo.png" alt="Logo" class="header-logo">
-            <h3 class="header-title">Dịch Vụ Sửa Chữa</h3>
-        </div>
-        <div class="brand-right">
-             <button id="authButton" class="btn-login" style="display:none;">Đăng nhập</button>
-             <button id="signOutButton" class="btn-logout" style="display:none;" onclick="firebase.auth().signOut().then(() => { window.location.href = 'index.html'; })">Đăng xuất</button>
+<body class="bg-light">
+
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm sticky-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="index.html">
+            <i class="fas fa-tools me-2"></i> DỊCH VỤ SỬA CHỮA
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link active" id="btnShowList" href="#" onclick="showView('list')"><i class="fas fa-list"></i> Danh sách</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="btnShowCreate" href="#" onclick="showView('create')"><i class="fas fa-plus-circle"></i> Tiếp nhận mới</a>
+                </li>
+            </ul>
+            <div class="d-flex align-items-center text-white">
+                <span id="userDisplay" class="me-3 d-none d-md-block">Loading...</span>
+                <button id="authButton" class="btn btn-light btn-sm fw-bold text-primary">Đăng nhập</button>
+                <button id="signOutButton" class="btn btn-outline-light btn-sm" style="display:none;" onclick="firebase.auth().signOut()">Đăng xuất</button>
+            </div>
         </div>
     </div>
-    <div class="nav-grid">
-        <a href="index.html" class="nav-item-link">
-            <button class="nav-btn" style="background-color: var(--secondary-color) !important;">&lt; Trang Chủ</button>
-        </a>
-        <button id="btnShowList" class="nav-btn btn-manager" onclick="showView('list')" style="display:none;">Danh Sách Phiếu</button>
-        <button id="btnShowCreate" class="nav-btn btn-add" onclick="showView('create')">+ Tạo Phiếu Mới</button>
+  </nav>
+
+  <div id="app-container" class="container-fluid mt-4" style="display:none;">
+    
+    <div id="listView">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="row g-2 mb-3 align-items-center">
+                    <div class="col-md-6 col-12">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                            <input type="text" id="searchTicket" class="form-control" placeholder="Tìm Mã phiếu, SĐT, Tên khách...">
+                            <button class="btn btn-outline-secondary" onclick="startTicketQrScanner()"><i class="fas fa-qrcode"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-4 col-12">
+                        <select id="filterStatus" class="form-select">
+                            <option value="" selected>-- Tất cả trạng thái --</option>
+                            <option value="Chưa hoàn tất">Đang xử lý (Chưa hoàn tất)</option>
+                            <option value="Hoàn tất">Đã hoàn tất</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 col-12 d-grid">
+                        <button class="btn btn-primary" onclick="loadTickets()">Lọc Dữ Liệu</button>
+                    </div>
+                </div>
+
+                <div class="table-responsive" style="min-height: 400px;">
+                    <table class="table table-hover table-striped align-middle" id="ticketTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã Phiếu</th>
+                                <th>Khách Hàng</th>
+                                <th>Thiết Bị & Lỗi</th>
+                                <th>Trạng Thái</th>
+                                <th class="d-none d-md-table-cell">Ngày Nhận</th>
+                                <th class="text-center">Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketTableBody">
+                            <tr><td colspan="6" class="text-center text-muted py-4">Đang tải dữ liệu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-grid mt-3">
+                    <button id="loadMoreTickets" class="btn btn-light border" onclick="loadMoreTickets()">Tải thêm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="createView" style="display:none;">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 text-primary"><i class="fas fa-file-alt me-2"></i> Tạo Phiếu Tiếp Nhận</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="text-muted text-uppercase fw-bold mb-3">1. Khách Hàng & Thiết Bị</h6>
+                        <div class="mb-3">
+                            <label class="form-label">Tên khách hàng <span class="text-danger">*</span></label>
+                            <input type="text" id="custName" class="form-control" placeholder="VD: Nguyễn Văn A">
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
+                                <input type="tel" id="custPhone" class="form-control" placeholder="09xxxxxxxx">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Địa chỉ</label>
+                                <input type="text" id="custAddress" class="form-control" placeholder="Quận/Huyện...">
+                            </div>
+                        </div>
+                        <hr class="border-secondary opacity-10">
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <label class="form-label">Loại máy</label>
+                                <select id="deviceType" class="form-select">
+                                    <option value="Laptop">Laptop</option>
+                                    <option value="PC">PC/Máy bàn</option>
+                                    <option value="Printer">Máy in</option>
+                                    <option value="Phone">Điện thoại</option>
+                                    <option value="Other">Khác</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">Hãng</label>
+                                <input type="text" id="deviceBrand" class="form-control" placeholder="Dell...">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">Model</label>
+                                <input type="text" id="deviceModel" class="form-control" placeholder="XPS 15...">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Serial / IMEI / Service Tag</label>
+                            <input type="text" id="deviceSerial" class="form-control text-uppercase" placeholder="Nhập số serial...">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Phụ kiện đi kèm</label>
+                            <div class="d-flex gap-3 flex-wrap mb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input acc-check" type="checkbox" value="Sạc" id="chkSac">
+                                    <label class="form-check-label" for="chkSac">Sạc</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input acc-check" type="checkbox" value="Chuột" id="chkChuot">
+                                    <label class="form-check-label" for="chkChuot">Chuột</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input acc-check" type="checkbox" value="Túi" id="chkTui">
+                                    <label class="form-check-label" for="chkTui">Túi</label>
+                                </div>
+                            </div>
+                            <input type="text" id="deviceAccessories" class="form-control form-control-sm" placeholder="Ghi chú phụ kiện khác...">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6 border-start-md">
+                        <h6 class="text-muted text-uppercase fw-bold mb-3">2. Tình Trạng & Hình Ảnh</h6>
+                        <div class="mb-3">
+                            <label class="form-label">Mô tả lỗi (Khách báo) <span class="text-danger">*</span></label>
+                            <textarea id="customerDesc" class="form-control" rows="3" placeholder="Máy không lên nguồn, màn hình sọc..."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Ngoại hình máy</label>
+                            <textarea id="physicalDesc" class="form-control" rows="2" placeholder="Trầy xước góc, móp vỏ..."></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Hình ảnh tiếp nhận</label>
+                            <div class="d-grid">
+                                <button type="button" class="btn btn-outline-primary dashed-border" onclick="openPhotoActionSheet('photoInput')">
+                                    <i class="fas fa-camera fa-2x mb-2"></i><br>Chụp hoặc Chọn Ảnh
+                                </button>
+                            </div>
+                            <input type="file" id="photoInput_Cam" accept="image/*" capture="environment" class="d-none" onchange="handlePhotoSelect(this)">
+                            <input type="file" id="photoInput_Gal" accept="image/*" multiple class="d-none" onchange="handlePhotoSelect(this)">
+                            
+                            <div id="photoPreviewGrid" class="photo-grid mt-3"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Ghi chú nội bộ</label>
+                            <textarea id="internalNote" class="form-control bg-light" rows="1" placeholder="Lưu ý cho kỹ thuật..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-white py-3 d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" onclick="showView('list')">Hủy bỏ</button>
+                <button class="btn btn-primary" onclick="submitTicket(false)"><i class="fas fa-save"></i> Lưu Phiếu</button>
+                <button class="btn btn-success" onclick="submitTicket(true)"><i class="fas fa-print"></i> Lưu & In</button>
+            </div>
+            <div id="createSpinner" class="text-center py-2" style="display:none;">
+                <div class="spinner-border text-primary" role="status"></div> <span>Đang xử lý...</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="detailView" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <button class="btn btn-outline-secondary btn-sm" onclick="showView('list')"><i class="fas fa-arrow-left"></i> Quay lại</button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-dark btn-sm" onclick="printTicket()"><i class="fas fa-receipt"></i> In Biên Nhận</button>
+                <button class="btn btn-warning btn-sm" onclick="printDeviceLabel()"><i class="fas fa-tag"></i> In Tem Dán</button>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0"><i class="fas fa-info-circle"></i> Thông Tin Phiếu <span id="d_ticketId" class="fw-bold bg-white text-primary px-2 rounded ms-2">...</span></h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-1 text-muted small"><i class="far fa-clock"></i> Ngày nhận: <span id="d_createdAt" class="text-dark">...</span></p>
+                        <p class="mb-3 text-muted small"><i class="fas fa-user-tag"></i> Người nhận: <span id="d_receiver" class="text-dark">...</span></p>
+                        
+                        <h6 class="text-primary border-bottom pb-1">Khách hàng</h6>
+                        <p class="mb-1 fw-bold" id="d_custName">...</p>
+                        <p class="mb-1 text-primary"><i class="fas fa-phone-alt"></i> <span id="d_custPhone">...</span></p>
+                        <p class="small text-muted" id="d_custAddress">...</p>
+
+                        <h6 class="text-primary border-bottom pb-1 mt-3">Thiết bị</h6>
+                        <p class="mb-1 fw-bold" id="d_deviceInfo">...</p>
+                        <p class="mb-1 small">SN: <span id="d_deviceSerial" class="font-monospace">...</span></p>
+                        <p class="mb-1 small fst-italic text-muted">PK: <span id="d_accessories">...</span></p>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white">
+                        <h6 class="mb-0 text-muted">Tình trạng ban đầu</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-light border mb-2">
+                            <strong>Khách báo:</strong> <span id="d_issueDesc">...</span>
+                        </div>
+                        <p class="small text-muted mb-2">Ngoại hình: <span id="d_physicalDesc">...</span></p>
+                        
+                        <h6 class="small text-muted mt-3">Ảnh tiếp nhận:</h6>
+                        <div id="d_receivePhotos" class="photo-grid"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-body p-3">
+                        <div class="timeline-wrapper">
+                            <div class="timeline-steps">
+                                <div class="step active" id="step_new"><div class="step-circle">1</div><div class="step-label">Tiếp nhận</div></div>
+                                <div class="step" id="step_check"><div class="step-circle">2</div><div class="step-label">Kiểm tra</div></div>
+                                <div class="step" id="step_quote"><div class="step-circle">3</div><div class="step-label">Báo giá</div></div>
+                                <div class="step" id="step_repair"><div class="step-circle">4</div><div class="step-label">Sửa chữa</div></div>
+                                <div class="step" id="step_done"><div class="step-circle">5</div><div class="step-label">Hoàn tất</div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="vstack gap-3">
+                    
+                    <div class="card shadow-sm border-0" id="block_techCheck">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 text-primary fw-bold"><i class="fas fa-stethoscope"></i> Kỹ Thuật Kiểm Tra</h6>
+                            <button id="btn_update_check" class="btn btn-sm btn-outline-primary" onclick="openUpdateModal('check')">Cập nhật</button>
+                        </div>
+                        <div class="card-body" id="content_techCheck">...</div>
+                    </div>
+
+                    <div class="card shadow-sm border-0 border-warning" id="block_external_logistics" style="display:none; background-color: #fffaf0;">
+                        <div class="card-header bg-transparent border-0 pb-0">
+                            <h6 class="mb-0 text-warning fw-bold"><i class="fas fa-truck"></i> Điều Phối Gửi Ngoài</h6>
+                        </div>
+                        <div class="card-body" id="content_external_logistics">...</div>
+                    </div>
+
+                    <div class="card shadow-sm border-0" id="block_quotation">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0 text-success fw-bold"><i class="fas fa-file-invoice-dollar"></i> Báo Giá Sửa Chữa</h6>
+                            <button id="btn_update_quote" class="btn btn-sm btn-success" onclick="openUpdateModal('quote')">Lên Báo Giá</button>
+                        </div>
+                        <div class="card-body" id="content_quotation">...</div>
+                    </div>
+
+                    <div class="card shadow-sm border-0" id="block_repair">
+                        <div class="card-header bg-white">
+                            <h6 class="mb-0 text-info fw-bold"><i class="fas fa-wrench"></i> Quá Trình Sửa Chữa</h6>
+                        </div>
+                        <div class="card-body" id="content_repair">...</div>
+                    </div>
+
+                    <div class="card shadow-sm border-0" id="block_payment">
+                        <div class="card-header bg-white">
+                            <h6 class="mb-0 text-dark fw-bold"><i class="fas fa-cash-register"></i> Trả Máy & Thanh Toán</h6>
+                        </div>
+                        <div class="card-body" id="content_payment">...</div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+  </div> <div class="modal fade" id="ticketQrModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Quét Mã Phiếu</h5>
+                <button type="button" class="btn-close" onclick="stopTicketQrScanner()"></button>
+            </div>
+            <div class="modal-body text-center p-0">
+                <div id="ticket-qr-reader" style="width:100%;"></div>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button class="btn btn-secondary btn-sm" onclick="stopTicketQrScanner()">Đóng</button>
+            </div>
+        </div>
     </div>
   </div>
 
-  <div id="app-container" style="display:none;"> <div id="listView" class="form-section">
-        <div class="filter-bar">
-            <div style="display:flex; flex:2; gap:5px;">
-                <input type="text" id="searchTicket" placeholder="🔍 Tìm Mã phiếu / SĐT..." style="width:100%; height:45px;">
-                <button onclick="startTicketQrScanner()" class="btn-icon" style="width:50px; justify-content:center; height:45px; background:#6c757d;" title="Quét mã phiếu">
-                    📷
-                </button>
+  <div class="modal fade" id="modalTechCheck" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-stethoscope"></i> Cập Nhật Kết Quả Kiểm Tra</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            
-            <select id="filterStatus" style="flex: 1; height:45px;">
-                <option value="" selected>-- Tất cả trạng thái --</option>
-                <option value="Chưa hoàn tất">Chưa hoàn tất (Đang xử lý)</option>
-                <option value="Hoàn tất">Đã hoàn tất</option>
-            </select>
-
-        </div>
-
-        <div id="ticketQrModal" class="modal-overlay" style="display:none;">
-            <div class="modal-content" style="text-align:center;">
-                <h3>Quét Mã Phiếu</h3>
-                <div id="ticket-qr-reader" style="width:100%;"></div>
-                <button onclick="stopTicketQrScanner()" style="margin-top:15px; background:#ccc; color:#333;">Đóng Camera</button>
-            </div>
-        </div>
-        <div class="table-scroll-container">
-            <table id="ticketTable">
-                <thead>
-                    <tr>
-                        <th>Mã Phiếu</th>
-                        <th>Khách Hàng</th>
-                        <th>Thiết Bị</th>
-                        <th>Trạng Thái</th>
-                        <th>Ngày Nhận</th>
-                        <th>Chi Tiết</th>
-                    </tr>
-                </thead>
-                <tbody id="ticketTableBody">
-                    <tr><td colspan="6" class="text-center">Đang tải dữ liệu...</td></tr>
-                </tbody>
-            </table>
-        </div>
-        <button id="loadMoreTickets" class="load-more-button" onclick="loadMoreTickets()">Tải thêm</button>
-    </div>
-
-    <div id="createView" class="form-section" style="display:none;">
-        <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px;">Tạo Phiếu Tiếp Nhận Mới</h3>
-        
-        <div class="borrow-layout">
-            <div class="left-panel">
-                <h4>1. Thông Tin Khách Hàng</h4>
-                <div class="control-group">
-                    <label>Tên khách hàng (*):</label>
-                    <input type="text" id="custName" placeholder="VD: Nguyễn Văn A">
-                    
-                    <label>Số điện thoại (*):</label>
-                    <input type="tel" id="custPhone" placeholder="VD: 0912345678">
-                    
-                    <label>Địa chỉ:</label>
-                    <input type="text" id="custAddress" placeholder="Địa chỉ (Tùy chọn)">
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Nguyên nhân lỗi (*)</label>
+                    <textarea id="check_cause" class="form-control" rows="3" placeholder="VD: Mainboard bị chạm nguồn..."></textarea>
                 </div>
-
-                <h4>2. Thông Tin Thiết Bị</h4>
-                <div class="control-group">
-                    <label>Loại thiết bị:</label>
-                    <select id="deviceType">
-                        <option value="Laptop">Laptop</option>
-                        <option value="PC">PC / Máy bàn</option>
-                        <option value="Printer">Máy in</option>
-                        <option value="Phone">Điện thoại</option>
-                        <option value="Other">Khác</option>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Đề xuất xử lý</label>
+                    <select id="check_solution" class="form-select">
+                        <option value="Sửa chữa">Sửa chữa / Thay thế</option>
+                        <option value="Cài đặt">Cài đặt phần mềm</option>
+                        <option value="Gửi sửa ngoài">Gửi sửa ngoài</option>
+                        <option value="Gửi hãng">Gửi bảo hành hãng</option>
+                        <option value="Không sửa được">Trả máy (Không sửa được)</option>
                     </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Linh kiện cần thay (nếu có)</label>
+                    <textarea id="check_components" class="form-control" rows="2" placeholder="VD: Màn hình 14 inch..."></textarea>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 dashed-border" onclick="openPhotoActionSheet('checkPhotoInput')">
+                    <i class="fas fa-camera"></i> Thêm ảnh kiểm tra
+                </button>
+                <div id="checkPhotoGrid" class="photo-grid mt-2"></div>
+                <input type="file" id="checkPhotoInput_Cam" accept="image/*" capture="environment" class="d-none" onchange="handleCheckPhotoSelect(this)">
+                <input type="file" id="checkPhotoInput_Gal" accept="image/*" multiple class="d-none" onchange="handleCheckPhotoSelect(this)">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary" onclick="submitTechCheck()">Lưu Kết Quả</button>
+            </div>
+        </div>
+    </div>
+  </div>
 
-                    <div class="input-row">
-                        <div style="flex:1"><label>Hãng:</label><input type="text" id="deviceBrand" placeholder="Dell, HP..."></div>
-                        <div style="flex:1"><label>Model:</label><input type="text" id="deviceModel" placeholder="XPS 13..."></div>
+  <div class="modal fade" id="modalQuote" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-file-invoice-dollar"></i> Lên Báo Giá Chi Tiết</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3 p-3 bg-light rounded border">
+                    <label class="form-label fw-bold d-block">Hình thức xử lý:</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="quoteType" id="qTypeInternal" value="INTERNAL" checked onchange="toggleQuoteType()">
+                        <label class="btn btn-outline-primary" for="qTypeInternal">Sửa tại chỗ</label>
+                        
+                        <input type="radio" class="btn-check" name="quoteType" id="qTypeExternal" value="EXTERNAL" onchange="toggleQuoteType()">
+                        <label class="btn btn-outline-warning text-dark" for="qTypeExternal">Gửi đơn vị ngoài</label>
                     </div>
-                    
-                    <label>Serial / IMEI / Service Tag:</label>
-                    <input type="text" id="deviceSerial" placeholder="Nhập số serial...">
+                </div>
 
-                    <label>Phụ kiện đi kèm:</label>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" class="acc-check" value="Sạc"> Sạc</label>
-                        <label><input type="checkbox" class="acc-check" value="Chuột"> Chuột</label>
-                        <label><input type="checkbox" class="acc-check" value="Túi"> Túi</label>
-                        <label><input type="checkbox" class="acc-check" value="Hộp mực"> Hộp mực</label>
+                <div id="ext_unit_div" class="mb-3 ext-only">
+                    <label class="form-label fw-bold text-warning">Tên đơn vị sửa chữa / Hãng:</label>
+                    <input type="text" id="q_ext_unit" class="form-control border-warning" placeholder="VD: Trung tâm bảo hành Dell...">
+                </div>
+
+                <div class="alert alert-info py-2 small mb-3">
+                    <strong>Đề xuất từ KTV:</strong> <span id="quote_tech_summary">...</span>
+                </div>
+
+                <div class="table-responsive mb-3">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tên linh kiện / Dịch vụ</th>
+                                <th style="width: 70px;">SL</th>
+                                <th class="ext-only text-warning" style="width: 120px;">Giá Gốc (A)</th>
+                                <th class="text-success" style="width: 120px;">Giá Bán (B)</th>
+                                <th style="width: 40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="quoteItemsBody"></tbody>
+                    </table>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="addQuoteRow()">+ Thêm dòng</button>
+                </div>
+
+                <div id="ext_ship_div" class="ext-only row justify-content-end align-items-center mb-2">
+                    <label class="col-auto col-form-label text-muted">+ Phí vận chuyển (Nội bộ):</label>
+                    <div class="col-auto">
+                        <input type="number" id="q_ext_ship" class="form-control form-control-sm text-end" style="width:120px;" placeholder="0" oninput="calculateQuoteTotal()">
                     </div>
-                    <input type="text" id="deviceAccessories" placeholder="Ghi chú phụ kiện khác...">
-                </div>
-            </div>
-
-            <div class="right-panel">
-                <h4>3. Tình Trạng Khi Nhận</h4>
-                <div class="control-group">
-                    <label>Lỗi khách mô tả (*):</label>
-                    <textarea id="customerDesc" rows="3" placeholder="VD: Máy không lên nguồn, màn hình chớp..."></textarea>
-                    
-                    <label>Ngoại hình ghi nhận:</label>
-                    <textarea id="physicalDesc" rows="2" placeholder="VD: Trầy góc trái, móp nắp lưng..."></textarea>
                 </div>
 
-                <h4>4. Hình Ảnh (Tối đa 5 ảnh)</h4>
-                <div class="control-group">
-                    <input type="file" id="photoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelect(this)">
-                    <input type="file" id="photoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handlePhotoSelect(this)">
-                    
-                    <button onclick="openPhotoActionSheet('photoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
-                        📷 Thêm hình ảnh
-                    </button>
-                    
-                    <div id="photoPreviewGrid" class="photo-grid"></div>
-                </div>
-
-                <h4>5. Thông Tin Nhận</h4>
-                <div class="control-group">
-                    <label>Ghi chú nội bộ:</label>
-                    <textarea id="internalNote" rows="2" placeholder="Ghi chú cho kỹ thuật..."></textarea>
-                </div>
-
-                <div class="action-footer">
-                    <button onclick="showView('list')" style="background-color: var(--secondary-color) !important;">Hủy</button>
-                    <button onclick="submitTicket(false)" style="background-color: var(--primary-color);">Lưu Phiếu</button>
-                    <button onclick="submitTicket(true)" style="background-color: #28a745 !important;">Lưu & In</button>
-                </div>
-                <div id="createSpinner" style="display:none;text-align:center; margin-top:10px;">
-                    <div class="spinner"></div> Đang xử lý (Nén ảnh & Lưu)...
-                </div>
-            </div>
-        </div>
-    </div>
-    <div id="detailView" class="form-section" style="display:none;">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px; margin-bottom:20px;">
-        <div style="display:flex; align-items:center; gap:15px;">
-            <button onclick="showView('list')" style="background:#f1f3f4; color:#333; border:none; padding:8px 15px; border-radius:20px; font-weight:600;">← Quay lại</button>
-            <div>
-                <h3 style="margin:0; color:var(--primary-color);">Phiếu: <span id="d_ticketId">...</span></h3>
-                <span id="d_createdAt" style="font-size:13px; color:#666;">...</span>
-            </div>
-        </div>
-        <div style="display:flex; gap: 10px;">
-            <button class="btn-icon" onclick="printTicket()" style="background:#6c757d; padding: 8px 15px;">
-                🖨️ In Biên Nhận
-            </button>
-
-            <button class="btn-icon" onclick="printDeviceLabel()" style="background:#ffc107; color:#000; padding: 8px 15px;">
-                🏷️ In Tem Dán
-            </button>
-        </div>
-    </div>
-
-    <div class="timeline-wrapper" style="margin-bottom:30px; overflow-x:auto; padding-bottom:10px;">
-        <div class="timeline-steps">
-            <div class="step active" id="step_new">
-                <div class="step-circle">1</div>
-                <div class="step-label">Tiếp nhận</div>
-            </div>
-            <div class="step" id="step_check">
-                <div class="step-circle">2</div>
-                <div class="step-label">Kiểm tra</div>
-            </div>
-            <div class="step" id="step_quote">
-                <div class="step-circle">3</div>
-                <div class="step-label">Báo giá</div>
-            </div>
-            <div class="step" id="step_repair">
-                <div class="step-circle">4</div>
-                <div class="step-label">Sửa chữa</div>
-            </div>
-            <div class="step" id="step_done">
-                <div class="step-circle">5</div>
-                <div class="step-label">Hoàn tất</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="borrow-layout">
-        <div class="left-panel">
-            
-            <div class="control-group">
-                <h4>👤 Khách hàng</h4>
-                <div style="margin-bottom:5px;"><strong>Tên:</strong> <span id="d_custName">...</span></div>
-                <div style="margin-bottom:5px;"><strong>SĐT:</strong> <span id="d_custPhone" style="color:blue;">...</span></div>
-                <div style="margin-bottom:5px;"><strong>Đ/C:</strong> <span id="d_custAddress">...</span></div>
-            </div>
-
-            <div class="control-group">
-                <h4>💻 Thiết bị tiếp nhận</h4>
-                <div style="margin-bottom:5px;"><strong>Máy:</strong> <span id="d_deviceInfo">...</span></div>
-                <div style="margin-bottom:5px;"><strong>Serial:</strong> <span id="d_deviceSerial">...</span></div>
-                <div style="margin-bottom:5px;"><strong>Phụ kiện:</strong> <span id="d_accessories">...</span></div>
-            </div>
-
-            <div class="control-group">
-                <h4>⚠️ Tình trạng ban đầu</h4>
-                <p><strong>Khách báo:</strong> <span id="d_issueDesc">...</span></p>
-                <p><strong>Ngoại hình:</strong> <span id="d_physicalDesc">...</span></p>
-                <div style="margin-bottom:5px; border-bottom:1px dashed #eee; padding-bottom:5px;">
-                    <strong>Người nhận:</strong> 
-                    <img id="d_receiver_avatar" src="/default-avatar.png" class="avatar-small" style="display:none;" alt="avt">
-                    <span id="d_receiver">...</span>
-                </div>
-                <h5 style="margin-top:15px; margin-bottom:5px;">Ảnh tiếp nhận:</h5>
-                <div id="d_receivePhotos" class="photo-grid" style="grid-template-columns: repeat(3, 1fr);"></div>
-            </div>
-        </div>
-
-        <div class="right-panel">
-            <div class="control-group">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h4>🛠️ Kỹ thuật kiểm tra</h4>
-                    <button id="btn_update_check" class="btn-sm" onclick="openUpdateModal('check')">Cập nhật</button>
-                </div>
-                <div id="content_techCheck" style="color:#666; font-style:italic;">Chưa có dữ liệu kiểm tra.</div>
-            </div>
-
-            <div class="control-group" id="block_external_logistics" style="display:none; border: 2px dashed #ff9800; background: #fff3e0;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h4 style="margin:0; color:#e65100;">🚚 Điều Phối Gửi Ngoài</h4>
+                <div class="card bg-light border mb-3">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fs-5">Tổng Báo Khách (B):</span>
+                            <strong id="quote_total_display" class="fs-4 text-success">0 đ</strong>
+                        </div>
+                        <div id="profit_display_div" class="ext-only border-top mt-2 pt-2 d-flex justify-content-between text-muted small">
+                            <span>Lợi nhuận dự kiến (B - A - Ship):</span>
+                            <strong id="quote_profit_display" class="text-warning">0 đ</strong>
+                        </div>
                     </div>
-                <div id="content_external_logistics">---</div>
-            </div>
-
-
-            <div class="control-group" id="block_quotation" style="opacity:0.6;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h4 style="margin:0;">💰 Báo giá sửa chữa</h4>
-                    <button id="btn_update_quote" class="btn-sm" onclick="openUpdateModal('quote')" style="display:none;">Cập nhật</button>
                 </div>
-                <div id="content_quotation">Đang chờ kiểm tra...</div>
-            </div>
 
-            <div class="control-group" id="block_repair" style="opacity:0.6;">
-                <h4>🔧 Quá trình sửa chữa</h4>
-                <div id="content_repair">---</div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Bảo hành:</label>
+                        <input type="text" id="quote_warranty" class="form-control" placeholder="VD: 3 tháng...">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">Ghi chú thêm:</label>
+                        <textarea id="quote_notes" class="form-control" rows="1" placeholder="VD: Giá chưa VAT..."></textarea>
+                    </div>
+                </div>
             </div>
-
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-success" onclick="submitQuote()">Gửi Báo Giá</button>
+            </div>
         </div>
     </div>
-</div>
-<div id="modalTechCheck" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>🛠️ Cập Nhật Kết Quả Kiểm Tra</h3>
-        
-        <label>Nguyên nhân lỗi (*):</label>
-        <textarea id="check_cause" rows="3" placeholder="VD: Mainboard bị chạm nguồn..."></textarea>
-        
-        <label>Đề xuất xử lý:</label>
-            <select id="check_solution">
-                <option value="Sửa chữa">Sửa chữa / Thay thế</option>
-                <option value="Cài đặt">Cài đặt phần mềm</option>
+  </div>
+
+  <div class="modal fade" id="modalRepair" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-check-circle"></i> Báo Cáo Hoàn Tất Sửa Chữa</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Công việc đã thực hiện (*):</label>
+                    <textarea id="repair_work" class="form-control" rows="4" placeholder="VD: Đã thay IC nguồn, vệ sinh mainboard, test full chức năng..."></textarea>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 dashed-border" onclick="openPhotoActionSheet('repairPhotoInput')">
+                    <i class="fas fa-camera"></i> Thêm ảnh sau khi sửa
+                </button>
+                <div id="repairPhotoGrid" class="photo-grid mt-2"></div>
+                <input type="file" id="repairPhotoInput_Cam" accept="image/*" capture="environment" class="d-none" onchange="handleRepairPhotoSelect(this)">
+                <input type="file" id="repairPhotoInput_Gal" accept="image/*" multiple class="d-none" onchange="handleRepairPhotoSelect(this)">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-info text-white" onclick="submitRepairComplete()">Xác nhận Sửa Xong</button>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalReturn" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title"><i class="fas fa-hand-holding-usd"></i> Thanh Toán & Trả Máy</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-success d-flex justify-content-between align-items-center mb-3">
+                    <span>Tổng tiền khách phải trả:</span>
+                    <strong id="return_quote_price" class="fs-4">0 đ</strong>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label fw-bold">Thực thu (VNĐ) (*)</label>
+                        <input type="number" id="return_amount" class="form-control fw-bold text-success" placeholder="Nhập số tiền...">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Hình thức (*)</label>
+                        <select id="return_method" class="form-select">
+                            <option value="Tiền mặt">Tiền mặt</option>
+                            <option value="Chuyển khoản">Chuyển khoản</option>
+                            <option value="Công nợ">Công nợ</option>
+                            <option value="Không thu tiền">Không thu tiền</option>
+                            <option value="Khác">Khác</option>
+                        </select>
+                    </div>
+                </div>
                 
-                <option value="Gửi sửa ngoài">Gửi sửa ngoài</option>
-                <option value="Gửi hãng">Gửi bảo hành hãng</option>
-                <option value="Không sửa được">Trả máy (Không sửa được)</option>
-            </select>
-        
-        <label>Linh kiện cần thay (nếu có):</label>
-        <textarea id="check_components" rows="2" placeholder="VD: Cần thay màn hình 14 inch 30 pin..."></textarea>
-        
-        <label>Ảnh kiểm tra (nếu cần):</label>
-        <div class="control-group">
-            <input type="file" id="checkPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleCheckPhotoSelect(this)">
-            <input type="file" id="checkPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleCheckPhotoSelect(this)">
-            
-            <button onclick="openPhotoActionSheet('checkPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
-                📷 Thêm hình ảnh
-            </button>
-            
-            <div id="checkPhotoGrid" class="photo-grid"></div>
-        </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Số sổ 3 liên (Bắt buộc):</label>
+                    <input type="text" id="return_ticket_number" class="form-control" placeholder="VD: 001234">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú bàn giao:</label>
+                    <textarea id="return_note" class="form-control" rows="2" placeholder="VD: Khách đã kiểm tra máy ok..."></textarea>
+                </div>
 
-        <div class="action-footer" style="margin-top:20px;">
-            <button onclick="closeModal('modalTechCheck')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitTechCheck()" style="background:var(--primary-color);">Lưu & Gửi Báo Giá</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm w-100 dashed-border" onclick="openPhotoActionSheet('returnPhotoInput')">
+                    <i class="fas fa-camera"></i> Ảnh bàn giao (Sổ/Hóa đơn)
+                </button>
+                <div id="returnPhotoGrid" class="photo-grid mt-2"></div>
+                <input type="file" id="returnPhotoInput_Cam" accept="image/*" capture="environment" class="d-none" onchange="handleReturnPhotoSelect(this)">
+                <input type="file" id="returnPhotoInput_Gal" accept="image/*" multiple class="d-none" onchange="handleReturnPhotoSelect(this)">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-success" onclick="submitReturnDevice()">Hoàn tất & Trả Máy</button>
+            </div>
         </div>
     </div>
-</div>
-        <div id="modalQuote" class="modal-overlay" style="display:none;">
-    <div class="modal-content" style="max-width: 800px;">
-        <h3>💰 Lên Báo Giá Chi Tiết</h3>
-        
-        <div class="radio-group-container">
-            <label class="group-label">Hình thức xử lý:</label>
-            <div class="radio-options">
-                <label class="radio-item">
-                    <input type="radio" name="quoteType" value="INTERNAL" checked onchange="toggleQuoteType()"> 
-                    Sửa tại chỗ
-                </label>
-                <label class="radio-item">
-                    <input type="radio" name="quoteType" value="EXTERNAL" onchange="toggleQuoteType()"> 
-                    Gửi đơn vị ngoài
-                </label>
+  </div>
+
+  <div class="modal fade" id="modalExtSend" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title text-dark">🚚 Gửi Máy Đi Sửa Ngoài</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-        </div>
-        
-        <div id="ext_unit_div" class="ext-only" style="display: flex; flex-direction: column; margin-bottom: 15px; background: #fff8e1; border: 1px solid #ffe0b2; padding: 12px; border-radius: 6px;">
-    
-            <label style="margin-bottom: 8px; font-weight: bold; color: #e65100; width: 100%;">
-                Tên đơn vị sửa chữa / Hãng:
-            </label>
-            
-            <input type="text" id="q_ext_unit" 
-                placeholder="VD: Trung tâm bảo hành Dell..." 
-                style="width: 100%; box-sizing: border-box; height: 40px; border: 1px solid #e65100; padding: 0 10px; border-radius: 4px;">
-        </div>
-
-        <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 13px;">
-            <strong>Đề xuất từ KTV:</strong> <span id="quote_tech_summary">...</span>
-        </div>
-
-        <div id="quoteTableContainer">
-            <table style="width: 100%; font-size: 13px; margin-bottom: 10px;">
-                <thead>
-                    <tr style="background: #f1f1f1;">
-                        <th>Tên linh kiện / Dịch vụ</th>
-                        <th style="width: 90px;">SL</th>
-                        <th class="ext-only" style="width: 130px; color:#e65100;">Giá Gốc (A)</th>
-                        <th style="width: 150px; color:#2e7d32;">Giá Bán (B)</th>
-                        <th style="width: 30px;"></th>
-                    </tr>
-                </thead>
-                <tbody id="quoteItemsBody"></tbody>
-            </table>
-        </div>
-        
-        <button onclick="addQuoteRow()" class="btn-sm" style="background: var(--secondary-color); margin-bottom: 15px;">+ Thêm dòng</button>
-
-        <div id="ext_ship_div" class="ext-only" style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px; gap:10px;">
-            <label style="margin:0; color:#666;">+ Phí vận chuyển (Nội bộ):</label>
-            <input type="number" id="q_ext_ship" class="calc-input" placeholder="0" oninput="calculateQuoteTotal()" style="width:120px; text-align:right; margin:0;">
-        </div>
-
-        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #eee;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size:1.1em;">Tổng Báo Khách (B):</span>
-                <strong id="quote_total_display" style="font-size: 1.4em; color: #2e7d32;">0 đ</strong>
+            <div class="modal-body">
+                <p>Xác nhận gửi máy cho đơn vị đối tác?</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Đơn vị tiếp nhận:</label>
+                    <input type="text" id="ext_send_unit" class="form-control" placeholder="Nhập tên cửa hàng/hãng...">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú gửi hàng:</label>
+                    <textarea id="ext_send_note" class="form-control" rows="2" placeholder="VD: Gửi kèm sạc..."></textarea>
+                </div>
             </div>
-            
-            <div id="profit_display_div" class="ext-only" style="display:flex; justify-content: space-between; align-items: center; margin-top:5px; font-size:13px; color:#666; border-top:1px dashed #ccc; padding-top:5px;">
-                <span>Lợi nhuận dự kiến (B - A - Ship):</span>
-                <strong id="quote_profit_display" style="color: #e65100;">0 đ</strong>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-warning text-dark" onclick="submitExternalAction('SEND')">Xác nhận Gửi</button>
             </div>
-        </div>
-        
-        <div class="input-row">
-            <div style="flex:1">
-                <label>Bảo hành:</label>
-                <input type="text" id="quote_warranty" placeholder="VD: 3 tháng...">
-            </div>
-        </div>
-        
-        <label>Ghi chú thêm (Option):</label>
-        <textarea id="quote_notes" rows="2" placeholder="VD: Giá chưa bao gồm VAT..."></textarea>
-
-        <div class="action-footer" style="margin-top:20px;">
-            <button onclick="closeModal('modalQuote')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitQuote()" style="background:var(--primary-color);">Gửi Báo Giá</button>
         </div>
     </div>
-</div>
-<div id="modalRepair" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>✅ Báo Cáo Hoàn Tất Sửa Chữa</h3>
-        
-        <label>Công việc đã thực hiện (*):</label>
-        <textarea id="repair_work" rows="4" placeholder="VD: Đã thay IC nguồn, vệ sinh mainboard, test full chức năng..."></textarea>
-        
-        <label>Ảnh sau khi sửa / Bàn giao:</label>
-        <div class="control-group">
-            <input type="file" id="repairPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleRepairPhotoSelect(this)">
-            <input type="file" id="repairPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleRepairPhotoSelect(this)">
-            
-            <button onclick="openPhotoActionSheet('repairPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
-                📷 Thêm hình ảnh
-            </button>
-            
-            <div id="repairPhotoGrid" class="photo-grid"></div>
-        </div>
+  </div>
 
-        <div class="action-footer" style="margin-top:20px;">
-            <button onclick="closeModal('modalRepair')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitRepairComplete()" style="background:var(--success-color);">Xác nhận Sửa Xong</button>
+  <div class="modal fade" id="modalExtReceive" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">✅ Nhận Máy & Kiểm Tra (QC)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Máy đã được gửi trả về. Kỹ thuật viên cần kiểm tra lại.</p>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Kết quả kiểm tra (QC):</label>
+                    <select id="ext_qc_result" class="form-select">
+                        <option value="PASS">Đạt - Máy hoạt động tốt</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Ghi chú kiểm tra:</label>
+                    <textarea id="ext_qc_note" class="form-control" rows="3" placeholder="VD: Đã test full chức năng, tem bảo hành nguyên vẹn..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-success" onclick="submitExternalAction('RECEIVE_PASS')">QC Đạt - Nhập Kho</button>
+            </div>
         </div>
     </div>
-</div>
-<div id="modalReturn" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>💸 Thanh Toán & Trả Máy</h3>
-        
-        <div class="control-group" style="background: #e8f5e9; border: 1px solid #c8e6c9;">
-            <label>Tổng tiền khách phải trả (theo báo giá):</label>
-            <div id="return_quote_price" style="font-size: 1.5em; font-weight: bold; color: #2e7d32; text-align: right;">0 đ</div>
-        </div>
+  </div>
 
-        <div class="input-row">
-            <div style="flex:1">
-                <label>Thực thu (VNĐ) (*):</label>
-                <input type="number" id="return_amount" placeholder="Nhập số tiền...">
+  <div class="modal fade" id="modalAssign" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">👉 Phân Công</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div style="flex:1">
-                <label>Hình thức (*):</label>
-                <select id="return_method">
-                    <option value="Tiền mặt">Tiền mặt</option>
-                    <option value="Chuyển khoản">Chuyển khoản</option>
-                    <option value="Công nợ">Công nợ</option>
-                    <option value="Không thu tiền">Không thu tiền</option> 
-                    <option value="Khác">Khác</option>
+            <div class="modal-body">
+                <p class="small text-muted">Chọn nhân sự thực hiện:</p>
+                <select id="assign_tech_select" class="form-select">
+                    <option value="">-- Đang tải... --</option>
                 </select>
             </div>
-        </div>
-        
-        <label>Số sổ 3 liên (Bắt buộc):</label>
-        <input type="text" id="return_ticket_number" placeholder="VD: 001234">
-        
-        <label>Ghi chú bàn giao:</label>
-        <textarea id="return_note" rows="2" placeholder="VD: Khách đã kiểm tra máy ok..."></textarea>
-        
-        <label>Ảnh bàn giao (Sổ 3 liên):</label>
-        <div class="control-group">
-            <input type="file" id="returnPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleReturnPhotoSelect(this)">
-            <input type="file" id="returnPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleReturnPhotoSelect(this)">
-            
-            <button onclick="openPhotoActionSheet('returnPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
-                📷 Thêm hình ảnh
-            </button>
-            
-            <div id="returnPhotoGrid" class="photo-grid"></div>
-        </div>
-
-        <div class="action-footer" style="margin-top:20px;">
-            <button onclick="closeModal('modalReturn')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitReturnDevice()" style="background:#28a745;">Xác nhận & Hoàn tất</button>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="submitAssignWork()">Giao Việc</button>
+            </div>
         </div>
     </div>
-</div>
-<div id="imageViewerModal" class="image-modal" onclick="closeImageModal()">
-  <span class="close-img">&times;</span>
-  <img class="image-modal-content" id="imgExpanded">
-  <div id="imgCaption"></div>
-</div>
-<div id="photoActionSheet" class="modal-overlay" style="display:none; align-items: flex-end;" onclick="closePhotoActionSheet()">
-    <div class="action-sheet-content" onclick="event.stopPropagation()">
-        <h4 style="text-align:center; margin-bottom:15px; color:#666;">Bạn muốn chọn ảnh từ đâu?</h4>
-        
-        <button onclick="triggerPhotoInput('cam')" class="sheet-btn">
-            📷 &nbsp; Chụp ảnh mới
-        </button>
-        
-        <button onclick="triggerPhotoInput('gal')" class="sheet-btn">
-            🖼️ &nbsp; Chọn từ Thư viện
-        </button>
-        
-        <button onclick="closePhotoActionSheet()" class="sheet-btn cancel">
-            Hủy bỏ
-        </button>
-    </div>
-</div>
-<div id="modalExtSend" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>🚚 Gửi Máy Đi Sửa Ngoài</h3>
-        <p>Xác nhận gửi máy cho đơn vị đối tác?</p>
-        
-        <label>Đơn vị tiếp nhận:</label>
-        <input type="text" id="ext_send_unit" placeholder="Nhập tên cửa hàng/hãng...">
-        
-        <label>Ghi chú gửi hàng:</label>
-        <textarea id="ext_send_note" rows="2" placeholder="VD: Gửi kèm sạc, pass máy là..."></textarea>
-
-        <div class="action-footer">
-            <button onclick="closeModal('modalExtSend')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitExternalAction('SEND')" style="background:var(--primary-color);">Xác nhận Gửi</button>
-        </div>
-    </div>
-</div>
-
-<div id="modalExtReceive" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
-        <h3>✅ Nhận Máy & Kiểm Tra (QC)</h3>
-        <p>Máy đã được gửi trả về. Kỹ thuật viên cần kiểm tra lại.</p>
-        
-        <label>Kết quả kiểm tra (QC):</label>
-        <select id="ext_qc_result">
-            <option value="PASS">Đạt - Máy hoạt động tốt</option>
-            </select>
-        
-        <label>Ghi chú kiểm tra:</label>
-        <textarea id="ext_qc_note" rows="3" placeholder="VD: Đã test full chức năng, tem bảo hành nguyên vẹn..."></textarea>
-
-        <div class="action-footer">
-            <button onclick="closeModal('modalExtReceive')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitExternalAction('RECEIVE_PASS')" style="background:#28a745;">QC Đạt - Chờ Trả Khách</button>
-        </div>
-    </div>
-</div>
-<div id="modalAssign" class="modal-overlay" style="display:none;">
-    <div class="modal-content" style="max-width: 400px;">
-        <h3>👉 Phân Công Kỹ Thuật</h3>
-        <p>Chọn nhân sự thực hiện công đoạn này:</p>
-        
-        <div id="assign_selection_preview" style="display: none; align-items: center; gap: 10px; margin-bottom: 15px; background: #f0f8ff; padding: 10px; border-radius: 8px;">
-            <img id="assign_avatar_preview" src="/default-avatar.png" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
-            <span id="assign_tech_name" style="font-weight: bold; font-size: 1.1em;"></span>
-        </div>
-        
-        <select id="assign_tech_select" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;">
-            <option value="">-- Đang tải danh sách... --</option>
-        </select>
-
-        <div class="action-footer">
-            <button onclick="closeModal('modalAssign')" style="background:#ccc; color:#333;">Hủy</button>
-            <button onclick="submitAssignWork()" style="background:var(--primary-color);">Xác nhận Giao</button>
-        </div>
-    </div>
-</div>
   </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+  <div class="modal fade" id="photoActionSheet" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-body p-0">
+                <div class="list-group list-group-flush text-center">
+                    <button class="list-group-item list-group-item-action py-3 text-primary fw-bold" onclick="triggerPhotoInput('cam')">📷 Chụp ảnh mới</button>
+                    <button class="list-group-item list-group-item-action py-3 text-primary fw-bold" onclick="triggerPhotoInput('gal')">🖼️ Chọn từ thư viện</button>
+                    <button class="list-group-item list-group-item-action py-3 text-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div id="imageViewerModal" class="image-modal" onclick="closeImageModal()">
+    <span class="close-img">&times;</span>
+    <img class="image-modal-content" id="imgExpanded">
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
   <script src="common.js"></script>
-  <script src="repair.js"></script> </body>
+  <script src="repair.js"></script>
+</body>
 </html>

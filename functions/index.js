@@ -455,6 +455,42 @@ inventoryRouter.post('/list', canApproveBorrowsOrAdmin, apiWrapper(async ({ db }
 
 // === KẾT THÚC THÊM MỚI ===
 
+// --- ROUTER 3: AUDIT (KIỂM KHO) ---
+const auditRouter = express.Router();
+auditRouter.use(authenticate); // Yêu cầu xác thực
+
+// Endpoint để cập nhật số lượng một vật tư trong phiên kiểm kho
+auditRouter.post('/updateItem', isAuditorOrAdmin, apiWrapper(async ({ db, body, user }) => {
+    return dataProcessor.updateAuditItem({ 
+        db, 
+        auditId: body.auditId,
+        itemCode: body.itemCode,
+        quantity: body.quantity,
+        user: user 
+    });
+}));
+
+// Endpoint để kết thúc phiên kiểm kho
+auditRouter.post('/finishSession', isAuditorOrAdmin, apiWrapper(async ({ db, body, user }) => {
+    return dataProcessor.finishAuditSession({ 
+        db, 
+        auditId: body.auditId,
+        user: user 
+    });
+}));
+
+// Endpoint để xóa toàn bộ kết quả kiểm kê của một phiên
+auditRouter.post('/resetSession', isAuditorOrAdmin, apiWrapper(async ({ db, body, user }) => {
+    return dataProcessor.resetAuditSession({
+        db,
+        auditId: body.auditId,
+        user: user
+    });
+}));
+
+// Gắn router kiểm kho vào app
+app.use('/api/audit', auditRouter);
+
 app.use('/api', privateRouter);
 app.use('/api/inventory', inventoryRouter); // Gắn router vật tư
 
