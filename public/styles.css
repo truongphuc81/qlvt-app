@@ -1900,3 +1900,10 @@ div.mode-external .ext-only {
     overflow: visible !important;
     height: auto !important;
 }
+
+/* --- Avatar Styles --- */
+.avatar-small {
+  border-radius: 50%;
+  object-fit: cover;      /* Đảm bảo ảnh không bị méo khi resize */
+  vertical-align: middle; /* Căn giữa với dòng chữ bên cạnh */
+}

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm Kho Thông Minh - QLVT</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="audit-styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.3/themes/base/jquery-ui.css">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <script>
+        // Cấu hình Firebase (Giữ nguyên như cũ)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+            authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+            projectId: "quan-ly-vat-tu-backend",
+            storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+            messagingSenderId: "323292129107",
+            appId: "1:323292129107:web:8e467d10c217197b9b63a6"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+    </script>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="#">
+                <i class="fas fa-boxes me-2"></i> KIỂM KHO
+            </a>
+            <div class="d-flex text-white align-items-center">
+                <span id="userEmailDisplay" class="me-3">Đang tải...</span>
+                <button onclick="window.location.href='index.html'" class="btn btn-outline-light btn-sm">Thoát</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card shadow-sm border-0 mb-3">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary"><i class="fas fa-barcode"></i> Khu Vực Quét</h5>
+                        
+                        <div class="btn-group w-100 mb-3" role="group">
+                            <input type="radio" class="btn-check" name="scanMode" id="modeQuick" autocomplete="off" checked onchange="toggleScanMode()">
+                            <label class="btn btn-outline-primary" for="modeQuick">⚡ Quét Nhanh (+1)</label>
+                          
+                            <input type="radio" class="btn-check" name="scanMode" id="modeQty" autocomplete="off" onchange="toggleScanMode()">
+                            <label class="btn btn-outline-primary" for="modeQty">🔢 Quét & Nhập SL</label>
+                        </div>
+
+                        <div class="input-group input-group-lg mb-2">
+                            <span class="input-group-text bg-white text-primary"><i class="fas fa-qrcode"></i></span>
+                            <input type="text" id="scanInput" class="form-control fw-bold text-primary" placeholder="Quét mã hoặc nhập tên..." autocomplete="off" list="suggestions-list">
+                            <datalist id="suggestions-list"></datalist>
+                            <button class="btn btn-primary" onclick="processInputManual()">OK</button>
+                        </div>
+                        <small class="text-muted fst-italic">* Mẹo: Máy quét mã vạch sẽ tự động nhấn Enter.</small>
+
+                        <div id="cameraSection" class="mt-3" style="display:none;">
+                            <div id="reader" style="width: 100%;"></div>
+                        </div>
+                        <button class="btn btn-outline-secondary w-100 mt-2" onclick="toggleCamera()">
+                            <i class="fas fa-camera"></i> Bật/Tắt Camera Laptop
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm border-0 bg-white">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">📊 Thống Kê Phiên</h5>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Tổng mã đã quét
+                                <span class="badge bg-primary rounded-pill" id="statScannedCodes">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Tổng số lượng thực tế
+                                <span class="badge bg-success rounded-pill" id="statTotalQty">0</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                Mã lệch kho
+                                <span class="badge bg-danger rounded-pill" id="statDiffCodes">0</span>
+                            </li>
+                        </ul>
+                        <div class="d-grid gap-2 mt-3">
+                            <button class="btn btn-success" onclick="finishAudit()">✅ Hoàn Tất & Lưu Kết Quả</button>
+                            <button class="btn btn-secondary" onclick="resetAudit()">🔄 Làm Lại</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 text-primary fw-bold">📋 Bảng Đối Chiếu Tồn Kho</h5>
+                        <div>
+                            <input type="text" id="filterTable" class="form-control form-control-sm" placeholder="🔍 Lọc trong bảng..." onkeyup="filterAuditTable()">
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="height: 75vh;">
+                            <table class="table table-hover table-striped align-middle mb-0" id="auditTable">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Mã Hàng</th>
+                                        <th>Tên Vật Tư</th>
+                                        <th class="text-center">Tồn Máy</th>
+                                        <th class="text-center">Thực Tế</th>
+                                        <th class="text-center">Lệch</th>
+                                        <th class="text-end">Giá Trị Lệch</th>
+                                        <th class="text-center">Xóa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auditTableBody">
+                                    <tr><td colspan="7" class="text-center py-5 text-muted">Đang tải dữ liệu kho...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="common.js"></script>
+    <script src="inventory-audit.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ let managerHistoryCache = [];
 let itemListCache = [];
 let html5QrCodeScanner = null;
 let isQrScannerRunning = false;
+let currentScanMode = 'borrow'; // 'borrow' or 'info'
 let managerHistoryLastDoc = null;
 let currentNegativeItems = [];
 var managerSelectedItems = [];
@@ -99,24 +100,24 @@ async function handleManagerAuthSuccess(user) {
         const roles = await callApi('/auth/getSelfRoles', {});
         userRoles = roles;
         
-        // Kiểm tra xem có phải Manager/Admin không
-        const isManager = userRoles.admin || userRoles.inventory_manager;
+        // Kiểm tra xem có phải Manager/Admin/Sale không
+        const canAccess = userRoles.admin || userRoles.inventory_manager || userRoles.sale;
 
-        if (isManager) {
+        if (canAccess) {
             // OK, hiển thị trang
-            console.log("Xác thực Manager thành công. Hiển thị trang.");
+            console.log("Xác thực thành công. Hiển thị trang.");
             document.getElementById('managerPage').style.display = 'block';
             
             // Tải các tài nguyên cần thiết
             loadTechnicians();
             initItemSearch();
-            showManagerPage(); // (Hàm này sẽ ẩn/hiện mục theo quyền Admin/Inv Mgr)
+            showManagerPage(); // (Hàm này sẽ ẩn/hiện mục theo quyền)
             listenForManagerHistory();
             loadPendingNotifications();
             
         } else {
-            // Không phải Manager, báo lỗi và điều hướng
-            console.warn("User không phải Manager. Đang điều hướng...");
+            // Không có quyền, báo lỗi và điều hướng
+            console.warn("User không có quyền truy cập. Đang điều hướng...");
             alert("Bạn không có quyền truy cập trang này. Đang quay lại trang chính.");
             window.location.href = 'index.html';
         }
@@ -130,52 +131,53 @@ async function handleManagerAuthSuccess(user) {
 
 // === TẤT CẢ CÁC HÀM CỦA QUẢN LÝ (COPY TỪ APP.JS) ===
 
-function showManagerPage(){
-    // 1. Lấy các mục chỉ dành cho Admin (để ẩn/hiện)
-    const excelForm = document.getElementById('excelUploadForm');
-    const transferForm = document.getElementById('transferForm');
-    const ticketRangeForm = document.getElementById('ticketRangeForm');
-    const roleManagerForm = document.getElementById('roleManagerForm');
-    const globalOverviewSection = document.getElementById('globalOverviewSection');
+function showManagerPage() {
+    // Define all manageable sections
+    const sections = {
+        itemInfo: document.getElementById('itemInfoSection'),
+        globalOverview: document.getElementById('globalOverviewSection'),
+        managerBorrow: document.getElementById('managerBorrowForm'),
+        managerOverview: document.getElementById('managerOverviewSection'),
+        ticketRange: document.getElementById('ticketRangeForm'),
+        excelUpload: document.getElementById('excelUploadForm'),
+        inventoryUpload: document.getElementById('inventoryUploadSection'),
+        transfer: document.getElementById('transferForm'),
+        roleManager: document.getElementById('roleManagerForm'),
+        managerHistory: document.getElementById('managerHistorySection'),
+        technicianSelector: document.querySelector('.form-section:has(#technicianEmail)') // Parent of dropdown
+    };
 
-    // 2. Lấy các element giao diện Tab và Layout mới
-    const tabReturn = document.getElementById('tab-return');
-    const tabBorrow = document.getElementById('tab-borrow');
-    const layoutContainer = document.querySelector('.borrow-layout');
+    // Default to hiding all sections
+    for (const key in sections) {
+        if (sections[key]) sections[key].style.display = 'none';
+    }
 
-    // === QUAN TRỌNG: LUÔN RESET GIAO DIỆN VỀ MẶC ĐỊNH (2 CỘT) ===
-    // Xóa class 1 cột (nếu có) để đảm bảo Cột Trái (Cấu hình) luôn hiện
-    if (layoutContainer) layoutContainer.classList.remove('single-column');
-    
-    // Luôn hiện Tab Trả (theo yêu cầu mới)
-    if (tabReturn) tabReturn.style.display = ''; 
-    if (tabBorrow) tabBorrow.style.width = ''; 
-    // =============================================================
-
+    // Show sections based on role
     if (userRoles.admin) {
         console.log("Admin view: Hiển thị tất cả.");
-        
-        if (excelForm) excelForm.style.display = '';
-        if (transferForm) transferForm.style.display = '';
-        if (ticketRangeForm) ticketRangeForm.style.display = '';
-        if (roleManagerForm) roleManagerForm.style.display = '';
-        if (globalOverviewSection) globalOverviewSection.style.display = '';
-
-    } else {
-        console.log("Inventory Manager view: Ẩn các mục Admin, giữ nguyên giao diện Mượn/Trả.");
-        
-        // Chỉ ẩn các Form chức năng nâng cao
-        if (excelForm) excelForm.style.display = 'none';
-        if (transferForm) transferForm.style.display = 'none';
-        if (ticketRangeForm) ticketRangeForm.style.display = 'none';
-        if (roleManagerForm) roleManagerForm.style.display = 'none';
-        if (globalOverviewSection) globalOverviewSection.style.display = 'none';
-
-        // Mặc định chọn tab Mượn khi mới vào
-        selectMode('borrow'); 
+        for (const key in sections) {
+            if (sections[key]) sections[key].style.display = '';
+        }
+    } else if (userRoles.inventory_manager) {
+        console.log("Inventory Manager view: Hiển thị các mục hoạt động.");
+        if (sections.itemInfo) sections.itemInfo.style.display = '';
+        if (sections.managerBorrow) sections.managerBorrow.style.display = '';
+        if (sections.managerOverview) sections.managerOverview.style.display = '';
+        if (sections.inventoryUpload) sections.inventoryUpload.style.display = '';
+        if (sections.managerHistory) sections.managerHistory.style.display = '';
+        if (sections.technicianSelector) sections.technicianSelector.style.display = '';
+        selectMode('borrow');
+    } else if (userRoles.sale) {
+        console.log("Sale view: Chỉ hiển thị mục tra cứu.");
+        if (sections.itemInfo) sections.itemInfo.style.display = '';
+        // Hide operational parts for sales
+        if (sections.technicianSelector) sections.technicianSelector.style.display = 'none';
+        if (sections.managerHistory) sections.managerHistory.style.display = 'none';
+        if (sections.managerBorrow) sections.managerBorrow.style.display = 'none';
     }
     
-    loadPendingNotifications(); 
+    // These are independent of the main roles logic above
+    loadPendingNotifications();
     listenForManagerHistory();
 }
 
@@ -193,12 +195,14 @@ function loadTechnicians(){
             var selFrom = document.getElementById('transferFromTech');
             var selTo = document.getElementById('transferToTech');
             var selManagerHistory = document.getElementById('managerHistoryFilterTech');
+            var selRole = document.getElementById('roleUserSelect');
             // (Không cần selAuditorHistory)
 
             if (selManager) selManager.innerHTML='<option value="">Chọn kỹ thuật viên</option>';
             if (selFrom) selFrom.innerHTML = '<option value="">-- Chọn người chuyển --</option>';
             if (selTo) selTo.innerHTML = '<option value="">-- Chọn người nhận --</option>';
             if (selManagerHistory) selManagerHistory.innerHTML = '<option value="Tất cả">Tất cả KTV</option>';
+            if (selRole) selRole.innerHTML = '<option value="">-- Chọn nhân viên --</option>';
 
             (techs||[]).forEach(function(t, index){
                 if (!t || !t.email) return;
@@ -214,6 +218,7 @@ function loadTechnicians(){
                 if (selFrom) selFrom.appendChild(o.cloneNode(true));
                 if (selTo) selTo.appendChild(o.cloneNode(true));
                 if (selManagerHistory) selManagerHistory.appendChild(o.cloneNode(true));
+                if (selRole) selRole.appendChild(o.cloneNode(true));
             });
             techniciansLoaded = true;
         })
@@ -227,19 +232,32 @@ function loadTechnicians(){
 }
 
 function initItemSearch(){
-    callApi('/manager/items')
+    callApi('/inventory/list')
       .then(items => {
         itemListCache = items || []; 
-        console.log(`Đã cache ${itemListCache.length} vật tư.`);
+        console.log(`Đã cache ${itemListCache.length} vật tư từ Firestore.`);
         var src = (itemListCache).map(function(it){ 
             return { label: it.code + ' - ' + it.name, value: it.code, name: it.name }; 
         });
+
+        // Autocomplete cho form mượn
         jQuery('#managerItemSearch').autocomplete({
           source: src,
           select: function(e,ui){ 
               e.preventDefault(); 
               jQuery(this).val(ui.item.label); 
               jQuery(this).data('selectedItem',{code:ui.item.value, name:ui.item.name}); 
+          }
+        });
+
+        // Autocomplete cho form kiểm tra thông tin
+        jQuery('#itemInfoSearchInput').autocomplete({
+          source: src,
+          select: function(e,ui){ 
+              e.preventDefault(); 
+              jQuery(this).val(ui.item.label);
+              // Optionally trigger search on select
+              checkItemInfo();
           }
         });
       })
@@ -1271,22 +1289,29 @@ function loadGlobalInventoryOverview() {
 }
 
 async function submitSetRoles() {
-    const email = document.getElementById('roleEmailInput').value;
+    const email = document.getElementById('roleUserSelect').value;
     const isInventoryManager = document.getElementById('roleCheckboxInventoryManager').checked;
     const isSale = document.getElementById('roleCheckboxSale').checked;
     const isAuditor = document.getElementById('roleCheckboxAuditor').checked;
-    if (!email) { showError('roleManagerErrorMessage', 'Vui lòng nhập email.'); return; }
+    if (!email) { 
+        showError('roleManagerErrorMessage', 'Vui lòng chọn một nhân viên từ danh sách.'); 
+        return; 
+    }
+
     const rolesToSet = { inventory_manager: isInventoryManager, sale: isSale, auditor: isAuditor };
     const spinner = document.getElementById('roleManagerSpinner');
     spinner.style.display = 'block';
     showError('roleManagerErrorMessage', '');
     showSuccess('roleManagerSuccessMessage', '');
+
     try {
         const result = await callApi('/admin/setRole', { email: email, roles: rolesToSet });
         showSuccess('roleManagerSuccessMessage', result.message || `Cập nhật quyền cho ${email} thành công.`);
-        document.getElementById('roleEmailInput').value = '';
-        document.getElementById('roleCheckboxInventoryManager').checked = false;
-        document.getElementById('roleCheckboxAuditor').checked = false;
+        
+        // Reset the selection and UI by triggering the change event on the dropdown
+        document.getElementById('roleUserSelect').value = '';
+        document.getElementById('roleUserSelect').dispatchEvent(new Event('change'));
+
     } catch (err) {
         showError('roleManagerErrorMessage', 'Lỗi cập nhật: ' + err.message);
     } finally {
@@ -1294,33 +1319,30 @@ async function submitSetRoles() {
     }
 }
 
-async function startQrScanner() {
+async function startQrScanner(scanMode = 'borrow') {
     if (isQrScannerRunning) return;
-    console.log("[QR] BƯỚC 1: Đã gọi startQrScanner() (Chế độ Nâng cao)");
+    currentScanMode = scanMode; // Set the current scan mode
+    console.log(`[QR] Chế độ quét được đặt thành: ${currentScanMode}`);
     const overlay = document.getElementById('qr-scanner-overlay'); 
     if (!overlay) { console.error("[QR LỖI] Không tìm thấy 'qr-scanner-overlay'."); return; }
     overlay.style.display = 'flex'; 
     showError('managerBorrowErrorMessage', '');
-    console.log("[QR] BƯỚC 2: Đã hiển thị overlay.");
     if (typeof Html5Qrcode === 'undefined') { console.error("[QR LỖI] Thư viện 'Html5Qrcode' (core) không tồn tại."); showError('managerBorrowErrorMessage', 'Lỗi tải thư viện QR.'); return; }
     html5QrCodeScanner = new Html5Qrcode("qr-reader");
     isQrScannerRunning = true; 
-    console.log("[QR] BƯỚC 3: Đã khởi tạo core engine.");
     try {
         const cameras = await Html5Qrcode.getCameras();
-        console.log("[QR] BƯỚC 4: Lấy danh sách camera:", cameras);
         if (!cameras || cameras.length === 0) throw new Error("Không tìm thấy camera nào.");
         let cameraId = null;
         const backCamera = cameras.find(camera => (camera.label && camera.label.toLowerCase().includes('back')) || camera.facingMode === 'environment');
-        if (backCamera) { cameraId = backCamera.id; console.log("[QR] BƯỚC 5: Đã tìm thấy camera sau:", backCamera.label); }
-        else { cameraId = cameras[cameras.length - 1].id; console.log("[QR] BƯỚC 5: Không tìm thấy camera 'back', dùng camera cuối cùng:", cameras[cameras.length - 1].label); }
+        if (backCamera) { cameraId = backCamera.id; }
+        else { cameraId = cameras[cameras.length - 1].id; }
         await html5QrCodeScanner.start(
             cameraId,
             { fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.8); return { width: Math.max(50, s), height: Math.max(50, s) }; } },
             handleQrScanSuccess,
             handleQrScanError
         );
-        console.log("[QR] BƯỚC 6: Camera đã khởi động.");
     } catch (err) {
         console.error("[QR LỖI] Không thể khởi động camera:", err);
         showError('managerBorrowErrorMessage', 'Lỗi camera: ' + err.message);
@@ -1346,26 +1368,84 @@ function handleQrScanSuccess(decodedText, decodedResult) {
     console.log(`Scan successful: ${decodedText}`);
     stopQrScanner();
     const scannedCode = normalizeCode(decodedText.trim());
-    const foundItem = itemListCache.find(it => normalizeCode(it.code) === scannedCode);
-    const errorEl = document.getElementById('qr-scan-error');
-    if (foundItem) {
-        const label = `${foundItem.code} - ${foundItem.name}`;
-        const itemData = { code: foundItem.code, name: foundItem.name };
-        const searchInput = jQuery('#managerItemSearch');
-        searchInput.val(label);
-        searchInput.data('selectedItem', itemData);
-        document.getElementById('managerItemQuantity').focus();
-        showSuccess('managerBorrowSuccessMessage', `Đã tìm thấy: ${foundItem.name}`);
-        if (errorEl) errorEl.style.display = 'none';
-    } else {
-        console.warn(`Mã QR "${scannedCode}" không có trong danh mục.`);
-        if (errorEl) {
-             errorEl.innerText = `Lỗi: Mã "${scannedCode}" không tồn tại.`;
-             errorEl.style.display = 'block';
-             setTimeout(() => { if (errorEl) errorEl.style.display = 'none'; }, 3000);
+
+    if (currentScanMode === 'info') {
+        const searchInput = document.getElementById('itemInfoSearchInput');
+        searchInput.value = scannedCode;
+        checkItemInfo();
+        // Mở toggle section nếu nó đang đóng
+        const header = $('#itemInfoSection .toggle-header');
+        if (!header.hasClass('active')) {
+            header.click();
+        }
+    } else { // Default to 'borrow'
+        const foundItem = itemListCache.find(it => normalizeCode(it.code) === scannedCode);
+        const errorEl = document.getElementById('qr-scan-error');
+        if (foundItem) {
+            const label = `${foundItem.code} - ${foundItem.name}`;
+            const itemData = { code: foundItem.code, name: foundItem.name };
+            const searchInput = jQuery('#managerItemSearch');
+            searchInput.val(label);
+            searchInput.data('selectedItem', itemData);
+            document.getElementById('managerItemQuantity').focus();
+            showSuccess('managerBorrowSuccessMessage', `Đã tìm thấy: ${foundItem.name}`);
+            if (errorEl) errorEl.style.display = 'none';
+        } else {
+            console.warn(`Mã QR "${scannedCode}" không có trong danh mục.`);
+            if (errorEl) {
+                 errorEl.innerText = `Lỗi: Mã "${scannedCode}" không tồn tại.`;
+                 errorEl.style.display = 'block';
+                 setTimeout(() => { if (errorEl) errorEl.style.display = 'none'; }, 3000);
+            }
         }
     }
 }
+
+/**
+ * [NEW] Checks and displays item information based on search input.
+ */
+function checkItemInfo() {
+    const resultArea = document.getElementById('itemInfoResultArea');
+    const spinner = document.getElementById('itemInfoSpinner');
+    const searchInput = document.getElementById('itemInfoSearchInput');
+    const query = searchInput.value.trim().toLowerCase();
+    
+    resultArea.innerHTML = '';
+    if (!query) {
+        resultArea.innerHTML = '<p class="error">Vui lòng nhập mã hoặc tên vật tư.</p>';
+        return;
+    }
+    
+    spinner.style.display = 'block';
+
+    // Extract code from labels like "CODE - NAME"
+    const codeFromLabel = query.split(' - ')[0];
+
+    const foundItem = itemListCache.find(item => 
+        item.code.toLowerCase() === codeFromLabel ||
+        item.name.toLowerCase().includes(query)
+    );
+
+    setTimeout(() => { // Simulate network delay for better UX
+        spinner.style.display = 'none';
+        if (foundItem) {
+            resultArea.innerHTML = `
+                <div class="info-card">
+                    <h4>Thông tin vật tư</h4>
+                    <p><strong>Mã vật tư:</strong> ${foundItem.code}</p>
+                    <p><strong>Tên vật tư:</strong> ${foundItem.name}</p>
+                    <p><strong>Đơn vị tính:</strong> ${foundItem.unit || 'N/A'}</p>
+                    <p><strong>Tồn kho tổng:</strong> ${foundItem.quantity !== undefined ? foundItem.quantity.toLocaleString('vi-VN') : 'N/A'}</p>
+                    <p><strong>Giá trị kho:</strong> ${foundItem.value !== undefined ? foundItem.value.toLocaleString('vi-VN') + ' VNĐ' : 'N/A'}</p>
+                    <p><strong>Đơn giá (ước tính):</strong> ${foundItem.unitPrice !== undefined ? foundItem.unitPrice.toLocaleString('vi-VN') + ' VNĐ' : 'N/A'}</p>
+                </div>
+            `;
+        } else {
+            resultArea.innerHTML = `<p class="error">Không tìm thấy vật tư nào khớp với "${searchInput.value}".</p>`;
+        }
+    }, 300);
+}
+
 /**
  * [ADMIN] Gọi API để sửa kho âm
  */
@@ -1560,6 +1640,12 @@ document.addEventListener('DOMContentLoaded', function(){
     // Bắt đầu quá trình xác thực
     attachAuthListener(authButton, signOutButton); 
     
+    // Gắn listener cho dropdown quản lý quyền
+    const roleSelect = document.getElementById('roleUserSelect');
+    if (roleSelect) {
+        roleSelect.addEventListener('change', loadUserRolesForAdmin);
+    }
+    
     // Khởi tạo các thành phần UI
     initForm();
     toggleBorrowInput();
@@ -1587,28 +1673,47 @@ document.addEventListener('DOMContentLoaded', function(){
 /**
  * [ADMIN] Kiểm tra quyền hiện tại của user
  */
+/**
+ * [ADMIN] Tải quyền và avatar của user được chọn trong dropdown
+ */
 async function loadUserRolesForAdmin() {
-    const email = document.getElementById('roleEmailInput').value.trim();
+    const email = document.getElementById('roleUserSelect').value;
+
+    // Helper function to reset the role UI elements
+    const resetRoleUI = () => {
+        document.getElementById('roleCheckboxInventoryManager').checked = false;
+        document.getElementById('roleCheckboxSale').checked = false;
+        document.getElementById('roleCheckboxAuditor').checked = false;
+        document.getElementById('roleAvatarPreview').src = '/default-avatar.png';
+        showError('roleManagerErrorMessage', '');
+        showSuccess('roleManagerSuccessMessage', '');
+    };
+    
+    // If no user is selected, just reset the UI and stop
     if (!email) {
-        showError('roleManagerErrorMessage', 'Vui lòng nhập email cần kiểm tra.');
+        resetRoleUI();
         return;
     }
 
     const spinner = document.getElementById('roleManagerSpinner');
     if (spinner) spinner.style.display = 'block';
     
-    // Xóa thông báo cũ
-    showError('roleManagerErrorMessage', '');
-    showSuccess('roleManagerSuccessMessage', '');
+    // Clear previous results before fetching new ones
+    resetRoleUI();
 
     try {
-        // Gọi API lấy quyền
+        // Call API to get user roles and info
         const claims = await callApi('/admin/getUserRoles', { email: email });
         
-        // Cập nhật trạng thái Checkbox dựa trên dữ liệu trả về
+        // Update checkboxes based on the response
         document.getElementById('roleCheckboxInventoryManager').checked = !!claims.inventory_manager;
         document.getElementById('roleCheckboxSale').checked = !!claims.sale;
         document.getElementById('roleCheckboxAuditor').checked = !!claims.auditor;
+
+        // Update the avatar preview as well
+        if (claims.avatarUrl) {
+            document.getElementById('roleAvatarPreview').src = claims.avatarUrl;
+        }
 
         let roleText = [];
         if (claims.admin) roleText.push("Admin");
@@ -1622,13 +1727,267 @@ async function loadUserRolesForAdmin() {
 
     } catch (err) {
         console.error(err);
-        showError('roleManagerErrorMessage', 'Lỗi: ' + err.message);
-        
-        // Reset checkbox nếu lỗi để tránh hiểu nhầm
-        document.getElementById('roleCheckboxInventoryManager').checked = false;
-        document.getElementById('roleCheckboxSale').checked = false;
-        document.getElementById('roleCheckboxAuditor').checked = false;
+        showError('roleManagerErrorMessage', 'Lỗi tải quyền: ' + err.message);
+        resetRoleUI(); // Reset UI on error to avoid confusion
     } finally {
         if (spinner) spinner.style.display = 'none';
+    }
+}
+
+/**
+ * [MỚI] Xử lý khi người dùng chọn file ảnh đại diện
+ */
+/**
+ * [MỚI] Xử lý khi người dùng chọn file ảnh đại diện
+ */
+async function handleAvatarUpload(input) {
+    const email = document.getElementById('roleUserSelect').value;
+    if (!email) {
+        showError('roleManagerErrorMessage', 'Vui lòng chọn nhân viên từ danh sách trước khi tải ảnh lên.');
+        input.value = ''; // Reset the file input if no user is selected
+        return;
+    }
+
+    const file = input.files[0];
+    if (!file) return;
+
+    // Kiểm tra kích thước file
+    if (file.size > 1 * 1024 * 1024) { // 1MB
+        showError('roleManagerErrorMessage', 'Lỗi: Kích thước ảnh phải nhỏ hơn 1MB.');
+        input.value = ''; // Reset input
+        return;
+    }
+
+    const spinner = document.getElementById('roleManagerSpinner');
+    if (spinner) spinner.style.display = 'block';
+    showError('roleManagerErrorMessage', '');
+    showSuccess('roleManagerSuccessMessage', 'Đang tải ảnh lên...');
+
+    try {
+        // 1. [NÂNG CẤP] Cắt vuông và nén ảnh đại diện
+        const compressedBlob = await compressAndCropImage(file, 400, 0.8); // Cắt vuông 400x400px, chất lượng 80%
+
+        // 2. Upload lên Firebase Storage
+        const storageRef = firebase.storage().ref();
+        const fileName = `avatars/${email.replace(/@/g, '_')}_${Date.now()}.jpg`;
+        const fileRef = storageRef.child(fileName);
+        
+        const snapshot = await fileRef.put(compressedBlob);
+        const downloadURL = await snapshot.ref.getDownloadURL();
+
+        // 3. Gọi API để lưu URL vào Firestore
+        await callApi('/admin/setAvatar', {
+            email: email,
+            avatarUrl: downloadURL
+        });
+
+        // 4. Cập nhật giao diện
+        document.getElementById('roleAvatarPreview').src = downloadURL;
+        showSuccess('roleManagerSuccessMessage', 'Cập nhật ảnh đại diện thành công!');
+
+    } catch (err) {
+        console.error("Lỗi tải ảnh đại diện:", err);
+        showError('roleManagerErrorMessage', 'Lỗi: ' + err.message);
+    } finally {
+        if (spinner) spinner.style.display = 'none';
+        input.value = ''; // Reset input
+    }
+}
+
+// [MỚI] Copy hàm này từ repair.js qua common.js để dùng chung
+// Nếu chưa có, hãy thêm hàm này vào `common.js`
+/*
+function compressImage(file, maxWidth, quality) { ... }
+*/
+
+// =================================================================
+// [MỚI] CHỨC NĂNG UPLOAD DANH MỤC VẬT TƯ
+// =================================================================
+let parsedInventoryData = [];
+
+/**
+ * Xử lý file Excel danh mục vật tư do người dùng chọn.
+ * Đọc file, tính toán, và hiển thị preview.
+ */
+function handleInventoryUpload() {
+    const fileInput = document.getElementById('inventoryFile');
+    const file = fileInput.files[0];
+
+    const spinner = document.getElementById('inventoryUploadSpinner');
+    const previewArea = document.getElementById('inventoryPreviewArea');
+    const previewBody = document.getElementById('inventoryPreviewBody');
+    const rowCountSpan = document.getElementById('inventoryRowCount');
+    
+    // Reset UI
+    previewArea.style.display = 'none';
+    previewBody.innerHTML = '';
+    showError('inventoryUploadErrorMessage', '');
+    showSuccess('inventoryUploadSuccessMessage', '');
+
+    if (!file) {
+        showError('inventoryUploadErrorMessage', 'Vui lòng chọn một file Excel.');
+        return;
+    }
+
+    spinner.style.display = 'block';
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Chuyển đổi sheet thành JSON
+            // Giả định hàng đầu tiên là header
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            if (jsonData.length < 2) {
+                throw new Error("File Excel không có dữ liệu hoặc không có header.");
+            }
+
+            // Lấy header và chuẩn hóa
+            const header = jsonData[0].map(h => h.toString().trim().toLowerCase());
+            const requiredHeaders = ['mã hàng', 'tên hàng', 'đơn vị tính', 'số lượng', 'giá trị'];
+
+            // Tìm vị trí của các cột cần thiết
+            const headerMap = {
+                code: header.indexOf('mã hàng'),
+                name: header.indexOf('tên hàng'),
+                unit: header.indexOf('đơn vị tính'),
+                quantity: header.indexOf('số lượng'),
+                value: header.indexOf('giá trị')
+            };
+
+            // Kiểm tra các cột bắt buộc
+            for (const key in headerMap) {
+                if (headerMap[key] === -1) {
+                    throw new Error(`Cột bắt buộc "${key}" (hoặc "Mã hàng", "Tên hàng",...) không tồn tại trong file Excel.`);
+                }
+            }
+            
+            // Xử lý dữ liệu từ hàng thứ 2
+            parsedInventoryData = [];
+            const dataRows = jsonData.slice(1);
+
+            dataRows.forEach((row, index) => {
+                const code = row[headerMap.code] ? row[headerMap.code].toString().trim() : '';
+                const name = row[headerMap.name] ? row[headerMap.name].toString().trim() : '';
+                
+                // Bỏ qua các hàng trống
+                if (!code && !name) {
+                    return;
+                }
+
+                if (!code || !name) {
+                    throw new Error(`Dòng ${index + 2}: "Mã hàng" và "Tên hàng" là bắt buộc.`);
+                }
+
+                const quantity = parseFloat(row[headerMap.quantity]) || 0;
+                const value = parseFloat(row[headerMap.value]) || 0;
+                const unit = row[headerMap.unit] ? row[headerMap.unit].toString().trim() : '';
+
+                // Tự động tính đơn giá
+                const unitPrice = (quantity !== 0) ? (value / quantity) : 0;
+
+                parsedInventoryData.push({
+                    code: code.toUpperCase().replace(/\//g, '-'), // [FIX] Sanitize code
+                    name: name,
+                    unit: unit,
+                    quantity: quantity,
+                    value: value,
+                    unitPrice: unitPrice
+                });
+            });
+
+            if (parsedInventoryData.length === 0) {
+                throw new Error("Không có dữ liệu hợp lệ nào được tìm thấy trong file.");
+            }
+
+            // Hiển thị preview
+            let tableHtml = '';
+            parsedInventoryData.slice(0, 100).forEach(item => { // Chỉ preview 100 dòng đầu
+                tableHtml += `
+                    <tr>
+                        <td>${item.code}</td>
+                        <td>${item.name}</td>
+                        <td>${item.unit}</td>
+                        <td>${item.quantity.toLocaleString('vi-VN')}</td>
+                        <td>${item.value.toLocaleString('vi-VN')}</td>
+                        <td>${item.unitPrice.toLocaleString('vi-VN')}</td>
+                    </tr>
+                `;
+            });
+
+            previewBody.innerHTML = tableHtml;
+            rowCountSpan.textContent = `${parsedInventoryData.length}`;
+            previewArea.style.display = 'block';
+
+        } catch (err) {
+            console.error(err);
+            showError('inventoryUploadErrorMessage', 'Lỗi xử lý file: ' + err.message);
+            parsedInventoryData = []; // Reset data on error
+        } finally {
+            spinner.style.display = 'none';
+        }
+    };
+
+    reader.onerror = function() {
+        spinner.style.display = 'none';
+        showError('inventoryUploadErrorMessage', 'Không thể đọc file đã chọn.');
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Xác nhận và tải dữ liệu vật tư đã preview lên Firestore theo từng lô.
+ */
+async function confirmInventoryUpload() {
+    if (!parsedInventoryData || parsedInventoryData.length === 0) {
+        showError('inventoryUploadErrorMessage', 'Không có dữ liệu để tải lên.');
+        return;
+    }
+
+    const spinner = document.getElementById('inventoryUploadSpinner');
+    const previewArea = document.getElementById('inventoryPreviewArea');
+    
+    spinner.style.display = 'block';
+    showError('inventoryUploadErrorMessage', '');
+    showSuccess('inventoryUploadSuccessMessage', `Đang tải lên ${parsedInventoryData.length} vật tư...`);
+
+    const BATCH_SIZE = 400; // Giới hạn của Firestore là 500, dùng 400 cho an toàn
+    const chunks = [];
+
+    // Chia dữ liệu thành các lô nhỏ
+    for (let i = 0; i < parsedInventoryData.length; i <+ BATCH_SIZE) {
+        chunks.push(parsedInventoryData.slice(i, i + BATCH_SIZE));
+    }
+
+    try {
+        const uploadPromises = chunks.map((chunk, index) => {
+            console.log(`Đang gửi lô ${index + 1}/${chunks.length} với ${chunk.length} vật tư.`);
+            return callApi('/inventory/uploadBatch', { items: chunk });
+        });
+
+        await Promise.all(uploadPromises);
+
+        showSuccess('inventoryUploadSuccessMessage', `Tải lên thành công ${parsedInventoryData.length} vật tư! Danh mục đã được cập nhật.`);
+        
+        // Reset UI sau khi thành công
+        previewArea.style.display = 'none';
+        document.getElementById('inventoryFile').value = '';
+        parsedInventoryData = [];
+
+        // [QUAN TRỌNG] Tải lại danh sách vật tư cho autocomplete
+        initItemSearch();
+
+
+    } catch (err) {
+        console.error("Lỗi tải lên lô vật tư:", err);
+        showError('inventoryUploadErrorMessage', 'Đã xảy ra lỗi trong quá trình tải lên: ' + err.message);
+    } finally {
+        spinner.style.display = 'none';
     }
 }

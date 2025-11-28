@@ -399,6 +399,12 @@ privateRouter.post('/admin/getUserRoles', isAdmin, apiWrapper(async ({ body }) =
         throw e;
     }
 }));
+
+// [MỚI] API Cập nhật ảnh đại diện
+privateRouter.post('/admin/setAvatar', isAdmin, apiWrapper(async ({ db, body }) => {
+    return dataProcessor.updateTechnicianAvatar({ db, email: body.email, avatarUrl: body.avatarUrl });
+}));
+
 // [REPAIR] Tạo phiếu mới
 // (Cho phép user đã đăng nhập là được tạo, không cần quyền Admin)
 privateRouter.post('/repair/create', apiWrapper(async ({ db, body, user }) => {
@@ -433,9 +439,24 @@ privateRouter.post('/repair/update', apiWrapper(async ({ db, body, user }) => {
         userRoles: user.roles
     });
 }));
+
+// --- ROUTER 3: INVENTORY (VẬT TƯ) ---
+const inventoryRouter = express.Router();
+inventoryRouter.use(authenticate); // Yêu cầu xác thực cho tất cả các route vật tư
+
+inventoryRouter.post('/uploadBatch', canApproveBorrowsOrAdmin, apiWrapper(async ({ db, body }) => {
+    return dataProcessor.uploadInventoryBatch({ db, items: body.items });
+}));
+
+inventoryRouter.post('/list', canApproveBorrowsOrAdmin, apiWrapper(async ({ db }) => {
+    return dataProcessor.getInventoryFromFirestore({ db });
+}));
+
+
 // === KẾT THÚC THÊM MỚI ===
 
 app.use('/api', privateRouter);
+app.use('/api/inventory', inventoryRouter); // Gắn router vật tư
 
 
 // 5. EXPORT HÀM GCF

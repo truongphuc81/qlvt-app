@@ -38,7 +38,10 @@ document.addEventListener('DOMContentLoaded', function(){
             .then(users => {
                 // Biến đổi mảng thành object cho dễ tra cứu: { 'a@gmail.com': 'Nguyễn Văn A' }
                 users.forEach(u => { 
-                    if(u.email && u.name) userMap[u.email] = u.name; 
+                    if(u.email) {
+                        // Lưu cả tên và avatar
+                        userMap[u.email] = { name: u.name || u.email, avatarUrl: u.avatarUrl || '' };
+                    }
                 });
                 console.log("User Map loaded:", Object.keys(userMap).length);
                 
@@ -47,7 +50,7 @@ document.addEventListener('DOMContentLoaded', function(){
                 if (currentTicketId) {
                     viewTicketDetail(currentTicketId);
                 } else {
-                    loadTickets(); 
+                    fetchTicketsAPI(false); 
                 } 
             });
 
@@ -61,7 +64,30 @@ document.addEventListener('DOMContentLoaded', function(){
             document.getElementById('app-container').style.display = 'none';
         }
     });
+
+    // [MỚI] Auto-filter listeners
+    const searchTicketInput = document.getElementById('searchTicket');
+    const filterStatusSelect = document.getElementById('filterStatus');
+
+    const debouncedFilter = debounce(() => fetchTicketsAPI(false), 300);
+
+    if (searchTicketInput) {
+        searchTicketInput.addEventListener('input', debouncedFilter); // Tự động lọc khi gõ
+    }
+
+    if (filterStatusSelect) {
+        filterStatusSelect.addEventListener('change', () => fetchTicketsAPI(false)); // Tự động lọc khi chọn
+    }
 });
+
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
 
 // === LOGIC GIAO DIỆN ===
 
@@ -90,7 +116,7 @@ function showView(viewName) {
         btnShowCreate.style.display = 'inline-block';
         btnShowList.style.display = 'none';
         
-        loadTickets(); 
+        fetchTicketsAPI(false); 
     } 
     else if (viewName === 'create') {
         // --- ĐANG TẠO MỚI ---
@@ -290,8 +316,15 @@ async function submitTicket(isPrint) {
         alert(`Tạo phiếu thành công! Mã phiếu: ${result.ticketId}`);
         
         if (isPrint) {
-            // Gọi hàm in (sẽ làm sau)
-            console.log("Đang mở trang in cho: " + result.ticketId);
+            callApi('/repair/detail', { ticketId: result.ticketId })
+            .then(ticket => {
+                currentTicketData = ticket; // Lưu dữ liệu phiếu vừa tạo
+                printTicket(); // Gọi hàm in
+            })
+            .catch(err => {
+                console.error("Lỗi tải chi tiết phiếu để in:", err);
+                alert("Lỗi tải chi tiết phiếu để in: " + err.message);
+            });
         }
         
         showView('list'); // Quay về danh sách
@@ -304,77 +337,7 @@ async function submitTicket(isPrint) {
     }
 }
 
-// Placeholder function cho List View
-function loadTickets() {
-    const tbody = document.getElementById('ticketTableBody');
-    const statusFilter = document.getElementById('filterStatus').value;
-    const searchText = document.getElementById('searchTicket').value.trim();
 
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center"><div class="spinner"></div> Đang tải dữ liệu...</td></tr>';
-    
-    callApi('/repair/list', { status: statusFilter, search: searchText })
-        .then(tickets => {
-            tbody.innerHTML = '';
-            if (!tickets || tickets.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Không tìm thấy phiếu nào.</td></tr>';
-                return;
-            }
-
-            tickets.forEach(t => {
-                const tr = document.createElement('tr');
-                
-                // Màu sắc trạng thái
-                let statusClass = 'status-new'; 
-                if (t.currentStatus === 'Đang sửa') statusClass = 'status-warning'; 
-                if (t.currentStatus === 'Hoàn tất' || t.currentStatus === 'Đã trả') statusClass = 'status-success';
-                
-                const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleString('vi-VN') : '';
-
-                tr.innerHTML = `
-                    <td style="font-weight:bold; color:var(--primary-color);">${t.ticketId}</td>
-                    <td>
-                        <div style="font-weight:600">${t.customerName}</div>
-                        <div style="font-size:13px; color:#666">${t.customerPhone}</div>
-                    </td>
-                    
-                    <td>
-                        <div style="font-size: 14px; line-height: 1.4;">
-                            <span class="mobile-label" style="display:none; color:#666;">Máy: </span>
-                            
-                            <span style="font-weight:600; color: #333;">
-                                ${t.deviceType} - ${t.deviceBrand} ${t.deviceModel}
-                            </span>
-                        </div>
-                        
-                        <div class="ticket-sn" style="font-size:12px; color:#888; margin-top:2px;">
-                            SN: ${t.deviceSerial}
-                        </div>
-                        
-                        <div class="ticket-issue mobile-only-issue" style="margin-top:5px; font-size:13px; color:#c00; font-style:italic;">
-                            <span class="mobile-label" style="display:none; color:#666; font-style:normal;">Lỗi: </span>
-                            ${t.issueDescription || ''}
-                        </div>
-                    </td>
-                    
-                    <td><span class="badge ${statusClass}">${t.currentStatus}</span></td>
-                    <td>${dateStr}</td>
-                    <td>
-                        <button class="btn-icon btn-view-detail" onclick="viewTicketDetail('${t.ticketId}')">
-                            <span class="text-desktop">Xem</span>
-                            <span class="text-mobile">Chi tiết</span>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
-        })
-        .catch(err => {
-            console.error(err);
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center error">Lỗi: ${err.message}</td></tr>`;
-        });
-        lastLoadedTicketId = null;
-        fetchTicketsAPI(false);
-}
 function loadMoreTickets() {
     if (!lastLoadedTicketId) return;
     const btn = document.getElementById('loadMoreTickets');
@@ -572,6 +535,16 @@ function renderTicketDetail(t) {
     // Người nhận (Đã làm ở bước trước)
     if(document.getElementById('d_receiver')) {
         document.getElementById('d_receiver').innerText = t.creatorName || t.createdBy;
+        // [MỚI] Thêm avatar
+        const receiverAvatar = document.getElementById('d_receiver_avatar');
+        const receiverInfo = userMap[t.createdBy] || {};
+        if (receiverAvatar) {
+            receiverAvatar.src = receiverInfo.avatarUrl || '/default-avatar.png';
+            receiverAvatar.classList.add('avatar-small');
+            receiverAvatar.style.width = '20px';
+            receiverAvatar.style.height = '20px';
+            receiverAvatar.style.display = 'inline-block';
+        }
     }
     
     // 2. Hiển thị ảnh tiếp nhận
@@ -599,10 +572,12 @@ function renderTicketDetail(t) {
 
     if (t.techCheck) {
         // === ƯU TIÊN LẤY TÊN TỪ THÔNG TIN GIAO VIỆC ===
-        const techName = (t.assignedTechCheck && t.assignedTechCheck.name) 
-                         ? t.assignedTechCheck.name 
-                         : (t.techCheck.technicianName || t.techCheck.technicianEmail);
-        // ===============================================
+        const techEmail = (t.assignedTechCheck && t.assignedTechCheck.email) || t.techCheck.technicianEmail;
+        const techInfo = userMap[techEmail] || {};
+        const techName = (t.assignedTechCheck && t.assignedTechCheck.name) || techInfo.name || techEmail;
+        const techAvatarUrl = (t.assignedTechCheck && t.assignedTechCheck.avatarUrl) || techInfo.avatarUrl || '/default-avatar.png';
+        const techAvatarImg = `<img src="${techAvatarUrl}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
+
 
         let techPhotosHtml = '';
         if (t.techCheck.photos && t.techCheck.photos.length > 0) {
@@ -615,7 +590,7 @@ function renderTicketDetail(t) {
 
         techBlock.innerHTML = `
             <div style="background:#f9f9f9; padding:10px; border-radius:6px; border-left:4px solid var(--primary-color);">
-                <div><strong>KTV:</strong> ${techName}</div> <div style="margin-top:5px;"><strong>Nguyên nhân:</strong> ${t.techCheck.cause}</div>
+                <div><strong>KTV:</strong> ${techAvatarImg} ${techName}</div> <div style="margin-top:5px;"><strong>Nguyên nhân:</strong> ${t.techCheck.cause}</div>
                 <div><strong>Đề xuất:</strong> ${t.techCheck.solution}</div>
                 <div><strong>Linh kiện:</strong> ${t.techCheck.components || 'Không'}</div>
                 ${techPhotosHtml} 
@@ -629,11 +604,13 @@ function renderTicketDetail(t) {
             if (t.assignedTechCheck) {
                 // ĐÃ GIAO CHO AI ĐÓ
                 const assignee = t.assignedTechCheck;
+                const assigneeAvatarUrl = assignee.avatarUrl || (userMap[assignee.email] ? userMap[assignee.email].avatarUrl : '') || '/default-avatar.png';
+                const assigneeAvatarImg = `<img src="${assigneeAvatarUrl}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
                 const isMe = (assignee.email === myEmail);
                 
                 assignHtml = `
                     <div style="margin-bottom:10px; color:#0d47a1; background:#e3f2fd; padding:8px; border-radius:4px; border-left: 3px solid #2196f3;">
-                        👤 KTV: <strong>${assignee.name}</strong><br>
+                        👤 KTV: <strong>${assigneeAvatarImg} ${assignee.name}</strong><br>
                         <small style="color:#666;">Giao bởi ${assignee.assignedBy} lúc ${new Date(assignee.assignedAt).toLocaleString('vi-VN')}</small>
                     </div>
                 `;
@@ -836,12 +813,13 @@ function renderTicketDetail(t) {
         }
         // ================================================
         const totalFormatted = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.quotation.totalPrice || 0);
-        // 1. Lấy thông tin an toàn
+        
+        // [FIX] Logic lấy tên Sale: Ưu tiên tên đã lưu -> Tra cứu trong userMap -> Hiện email
         const qSaleEmail = t.quotation.saleEmail || '';
         const qSaleName = t.quotation.saleName || '';
-        
-        // 2. Tra từ điển
-        const saleLabel = qSaleName || (userMap && userMap[qSaleEmail]) || qSaleEmail || '---';
+        const saleInfo = userMap[qSaleEmail] || {};
+        const saleName = qSaleName || saleInfo.name || qSaleEmail || '---';
+        const saleAvatar = `<img src="${saleInfo.avatarUrl || '/default-avatar.png'}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
 
         quoteBlock.innerHTML = `
             <div style="background:#fff3cd; padding:10px; border-radius:6px; border-left:4px solid #ffc107;">
@@ -860,9 +838,31 @@ function renderTicketDetail(t) {
                 </div>
 
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Sale: <strong>${saleLabel}</strong>
+                    Sale: <strong>${saleAvatar} ${saleName}</strong>
                 </div>
             </div>
+            
+            <!-- [MỚI] HIỂN THỊ KẾT QUẢ CHỐT CỦA KHÁCH -->
+            ${
+                t.customerConfirm ?
+                (() => {
+                    const isAgreed = t.customerConfirm.result === 'Đồng ý sửa';
+                    const bgColor = isAgreed ? '#e8f5e9' : '#fbe9e7';
+                    const borderColor = isAgreed ? '#4caf50' : '#ff5722';
+                    const icon = isAgreed ? '✅' : '❌';
+
+                    return `
+                        <div style="margin-top: 10px; padding: 10px; border-radius: 6px; background: ${bgColor}; border-left: 4px solid ${borderColor};">
+                            <div style="font-weight: bold; color: ${borderColor}; margin-bottom: 5px;">
+                                ${icon} Khách đã chốt: ${t.customerConfirm.result}
+                            </div>
+                            ${t.customerConfirm.note ? `<div style="font-size: 12px; font-style: italic;">Ghi chú: "${t.customerConfirm.note}"</div>` : ''}
+                            <div style="font-size: 11px; color: #666; text-align: right; margin-top: 5px;">
+                                ${new Date(t.customerConfirm.date).toLocaleString('vi-VN')}
+                            </div>
+                        </div>`;
+                })() : ''
+            }
         `;
     } else {
         // --- TRƯỜNG HỢP B: CHƯA CÓ BÁO GIÁ ---
@@ -978,6 +978,10 @@ function renderTicketDetail(t) {
                            (unitName && unitName.toLowerCase().includes('hãng')) || 
                            (unitName && unitName.toLowerCase().includes('bảo hành'));
 
+        // [FIX] Kiểm tra xem khách đã xác nhận sửa chưa
+        const hasCustomerConfirmed = t.customerConfirm && t.customerConfirm.result === 'Đồng ý sửa';
+
+
         // === KHAI BÁO CÁC BIẾN MÀ BẠN ĐANG BỊ THIẾU ===
         const labelAction = isWarranty ? 'Gửi đi Bảo Hành' : 'Gửi đi Sửa Ngoài';
         const labelStatus = isWarranty ? 'Máy đang được Bảo Hành' : 'Máy đang ở đơn vị ngoài';
@@ -1008,6 +1012,16 @@ function renderTicketDetail(t) {
                     boxStyle = `border:2px solid #dc3545; background:#fff5f5;`; // Màu đỏ cảnh báo
                 }
 
+                // [FIX] Chỉ hiển thị nút "Nhận về" sau khi khách đã chốt
+                let receiveBtnHtml = '';
+                if (confirm) { // Nếu khách đã chốt (đồng ý hoặc từ chối)
+                    receiveBtnHtml = `
+                        <button onclick="openExternalModal('RECEIVE')" class="btn-sm" style="background:#28a745; padding:10px 20px; margin-top:10px;">
+                            ✅ Đã Nhận Về
+                        </button>
+                    `;
+                }
+
                 repairBlock.innerHTML = `
                     ${confirmInfo}
                     <div style="text-align:center; padding:15px; ${boxStyle} border-radius:8px;">
@@ -1016,9 +1030,7 @@ function renderTicketDetail(t) {
                             Gửi lúc: ${log.sentDate ? new Date(log.sentDate).toLocaleString('vi-VN') : '---'}<br>
                             Nơi nhận: <strong>${log.unitName}</strong>
                         </div>
-                        <button onclick="openExternalModal('RECEIVE')" class="btn-sm" style="background:#28a745; padding:10px 20px;">
-                            ✅ Đã Nhận Về & Test OK
-                        </button>
+                        ${receiveBtnHtml}
                     </div>
                 `;
             } else {
@@ -1033,7 +1045,10 @@ function renderTicketDetail(t) {
                     </div>
                 `;
             }
-        } else {
+        } else if (hasCustomerConfirmed) {
+            // === B. LOGIC SỬA TẠI CHỖ (Bình thường) ===
+            // [FIX] Chỉ hiển thị khối này nếu khách đã đồng ý sửa
+
             // === B. LOGIC SỬA TẠI CHỖ (Bình thường) ===
             
             // 1. ĐỊNH NGHĨA NÚT ĐẶT HÀNG (Khôi phục lại đoạn bị thiếu)
@@ -1053,10 +1068,12 @@ function renderTicketDetail(t) {
             if (t.assignedRepair) {
                 // Đã giao
                 const assignee = t.assignedRepair;
+                const assigneeAvatarUrl = (assignee.avatarUrl) || (userMap[assignee.email] ? userMap[assignee.email].avatarUrl : '') || '/default-avatar.png';
+                const assigneeAvatarImg = `<img src="${assigneeAvatarUrl}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
                 
                 workerHtml = `
                     <div style="margin-bottom:10px; font-size:13px; color:#004085; background:#cce5ff; padding:5px; border-radius:4px; border-left: 3px solid #007bff;">
-                        🔧 KTV: <strong>${assignee.name}</strong> đang sửa
+                        🔧 KTV: <strong>${assigneeAvatarImg} ${assignee.name || assignee.email}</strong> đang sửa
                     </div>
                 `;
                 
@@ -1105,10 +1122,12 @@ function renderTicketDetail(t) {
         repairContainer.style.opacity = '1';
         
         // === ƯU TIÊN LẤY TÊN TỪ THÔNG TIN GIAO VIỆC ===
-        const repairName = (t.assignedRepair && t.assignedRepair.name)
-                           ? t.assignedRepair.name
-                           : (t.repair.technicianName || t.repair.technicianEmail);
-        // ===============================================
+        const repairEmail = (t.assignedRepair && t.assignedRepair.email) || t.repair.technicianEmail;
+        const repairInfo = userMap[repairEmail] || {};
+        const repairName = (t.assignedRepair && t.assignedRepair.name) || repairInfo.name || repairEmail;
+        const repairAvatarUrl = (t.assignedRepair && t.assignedRepair.avatarUrl) || repairInfo.avatarUrl || '/default-avatar.png';
+        const repairAvatarImg = `<img src="${repairAvatarUrl}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
+
 
         let photosHtml = '';
         if (t.repair.photos && t.repair.photos.length > 0) {
@@ -1122,7 +1141,7 @@ function renderTicketDetail(t) {
         repairBlock.innerHTML = `
             <div style="background:#d4edda; padding:10px; border-radius:6px; border-left:4px solid #28a745;">
                 <div style="color:#155724; font-weight:bold; margin-bottom:5px;">✅ Đã sửa xong</div>
-                <div><strong>KTV:</strong> ${repairName}</div> <div><strong>Công việc:</strong> ${t.repair.workDescription}</div>
+                <div><strong>KTV:</strong> ${repairAvatarImg} ${repairName}</div> <div><strong>Công việc:</strong> ${t.repair.workDescription}</div>
                 <div><strong>Bảo hành:</strong> ${t.repair.warranty || 'Không'}</div>
                 ${photosHtml}
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
@@ -1167,9 +1186,12 @@ function renderTicketDetail(t) {
             photosHtml += `</div>`;
         }
 
+        // [FIX] Logic lấy tên Thu ngân: Ưu tiên tên đã lưu -> Tra cứu trong userMap -> Hiện email
         const pStaffEmail = t.payment.staffEmail || '';
         const pStaffName = t.payment.staffName || '';
-        const staffLabel = pStaffName || (userMap && userMap[pStaffEmail]) || pStaffEmail || '---';
+        const staffInfo = userMap[pStaffEmail] || {};
+        const staffName = pStaffName || staffInfo.name || pStaffEmail || '---';
+        const staffAvatar = `<img src="${staffInfo.avatarUrl || '/default-avatar.png'}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
 
         paymentBlock.innerHTML = `
             <div style="background:#e8f5e9; padding:10px; border-radius:6px; border-left:4px solid #2e7d32;">
@@ -1184,7 +1206,7 @@ function renderTicketDetail(t) {
                 ${photosHtml}
                 
                 <div style="font-size:11px; color:#666; margin-top:5px; text-align:right;">
-                    Thu ngân: <strong>${staffLabel}</strong> - ${new Date(t.payment.date).toLocaleString('vi-VN')}
+                    Thu ngân: <strong>${staffAvatar} ${staffName}</strong> - ${new Date(t.payment.date).toLocaleString('vi-VN')}
                 </div>
             </div>
         `;
@@ -1978,9 +2000,17 @@ async function openAssignModal(step) {
         techs.forEach(t => {
             const option = document.createElement('option');
             option.value = t.email;
-            option.text = t.name || t.email;
-            // Lưu thêm tên vào data attribute để tiện lấy
-            option.setAttribute('data-name', t.name || t.email);
+            const techName = t.name || t.email;
+            const avatarUrl = t.avatarUrl || '/default-avatar.png';
+            
+            option.text = techName;
+            // Lưu thêm tên và avatar vào data attribute để tiện lấy
+            option.setAttribute('data-name', techName);
+            option.setAttribute('data-avatar', avatarUrl);
+            
+            // [MỚI] Thêm avatar vào text của option để hiển thị trực tiếp
+            option.innerHTML = `<img src='${avatarUrl}' class='avatar-small' style='width:20px;height:20px;border-radius:50%;margin-right:8px;vertical-align:middle;'/> ${techName}`;
+
             select.appendChild(option);
         });
     } catch (err) {
@@ -1992,7 +2022,8 @@ async function openAssignModal(step) {
 async function submitAssignWork() {
     const select = document.getElementById('assign_tech_select');
     const email = select.value;
-    const name = select.options[select.selectedIndex].getAttribute('data-name');
+    const selectedOption = select.options[select.selectedIndex];
+    const name = selectedOption.getAttribute('data-name');
 
     if (!email) {
         alert("Vui lòng chọn Kỹ thuật viên.");

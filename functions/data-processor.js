@@ -1553,6 +1553,29 @@ async function fixNegativeInventoryBatch({ sheets, spreadsheetId, db, email, ite
 
     return { ok: true, message: `Điều chỉnh kho thành công cho ${itemsToFix.length} vật tư.` };
 }
+
+/**
+ * [MỚI] Cập nhật URL ảnh đại diện cho KTV
+ */
+async function updateTechnicianAvatar({ db, email, avatarUrl }) {
+    if (!email || !avatarUrl) {
+        throw new Error("Thiếu email hoặc URL ảnh đại diện.");
+    }
+    const normEmail = utils.normalizeCode(email);
+    const techRef = db.collection('technicians').doc(normEmail);
+
+    try {
+        await techRef.update({
+            avatarUrl: avatarUrl
+        });
+        console.log(`[Avatar] Đã cập nhật avatar cho ${email}`);
+        return { ok: true, message: "Cập nhật ảnh đại diện thành công." };
+    } catch (error) {
+        console.error(`[Avatar] Lỗi cập nhật avatar cho ${email}:`, error);
+        // Nếu lỗi, có thể do user chưa tồn tại, thử tạo mới
+        throw new Error("Không thể cập nhật ảnh. User có thể không tồn tại trong danh sách KTV.");
+    }
+}
 /**
  * [REPAIR] Tạo phiếu sửa chữa mới & Sinh mã tự động
  */
@@ -2042,6 +2065,73 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
 
     return { ok: true };
 }
+
+// [MỚI] Thêm chức năng tải lên danh mục vật tư
+async function uploadInventoryBatch({ db, items }) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        throw new Error("Không có dữ liệu vật tư để xử lý.");
+    }
+
+    const batch = db.batch();
+    let count = 0;
+
+    items.forEach(item => {
+        if (item && item.code) {
+            // [FIX] Sanitize the document ID by replacing slashes
+            const sanitizedCode = item.code.toString().toUpperCase().replace(/\//g, '-');
+            const docRef = db.collection('inventory').doc(sanitizedCode);
+            
+            // Dữ liệu để ghi, chỉ lấy các trường cần thiết
+            const itemData = {
+                code: sanitizedCode, // Store the sanitized code
+                name: item.name,
+                unit: item.unit,
+                quantity: item.quantity,
+                value: item.value,
+                unitPrice: item.unitPrice,
+                lastUpdated: new Date().toISOString()
+            };
+            batch.set(docRef, itemData, { merge: true });
+            count++;
+        }
+    });
+
+    if (count === 0) {
+        throw new Error("Dữ liệu vật tư không hợp lệ (thiếu 'code').");
+    }
+
+    await batch.commit();
+
+    return { ok: true, message: `Đã cập nhật thành công ${count} vật tư.` };
+}
+
+// [MỚI] Lấy danh mục vật tư từ Firestore
+async function getInventoryFromFirestore({ db }) {
+    console.log("[Firestore] Đang tải danh mục vật tư từ collection 'inventory'...");
+
+    const inventorySnapshot = await db.collection('inventory').orderBy('code').get();
+
+    if (inventorySnapshot.empty) {
+        console.warn("Không có vật tư nào trong collection 'inventory'.");
+        return [];
+    }
+
+    const itemList = [];
+    inventorySnapshot.forEach(doc => {
+        const data = doc.data();
+        itemList.push({
+            code: data.code,
+            name: data.name,
+            unit: data.unit,
+            quantity: data.quantity,
+            value: data.value,
+            unitPrice: data.unitPrice
+        });
+    });
+
+    return itemList;
+}
+
 // Xuất module
 module.exports = {
     getTechnicianDashboardData,
@@ -2069,4 +2159,7 @@ module.exports = {
     getRepairTickets,
     getRepairTicket, 
     updateRepairTicket, // <-- THÊM DÒNG NÀY
+    updateTechnicianAvatar,
+    uploadInventoryBatch,
+    getInventoryFromFirestore
 };

@@ -34,16 +34,19 @@ service cloud.firestore {
     // --- QUYỀN CỦA KTV THÔNG THƯỜNG ---
     
     // KTV có thể đọc/ghi các note của chính họ
+    // Lưu ý: khi tạo mới, `resource` chưa tồn tại - dùng cả `resource.data.email` và `request.resource.data.email`
     match /pending_notes/{noteId} {
       allow read, write: if request.auth != null && (
                             request.auth.email == resource.data.email 
+                            || request.auth.email == request.resource.data.email
                             || isAdmin() || isInventoryManager()
                           );
     }
-    
+
     match /pending_return_notes/{noteId} {
        allow read, write: if request.auth != null && (
                             request.auth.email == resource.data.email 
+                            || request.auth.email == request.resource.data.email
                             || isAdmin() || isInventoryManager()
                           );
     }
@@ -52,14 +55,16 @@ service cloud.firestore {
     match /history_transactions/{txId} {
       allow read, write: if request.auth != null && (
                             request.auth.email == resource.data.email 
+                            || request.auth.email == request.resource.data.email
                             || isAdmin() || isInventoryManager()
                           );
     }
-    
+
     // KTV có thể đọc/ghi các sổ của chính họ
     match /usage_tickets/{ticketId} {
        allow read, write: if request.auth != null && (
                             request.auth.email == resource.data.email 
+                            || request.auth.email == request.resource.data.email
                             || isAdmin() || isInventoryManager()
                           );
     }

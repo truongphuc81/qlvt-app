@@ -1,0 +1,65 @@
+/* Custom Styles cho Kiểm Kho */
+
+/* Tăng độ cao dòng để dễ đọc */
+body {
+    font-family: 'Segoe UI', Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f0f2f5;
+}
+
+/* Ô nhập liệu Scan nổi bật */
+#scanInput {
+    font-size: 1.2rem;
+    height: 50px;
+    border: 2px solid #0d6efd;
+    box-shadow: 0 0 10px rgba(13, 110, 253, 0.1);
+}
+#scanInput:focus {
+    box-shadow: 0 0 15px rgba(13, 110, 253, 0.3);
+}
+
+/* Bảng dữ liệu */
+.table th {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.table td {
+    font-size: 0.95rem;
+}
+
+/* Màu sắc highlight chênh lệch */
+.diff-positive {
+    color: #198754; /* Xanh - Thừa */
+    font-weight: bold;
+    background-color: #d1e7dd;
+}
+.diff-negative {
+    color: #dc3545; /* Đỏ - Thiếu */
+    font-weight: bold;
+    background-color: #f8d7da;
+}
+.diff-zero {
+    color: #adb5bd; /* Xám - Khớp */
+}
+
+/* Hiệu ứng focus hàng mới quét */
+@keyframes highlight-scan {
+    0% { background-color: #ffc107; }
+    100% { background-color: transparent; }
+}
+.just-scanned {
+    animation: highlight-scan 1.5s ease-out;
+}
+
+/* Sticky Header cho bảng dài */
+.sticky-top {
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+/* Camera box */
+#reader {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #ccc;
+}

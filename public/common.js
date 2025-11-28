@@ -114,3 +114,89 @@ async function callApi(endpoint, data) {
          throw error;
     }
 }
+
+/**
+ * [NÂNG CẤP] Nén và cắt ảnh đại diện thành hình vuông.
+ * @param {File} file - File ảnh gốc.
+ * @param {number} outputSize - Kích thước cạnh của ảnh vuông đầu ra (VD: 400).
+ * @param {number} quality - Chất lượng ảnh JPEG (0.1 - 1.0).
+ * @returns {Promise<Blob>} - Trả về một Blob chứa ảnh đã được xử lý.
+ */
+function compressAndCropImage(file, outputSize, quality) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                // Xác định kích thước và vị trí cắt (crop) từ tâm
+                let sourceX, sourceY, sourceSize;
+                if (img.width > img.height) {
+                    // Ảnh ngang
+                    sourceSize = img.height;
+                    sourceX = (img.width - img.height) / 2;
+                    sourceY = 0;
+                } else {
+                    // Ảnh dọc hoặc vuông
+                    sourceSize = img.width;
+                    sourceX = 0;
+                    sourceY = (img.height - img.width) / 2;
+                }
+
+                // Thiết lập kích thước canvas là kích thước vuông đầu ra
+                canvas.width = outputSize;
+                canvas.height = outputSize;
+
+                // Vẽ phần ảnh đã được cắt vào canvas và resize
+                ctx.drawImage(img, sourceX, sourceY, sourceSize, sourceSize, 0, 0, outputSize, outputSize);
+
+                // Chuyển canvas thành Blob
+                canvas.toBlob(blob => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Không thể tạo Blob từ canvas.'));
+                    }
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = error => reject(new Error('Không thể tải ảnh vào Image object.'));
+        };
+        reader.onerror = error => reject(new Error('Không thể đọc file ảnh.'));
+    });
+}
+
+/**
+ * [GIỮ LẠI] Hàm nén ảnh cũ để dùng cho các chức năng khác (không cắt vuông).
+ */
+function compressImage(file, maxWidth, quality) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth) {
+                    height = Math.round(height * maxWidth / width);
+                    width = maxWidth;
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob(blob => {
+                    resolve(blob);
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = error => reject(error);
+        };
+        reader.onerror = error => reject(error);
+    });
+}

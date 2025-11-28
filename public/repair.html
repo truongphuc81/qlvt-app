@@ -66,7 +66,7 @@
                 <option value="Chưa hoàn tất">Chưa hoàn tất (Đang xử lý)</option>
                 <option value="Hoàn tất">Đã hoàn tất</option>
             </select>
-            <button onclick="loadTickets()" style="width: auto; height:45px;">Lọc</button>
+
         </div>
 
         <div id="ticketQrModal" class="modal-overlay" style="display:none;">
@@ -249,7 +249,9 @@
                 <p><strong>Khách báo:</strong> <span id="d_issueDesc">...</span></p>
                 <p><strong>Ngoại hình:</strong> <span id="d_physicalDesc">...</span></p>
                 <div style="margin-bottom:5px; border-bottom:1px dashed #eee; padding-bottom:5px;">
-                    <strong>Người nhận:</strong> <span id="d_receiver">...</span>
+                    <strong>Người nhận:</strong> 
+                    <img id="d_receiver_avatar" src="/default-avatar.png" class="avatar-small" style="display:none;" alt="avt">
+                    <span id="d_receiver">...</span>
                 </div>
                 <h5 style="margin-top:15px; margin-bottom:5px;">Ảnh tiếp nhận:</h5>
                 <div id="d_receivePhotos" class="photo-grid" style="grid-template-columns: repeat(3, 1fr);"></div>
@@ -257,8 +259,7 @@
         </div>
 
         <div class="right-panel">
-            
-            <div class="control-group" id="block_techCheck">
+            <div class="control-group">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <h4>🛠️ Kỹ thuật kiểm tra</h4>
                     <button id="btn_update_check" class="btn-sm" onclick="openUpdateModal('check')">Cập nhật</button>
@@ -549,6 +550,11 @@
     <div class="modal-content" style="max-width: 400px;">
         <h3>👉 Phân Công Kỹ Thuật</h3>
         <p>Chọn nhân sự thực hiện công đoạn này:</p>
+        
+        <div id="assign_selection_preview" style="display: none; align-items: center; gap: 10px; margin-bottom: 15px; background: #f0f8ff; padding: 10px; border-radius: 8px;">
+            <img id="assign_avatar_preview" src="/default-avatar.png" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+            <span id="assign_tech_name" style="font-weight: bold; font-size: 1.1em;"></span>
+        </div>
         
         <select id="assign_tech_select" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px;">
             <option value="">-- Đang tải danh sách... --</option>

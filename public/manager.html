@@ -16,6 +16,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
   
   <script>
     // Copy cấu hình Firebase Config từ index.html
@@ -98,6 +99,22 @@
       <h4><span style="color: #856404;">🔔 Thông báo yêu cầu đang chờ:</span></h4>
       <p id="pendingCountsText" style="color: #856404; font-weight: bold;"></p>
       <div id="notificationSpinner" style="display:none;"><div class="spinner"></div></div>
+    </div>
+
+    <div id="itemInfoSection" class="form-section toggle-section" style="display: none;">
+      <h3 class="toggle-header">Kiểm tra thông tin vật tư</h3>
+      <div class="toggle-content" style="display: none;">
+        <p class="form-hint">Kiểm tra thông tin vật tư bằng Mã, Tên hoặc quét mã QR.</p>
+        <div class="input-row">
+            <input type="text" id="itemInfoSearchInput" placeholder="Nhập mã hoặc tên vật tư..." style="flex-grow: 2;">
+            <button class="btn-icon" onclick="startQrScanner('info')" title="Quét mã QR để kiểm tra" style="width: auto;">QUÉT QR</button>
+        </div>
+        <button onclick="checkItemInfo()" class="btn-add" style="width: 100%; margin-top: 10px; height: 45px;">Kiểm tra</button>
+        <div id="itemInfoResultArea" style="margin-top: 15px;"></div>
+        <div id="itemInfoSpinner" style="display:none; text-align:center; margin-top: 15px;">
+            <div class="spinner"></div>
+        </div>
+      </div>
     </div>
 
     <div class="form-section">
@@ -310,6 +327,43 @@
         <div id="excelErrorMessage" class="error" style="display:none;"></div>
       </div>
     </div>
+
+    <div id="inventoryUploadSection" class="form-section toggle-section">
+      <h3 class="toggle-header">Tải lên Danh mục Vật tư (Excel)</h3>
+      <div class="toggle-content" style="display: none;">
+        <p class="form-hint">Tải lên file Excel chứa danh mục vật tư tổng. Các cột bắt buộc: 'Mã hàng', 'Tên hàng', 'Đơn vị tính', 'Số lượng', 'Giá trị'.</p>
+        <input type="file" id="inventoryFile" accept=".xlsx,.xls" style="margin-bottom: 10px;"><br>
+        <button onclick="handleInventoryUpload()">Tải lên và Xem trước</button><br>
+        
+        <div id="inventoryUploadSpinner" style="display:none; text-align:center; margin-top: 15px;">
+            <div class="spinner"></div>
+            <p>Đang xử lý file...</p>
+        </div>
+
+        <div id="inventoryPreviewArea" style="display:none; margin-top: 15px;">
+            <p><strong>Xem trước dữ liệu:</strong> <span id="inventoryRowCount"></span> vật tư. Vui lòng kiểm tra kỹ trước khi xác nhận.</p>
+            <div class="table-scroll-container" style="max-height: 400px;">
+                <table id="inventoryPreviewTable">
+                    <thead> 
+                        <tr>
+                            <th>Mã hàng</th>
+                            <th>Tên hàng</th>
+                            <th>ĐVT</th>
+                            <th>Số lượng</th>
+                            <th>Giá trị</th>
+                            <th>Đơn giá (tự tính)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryPreviewBody"></tbody>
+                </table>
+            </div>
+            <button id="confirmInventoryUploadBtn" onclick="confirmInventoryUpload()" style="margin-top: 15px; background-color: var(--primary-color);">Xác nhận và Lưu vào Kho</button>
+        </div>
+        
+        <div id="inventoryUploadSuccessMessage" class="success" style="display:none;"></div>
+        <div id="inventoryUploadErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
     
     <div id="transferForm" class="form-section toggle-section">
       <h3 class="toggle-header">Chuyển vật tư (Toàn hệ thống)</h3>
@@ -344,13 +398,24 @@
       <h3 class="toggle-header">Quản lý Phân quyền (Admin)</h3>
       <div class="toggle-content" style="display: none;">
         <p class="form-hint">Chỉ Admin mới thấy mục này...</p>
-        <label for="roleEmailInput">Email Người dùng:</label><br>
+        <label for="roleUserSelect">Chọn nhân viên:</label><br>
         
         <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-            <input type="email" id="roleEmailInput" placeholder="user@example.com" style="flex: 1; margin-bottom: 0;">
-            <button onclick="loadUserRolesForAdmin()" class="btn-sm" style="width: auto; background: var(--secondary-color); white-space: nowrap;">
-                🔍 Kiểm tra
-            </button>
+            <select id="roleUserSelect" style="flex: 1; margin-bottom: 0;">
+                <option value="">-- Chọn nhân viên để xem quyền --</option>
+            </select>
+        </div>
+
+        <!-- [MỚI] Chức năng upload ảnh đại diện -->
+        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px;">
+            <img id="roleAvatarPreview" src="/default-avatar.png" alt="Avatar" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #ddd;">
+            <div>
+                <label for="avatarUploadInput" class="btn-sm" style="background: #6c757d; cursor: pointer; display: inline-block;">
+                    Chọn ảnh...
+                </label>
+                <input type="file" id="avatarUploadInput" accept="image/*" style="display: none;" onchange="handleAvatarUpload(this)">
+                <p style="font-size: 11px; color: #666; margin: 5px 0 0 0;">Chọn ảnh vuông, dưới 1MB.</p>
+            </div>
         </div>
         <label>Các vai trò:</label><br>
         <div class="role-checkbox-group">
