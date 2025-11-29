@@ -2173,6 +2173,18 @@ async function updateAuditItem({ db, auditId, itemCode, quantity, user }) {
     }
 
     const auditRef = db.collection('audit_sessions').doc(auditId);
+    
+    // === FIX: THÊM LỚP BẢO VỆ KIỂM TRA TRẠNG THÁI PHIÊN ===
+    const sessionDoc = await auditRef.get();
+    if (!sessionDoc.exists) {
+        throw new Error(`Phiên kiểm kê '${auditId}' không tồn tại.`);
+    }
+    if (sessionDoc.data().status !== 'in_progress') {
+        // Nếu trạng thái là 'finished' hoặc 'processing', từ chối ngay lập tức
+        throw new Error(`Phiên kiểm kê đang ở trạng thái '${sessionDoc.data().status}', không thể cập nhật.`);
+    }
+    // === KẾT THÚC SỬA LỖI ===
+
     const itemRef = auditRef.collection('items').doc(itemCode);
 
     await db.runTransaction(async (transaction) => {
