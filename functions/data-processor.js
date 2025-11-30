@@ -1668,37 +1668,49 @@ async function createRepairTicket({ db, data }) {
 /**
  * [REPAIR] Lấy danh sách phiếu sửa chữa (có phân trang & lọc)
  */
-async function getRepairTickets({ db, status = '', search = '', lastTicketId = null }) {
+async function getRepairTickets({ db, status = '', search = '', month = '', lastTicketId = null }) {
     let query = db.collection('repair_tickets').orderBy('createdAt', 'desc');
 
-    // Danh sách các trạng thái được coi là "Chưa hoàn tất"
-    const INCOMPLETE_STATUSES = [
-        'Mới nhận', 
-        'Đang kiểm tra', 
-        'Chờ báo giá', 
-        'Chờ khách xác nhận', 
-        'Đang sửa', 
-        'Chờ trả máy', 
-        'Trả máy không sửa'
-    ];
+    // 1. Xử lý Lọc theo tháng (ƯU TIÊN HÀNG ĐẦU)
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+        try {
+            const [year, monthNum] = month.split('-').map(Number);
+            
+            // Ngày bắt đầu của tháng (VD: 2025-10-01T00:00:00.000Z ở múi giờ UTC)
+            const startDate = new Date(Date.UTC(year, monthNum - 1, 1));
+            
+            // Ngày kết thúc của tháng (VD: 2025-10-31T23:59:59.999Z ở múi giờ UTC)
+            const endDate = new Date(Date.UTC(year, monthNum, 0, 23, 59, 59, 999));
 
-    // 1. Xử lý Lọc theo trạng thái
-    if (status === 'Hoàn tất') {
-        // Chỉ lấy phiếu đã xong
-        query = query.where('currentStatus', '==', 'Hoàn tất');
-        
-    } else if (status === 'Chưa hoàn tất') {
-        // Lấy tất cả phiếu đang xử lý (dùng toán tử 'in')
-        // Lưu ý: Firestore cho phép tối đa 10 giá trị trong mảng 'in'
-        query = query.where('currentStatus', 'in', INCOMPLETE_STATUSES);
-        
-    } else if (status && status !== 'Tất cả' && status !== '') {
-        // (Dự phòng) Nếu sau này muốn lọc riêng từng trạng thái cụ thể
-        query = query.where('currentStatus', '==', status);
+            console.log(`[getRepairTickets] Filtering for month ${month}: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+
+            query = query.where('createdAt', '>=', startDate.toISOString())
+                         .where('createdAt', '<=', endDate.toISOString());
+        } catch(e) {
+            console.error("Lỗi parse tháng không hợp lệ:", month, e);
+            // Nếu tháng không hợp lệ, không làm gì cả, query sẽ không bị thay đổi
+        }
+    } else {
+        // --- LOGIC LỌC THEO TRẠNG THÁI CŨ (Chỉ chạy khi không có bộ lọc tháng) ---
+        const INCOMPLETE_STATUSES = [
+            'Mới nhận', 'Đang kiểm tra', 'Chờ báo giá', 'Chờ khách xác nhận', 
+            'Đang sửa', 'Chờ trả máy', 'Trả máy không sửa', 'Chờ đặt hàng', 
+            'Đã có hàng', 'Đang sửa ngoài'
+        ];
+
+        if (status === 'Hoàn tất') {
+            query = query.where('currentStatus', '==', 'Hoàn tất');
+        } else if (status === 'Chưa hoàn tất') {
+            const incompleteChunks = chunkArray(INCOMPLETE_STATUSES, 10);
+            if(incompleteChunks.length > 0) {
+                 query = query.where('currentStatus', 'in', incompleteChunks[0]);
+            }
+        } else if (status && status !== 'Tất cả' && status !== '') {
+            query = query.where('currentStatus', '==', status);
+        }
     }
 
     // 2. Xử lý Tìm kiếm (Search)
-    // (Logic tìm kiếm giữ nguyên: Lấy 50 phiếu rồi lọc tay vì Firestore hạn chế)
     if (search) {
         const snapshot = await query.limit(50).get();
         let tickets = snapshot.docs.map(doc => doc.data());

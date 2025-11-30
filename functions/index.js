@@ -417,7 +417,8 @@ privateRouter.post('/repair/list', apiWrapper(async ({ db, body }) => {
     return dataProcessor.getRepairTickets({ 
         db, 
         status: body.status, 
-        search: body.search 
+        search: body.search,
+        month: body.month
     });
 }));
 // [REPAIR] Lấy chi tiết phiếu

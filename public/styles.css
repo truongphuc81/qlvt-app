@@ -1366,7 +1366,7 @@ h2 {
     left: 0;
     right: 0;
     height: 4px;
-    background-color: #e9ecef;
+    background-color: rgba(40, 167, 69, 0.3); /* Green with opacity */
     z-index: 0;
 }
 .step {
@@ -1384,7 +1384,7 @@ h2 {
     width: 34px;
     height: 34px;
     background-color: #fff;
-    border: 4px solid #e9ecef;
+    border: 4px solid rgba(40, 167, 69, 0.3); /* Green with opacity */
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -1395,10 +1395,10 @@ h2 {
     font-size: 14px;
 }
 .step.active .step-circle {
-    border-color: var(--primary-color);
-    background-color: var(--primary-color);
+    border-color: #28a745; /* Solid green for active */
+    background-color: #28a745; /* Solid green for active */
     color: white;
-    box-shadow: 0 0 0 3px rgba(0,123,255,0.2);
+    box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); /* Green glow */
 }
 .step-label {
     font-size: 12px;
@@ -1906,4 +1906,134 @@ div.mode-external .ext-only {
   border-radius: 50%;
   object-fit: cover;      /* Đảm bảo ảnh không bị méo khi resize */
   vertical-align: middle; /* Căn giữa với dòng chữ bên cạnh */
+}
+
+/* Kanban Board Styles */
+.kanban-board {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    overflow-x: auto; /* Allow horizontal scrolling on smaller screens */
+    align-items: flex-start; /* Align columns to the top */
+}
+
+.kanban-column {
+    flex: 0 0 300px; /* Fixed width for columns, no shrinking */
+    max-width: 300px;
+    background-color: var(--card-background);
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.dark-mode .kanban-column {
+    background-color: #2a2a2a;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.kanban-header {
+    padding: 15px;
+    color: white; /* White text for all headers */
+    text-align: center; /* Center align header text */
+    font-weight: bold;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px 8px 0 0;
+}
+
+.kanban-header h3 {
+    margin: 0;
+    font-size: 1.2em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kanban-title {
+    flex-grow: 1; /* Allow title to take available space */
+}
+
+.kanban-count {
+    background-color: rgba(255,255,255,0.3);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: normal;
+}
+
+/* Specific colors for different kanban statuses */
+.kanban-header.status-todo { background-color: #007bff; /* Blue */ }
+.kanban-header.status-inprogress { background-color: #ffc107; /* Yellow/Orange */ }
+.kanban-header.status-completed { background-color: #28a745; /* Green */ }
+.kanban-header.status-paused { background-color: #6c757d; /* Gray */ }
+.kanban-header.status-review { background-color: #17a2b8; /* Cyan/Teal */ } /* Example for another status */
+
+.kanban-content {
+    flex-grow: 1; /* Allow content to take remaining height */
+    padding: 15px;
+    overflow-y: auto; /* Scrollable content area */
+}
+
+.kanban-card {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.2s ease-in-out;
+}
+
+.dark-mode .kanban-card {
+    background-color: #3a3a3a;
+    border-color: #4a4a4a;
+    color: #e0e0e0;
+}
+
+.kanban-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.kanban-card h4 {
+    margin-top: 0;
+    margin-bottom: 8px;
+    color: var(--primary-color);
+    font-size: 1em;
+}
+.dark-mode .kanban-card h4 {
+    color: #8bbfff; /* Lighter primary color for dark mode cards */
+}
+
+.kanban-card p {
+    font-size: 0.9em;
+    color: #555;
+    line-height: 1.4;
+}
+.dark-mode .kanban-card p {
+    color: #bbb;
+}
+
+/* Responsive adjustments for kanban board */
+@media (max-width: 768px) {
+    .kanban-board {
+        flex-direction: column; /* Stack columns vertically on mobile */
+        align-items: center; /* Center columns */
+    }
+
+    .kanban-column {
+        flex: 0 0 auto; /* Allow height to be determined by content */
+        width: 100%;
+        max-width: 100%; /* Take full width */
+        margin-bottom: 15px; /* Space between stacked columns */
+    }
+
+    .kanban-header {
+        border-radius: 8px 8px 0 0; /* Keep rounded corners on top */
+    }
 }

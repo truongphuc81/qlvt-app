@@ -572,6 +572,7 @@ div.mode-external .ext-only {
     border-top-right-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     position: relative;
+    text-align: center;
 }
 
 .kanban-header h5 {
@@ -580,8 +581,178 @@ div.mode-external .ext-only {
     font-size: 1.1em;
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     letter-spacing: 0.5px;
+    color: white;
 }
 
 @media (max-width: 900px) {
     .borrow-layout { grid-template-columns: 1fr; }
+}
+
+/* New Styles for Repair Detail View */
+
+/* 5-Column Grid for Process Details */
+.process-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* 5 equal columns */
+    gap: 20px;
+    margin-top: 20px;
+    align-items: start; /* Align items to the start of the grid area */
+}
+
+/* Responsive adjustment for process-detail-grid */
+@media (max-width: 1200px) { /* Adjust for medium screens */
+    .process-detail-grid {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); /* Auto-fit columns, min 250px */
+        gap: 15px;
+    }
+}
+
+@media (max-width: 768px) { /* Stack columns vertically on small screens */
+    .process-detail-grid {
+        grid-template-columns: 1fr; /* Single column */
+        gap: 15px;
+    }
+    .timeline-wrapper {
+        padding-bottom: 0 !important; /* Remove bottom padding if stacked */
+    }
+    .timeline-steps {
+        flex-wrap: wrap; /* Allow steps to wrap on smaller screens */
+        justify-content: center; /* Center wrapped steps */
+    }
+    .step {
+        width: 120px; /* Adjust width for wrapped steps */
+        margin-bottom: 10px; /* Space between wrapped steps */
+    }
+    .timeline-steps::before {
+        height: 0; /* Hide line when wrapped */
+    }
+}
+
+/* View Card Style (similar to control-group but for display) */
+.view-card {
+    background: var(--card-background);
+    border: 1px solid var(--border-color);
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 15px; /* Add margin for spacing between cards if stacked */
+    height: 100%; /* Ensure cards fill their column height */
+    display: flex;
+    flex-direction: column;
+}
+
+.view-card h4, .view-card h5 {
+    color: var(--primary-color);
+    margin-top: 0;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px dashed var(--border-color);
+}
+
+.view-card .photo-grid {
+    margin-top: 10px;
+}
+
+/* Adjustments for Timeline steps to be full width and centered */
+.timeline-wrapper {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    overflow-x: auto; /* Allow horizontal scroll for timeline on smaller screens */
+    padding-bottom: 10px; /* Keep padding for scroll indicator */
+    margin-top: 20px;
+    padding-top: 10px; /* Add space to prevent top clipping of shadow */
+}
+.timeline-steps {
+    justify-content: space-around; /* Distribute steps evenly */
+    padding: 0 10px; /* Add some padding on sides */
+    min-width: 600px; /* Ensure timeline doesn't collapse too much */
+}
+.timeline-steps::after {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: 0;
+    height: 4px;
+    background-color: var(--progress-color, #e9ecef);
+    z-index: 0;
+    width: var(--progress-width, 0%);
+    transition: width 0.4s ease-in-out, background-color 0.4s ease-in-out;
+}
+.step {
+    flex-grow: 1; /* Allow steps to grow and fill space */
+    width: auto; /* Override fixed width */
+    max-width: 150px; /* Max width for each step */
+}
+.step-circle {
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.step.active .step-circle {
+    /* This is now handled by the more specific rules below */
+}
+
+/* Status specific colors for timeline steps (matching kanban) */
+#step_new.active .step-circle {
+    background-color: #6b7280; /* Gray */
+    border-color: #6b7280;
+    box-shadow: 0 0 0 5px rgba(107, 114, 128, 0.4);
+}
+#step_check.active .step-circle {
+    background-color: #3b82f6; /* Blue */
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.4);
+}
+#step_quote.active .step-circle {
+    background-color: #f59e0b; /* Orange */
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.4);
+}
+#step_repair.active .step-circle {
+    background-color: #ef4444; /* Red */
+    border-color: #ef4444;
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.4);
+}
+#step_done.active .step-circle {
+    background-color: #10b981; /* Green */
+    border-color: #10b981;
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.4);
+}
+
+/* Dark mode adjustments for new styles */
+body.dark-mode .view-card {
+    background: #2a2a2a;
+    border-color: #444;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+body.dark-mode .view-card h4, body.dark-mode .view-card h5 {
+    color: #e0e0e0; /* Lighter color for dark mode headers */
+    border-color: #555;
+}
+body.dark-mode .timeline-steps::before {
+    background-color: #444;
+}
+body.dark-mode .step-circle {
+    background-color: #333;
+    border-color: #444;
+    color: #bbb;
+}
+body.dark-mode #step_new.active .step-circle {
+    background-color: #4b5563; /* Darker Gray */
+    border-color: #4b5563;
+}
+body.dark-mode #step_check.active .step-circle {
+    background-color: #2563eb; /* Darker Blue */
+    border-color: #2563eb;
+}
+body.dark-mode #step_quote.active .step-circle {
+    background-color: #d97706; /* Darker Orange */
+    border-color: #d97706;
+}
+body.dark-mode #step_repair.active .step-circle {
+    background-color: #dc2626; /* Darker Red */
+    border-color: #dc2626;
+}
+body.dark-mode #step_done.active .step-circle {
+    background-color: #059669; /* Darker Green */
+    border-color: #059669;
 }

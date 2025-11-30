@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board - Accordion on Mobile</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="main-header">
+         <div class="brand-row">
+            <div class="brand-left">
+                <img src="logo.png" alt="Logo" class="header-logo">
+                <h1 class="header-title">Giao diện Kanban Board</h1>
+            </div>
+        </div>
+    </div>
+    
+    <div class="kanban-board">
+        <div class="kanban-column">
+            <div class="kanban-header status-todo">
+                <h3><span class="kanban-title">Cần làm</span> <span class="kanban-count">(3)</span></h3>
+            </div>
+            <div class="kanban-content">
+                <div class="kanban-card">
+                    <h4>#TASK-1</h4>
+                    <p>Phân tích yêu cầu khách hàng cho tính năng mới.</p>
+                </div>
+                <div class="kanban-card">
+                    <h4>#TASK-2</h4>
+                    <p>Thiết kế wireframe và mockup cho giao diện mobile.</p>
+                </div>
+                <div class="kanban-card">
+                    <h4>#TASK-3</h4>
+                    <p>Chuẩn bị môi trường development và staging.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="kanban-column">
+            <div class="kanban-header status-inprogress">
+            </div>
+            <div class="kanban-content">
+                <div class="kanban-card">
+                    <h4>#TASK-4</h4>
+                    <p>Phát triển API cho module quản lý người dùng.</p>
+                </div>
+                 <div class="kanban-card">
+                    <h4>#TASK-5</h4>
+                    <p>Tích hợp thanh toán qua cổng VNPAY.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="kanban-column">
+            <div class="kanban-header status-completed">
+            </div>
+            <div class="kanban-content">
+                <div class="kanban-card">
+                    <h4>#TASK-6</h4>
+                    <p>Tối ưu hóa tốc độ tải trang chủ.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="kanban-column">
+            <div class="kanban-header status-paused">
+                <h3><span class="kanban-title">Tạm dừng</span> <span class="kanban-count">(0)</span></h3>
+            </div>
+            <div class="kanban-content">
+                <!-- No tasks here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="kanban.js"></script>
+</body>
+</html>

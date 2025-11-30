@@ -15,6 +15,7 @@ let userRoles = {};
 let userMap = {};
 // === AUTH & INIT ===
 document.addEventListener('DOMContentLoaded', function(){ 
+    populateMonthFilter();
     const authButton = document.getElementById('authButton');
     const signOutButton = document.getElementById('signOutButton');
     
@@ -67,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
     // [MỚI] Auto-filter listeners
     const searchTicketInput = document.getElementById('searchTicket');
-    const filterStatusSelect = document.getElementById('filterStatus');
+    const filterMonthSelect = document.getElementById('filterMonth');
 
     const debouncedFilter = debounce(() => fetchTicketsAPI(false), 300);
 
@@ -75,8 +76,8 @@ document.addEventListener('DOMContentLoaded', function(){
         searchTicketInput.addEventListener('input', debouncedFilter); // Tự động lọc khi gõ
     }
 
-    if (filterStatusSelect) {
-        filterStatusSelect.addEventListener('change', () => fetchTicketsAPI(false)); // Tự động lọc khi chọn
+    if (filterMonthSelect) {
+        filterMonthSelect.addEventListener('change', () => fetchTicketsAPI(false)); // Tự động lọc khi chọn
     }
 });
 
@@ -87,6 +88,37 @@ function debounce(func, delay) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func.apply(context, args), delay);
     };
+}
+
+function populateMonthFilter() {
+    const filterMonth = document.getElementById('filterMonth');
+    if (!filterMonth) return;
+    
+    // Clear existing options except the first one
+    while (filterMonth.options.length > 1) {
+        filterMonth.remove(1);
+    }
+
+    const months = [];
+    const now = new Date();
+
+    // Add current and previous 11 months
+    for (let i = 0; i < 12; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const year = d.getFullYear();
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        months.push({
+            value: `${year}-${month}`,
+            text: `Tháng ${month}/${year}`
+        });
+    }
+    
+    months.forEach(m => {
+        const option = document.createElement('option');
+        option.value = m.value;
+        option.text = m.text;
+        filterMonth.appendChild(option);
+    });
 }
 
 // === LOGIC GIAO DIỆN ===
@@ -355,6 +387,28 @@ function loadMoreTickets() {
     fetchTicketsAPI(true);
 }
 
+function getStatusBadgeClass(status) {
+    if (!status) return 'bg-secondary';
+    const s = status.toLowerCase(); // Make matching case-insensitive
+
+    if (s.includes('hoàn tất') || s.includes('đã trả') || s.includes('trả máy')) {
+        return 'bg-success';
+    }
+    if (s.includes('đang sửa') || s.includes('sửa ngoài')) {
+        return 'bg-danger';
+    }
+    if (s.includes('báo giá') || s.includes('chờ khách')) {
+        return 'bg-warning text-dark';
+    }
+    if (s.includes('kiểm tra') || s.includes('chờ đặt hàng') || s.includes('đã có hàng')) {
+        return 'bg-info text-dark';
+    }
+    if (s.includes('mới nhận')) {
+        return 'bg-primary';
+    }
+    return 'bg-secondary';
+}
+
 function createTicketCardHTML(t) {
     const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleDateString('vi-VN') : 'N/A';
     
@@ -369,6 +423,8 @@ function createTicketCardHTML(t) {
         borderColor = 'var(--info-color)';
     }
 
+    const badgeClass = getStatusBadgeClass(t.currentStatus); // Get dynamic badge class
+
     return `
         <div class="kanban-card" onclick="viewTicketDetail('${t.ticketId}')" style="border-left-color: ${borderColor};">
             <div class="card-title">
@@ -380,12 +436,12 @@ function createTicketCardHTML(t) {
             <p class="card-text">
                 <strong>Máy:</strong> ${t.deviceBrand} ${t.deviceModel}
             </p>
-            <p class="card-text text-danger">
+            <p class="card-text">
                 <strong>Lỗi:</strong> ${t.issueDescription || 'Chưa mô tả'}
             </p>
             <div class="card-footer">
-                <span><i class="far fa-calendar-alt"></i> ${dateStr}</span>
-                <span class="badge bg-secondary">${t.currentStatus}</span>
+                <span style="display: flex; align-items: center; gap: 4px;"><span class="material-icons" style="font-size: 1.1em;">calendar_today</span> ${dateStr}</span>
+                <span class="badge ${badgeClass}">${t.currentStatus}</span>
             </div>
         </div>
     `;
@@ -393,7 +449,7 @@ function createTicketCardHTML(t) {
 
 function fetchTicketsAPI(isLoadMore) {
     const btnMore = document.getElementById('loadMoreTickets');
-    const statusFilter = document.getElementById('filterStatus').value;
+    const monthFilter = document.getElementById('filterMonth').value;
     const searchText = document.getElementById('searchTicket').value.trim();
 
     const statusToColumnId = {
@@ -419,21 +475,28 @@ function fetchTicketsAPI(isLoadMore) {
                 Swal.showLoading();
             }
         });
-        document.querySelectorAll('.kanban-cards').forEach(col => col.innerHTML = '');
     }
 
     const payload = { 
-        status: statusFilter, 
+        month: monthFilter, 
         search: searchText,
         lastTicketId: isLoadMore ? lastLoadedTicketId : null
     };
 
+    // Dòng này để debug, kiểm tra xem payload gửi đi có đúng không
+    console.log('Đang gửi yêu cầu API với payload:', payload);
+
     callApi('/repair/list', payload)
         .then(tickets => {
-            if (!isLoadMore) Swal.close();
+            if (!isLoadMore) {
+                Swal.close();
+                // Di chuyển việc xóa vào đây để đảm bảo nó chỉ chạy khi API đã trả về
+                document.querySelectorAll('.kanban-cards').forEach(col => col.innerHTML = '');
+            }
 
             if (!tickets || tickets.length === 0) {
                 if (!isLoadMore) {
+                    // Hiển thị thông báo khi không có phiếu nào
                     document.getElementById('kanban-new').querySelector('.kanban-cards').innerHTML = '<p class="text-center text-muted mt-3">Không có phiếu nào.</p>';
                 }
                 if (btnMore) btnMore.style.display = 'none';
@@ -462,7 +525,11 @@ function fetchTicketsAPI(isLoadMore) {
             });
         })
         .catch(err => {
-            if (!isLoadMore) Swal.close();
+            Swal.close(); // Đảm bảo đóng loading khi có lỗi
+            if (!isLoadMore) {
+                 // Xóa bảng nếu có lỗi khi tải lại từ đầu
+                document.querySelectorAll('.kanban-cards').forEach(col => col.innerHTML = '');
+            }
             Swal.fire({
                 icon: 'error',
                 title: 'Lỗi',
@@ -1054,17 +1121,8 @@ function renderTicketDetail(t) {
         repairBlock.innerHTML = '---';
     }
 
-    let paymentContainer = document.getElementById('block_payment');
-    if (!paymentContainer) {
-        const rightPanel = document.querySelector('#detailView .right-panel');
-        paymentContainer = document.createElement('div');
-        paymentContainer.id = 'block_payment';
-        paymentContainer.className = 'control-group';
-        paymentContainer.style.opacity = '0.6';
-        paymentContainer.innerHTML = '<h4>🧾 Thanh Toán & Trả Máy</h4><div id="content_payment">---</div>';
-        rightPanel.appendChild(paymentContainer);
-    }
-    const paymentBlock = document.getElementById('content_payment');
+    const paymentContainer = document.getElementById('block_complete');
+    const paymentBlock = document.getElementById('content_complete');
     if ((t.currentStatus === 'Hoàn tất' || t.currentStatus === 'Đã trả') && t.payment) {
         paymentContainer.style.opacity = '1';
         const amount = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(t.payment.totalAmount);
@@ -1123,15 +1181,25 @@ function updateTimeline(status) {
     
     const steps = ['step_new', 'step_check', 'step_quote', 'step_repair', 'step_done'];
     let activeIndex = 0;
-    
-    if (status === 'Mới nhận') activeIndex = 0;
-    else if (status === 'Đang kiểm tra' || status === 'Chờ báo giá') activeIndex = 1;
-    else if (status === 'Đã báo giá' || status === 'Chờ khách duyệt' || status === 'Chờ khách xác nhận') activeIndex = 2;
-    else if (status === 'Đang sửa' || status === 'Chờ sửa chữa' || status === 'Chờ đặt hàng' || status === 'Đã có hàng') {
+    const s = status ? status.toLowerCase() : '';
+
+    if (s === 'mới nhận') activeIndex = 0;
+    else if (s.includes('kiểm tra') || s.includes('chờ báo giá')) activeIndex = 1;
+    else if (s.includes('đã báo giá') || s.includes('chờ khách')) activeIndex = 2;
+    else if (s.includes('sửa') || s.includes('chờ đặt hàng') || s.includes('đã có hàng')) {
         activeIndex = 3;
     }
-    else if (status === 'Hoàn tất' || status === 'Đã trả' || status === 'Chờ trả máy') activeIndex = 4;
+    else if (s.includes('hoàn tất') || s.includes('đã trả') || s.includes('chờ trả máy')) activeIndex = 4;
     
+    // Update progress bar width
+    const timeline = document.querySelector('.timeline-steps');
+    if (timeline) {
+        const progressWidth = activeIndex > 0 ? (activeIndex / (steps.length - 1)) * 100 : 0;
+        timeline.style.setProperty('--progress-width', `${progressWidth}%`);
+        // Use a fixed semi-transparent blue for the progress bar
+        timeline.style.setProperty('--progress-color', 'rgba(33, 150, 243, 0.5)');
+    }
+
     for (let i = 0; i <= activeIndex; i++) {
         const stepEl = document.getElementById(steps[i]);
         if(stepEl) stepEl.classList.add('active');
@@ -1394,7 +1462,7 @@ function addQuoteRow(name = '', qty = null, price = null, cost = null) { // Thê
         </td>
         <td style="text-align: center; vertical-align: middle;">
             <button onclick="this.closest('tr').remove(); calculateQuoteTotal();" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size: 16px; padding: 5px;">
-                <i class="fas fa-trash"></i>
+                <span class="material-icons">delete</span>
             </button>
         </td>
     `;
