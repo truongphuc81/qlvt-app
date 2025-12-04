@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giao Dịch Vật Tư (Scanner)</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+    
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    
+    <!-- jQuery & jQuery UI -->
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+
+    <!-- Style chung & Audit Style -->
+    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <link rel="stylesheet" href="audit-styles.css">
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+            authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+            projectId: "quan-ly-vat-tu-backend",
+            storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+            messagingSenderId: "323292129107",
+            appId: "1:323292129107:web:8e467d10c217197b9b63a6"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+    </script>
+
+    
+</head>
+<body class="mode-borrow">
+
+    <!-- Header -->
+    <nav class="navbar navbar-dark theme-bg shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/manager.html">
+                <i class="fas fa-barcode me-2"></i> QUẦY GIAO DỊCH
+            </a>
+            <div class="d-flex align-items-center text-white">
+                
+                <!-- Notification Bell Dropdown -->
+                <div class="dropdown mx-3">
+                    <a class="nav-link" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-bell text-white fs-5"></i>
+                        <span id="notificationBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="display: none;">
+                          0
+                        </span>
+                    </a>
+                    <ul id="notificationMenu" class="dropdown-menu dropdown-menu-end" aria-labelledby="notificationDropdown">
+                        <li><a class="dropdown-item" href="#">Không có thông báo mới</a></li>
+                    </ul>
+                </div>
+
+                <div class="me-3 small text-end">
+                    <div id="userEmailDisplay" class="fw-bold">...</div>
+                    <div class="opacity-75">Quản lý kho</div>
+                </div>
+                <button onclick="window.location.href='manager.html'" class="btn btn-outline-light btn-sm"><i class="fas fa-sign-out-alt"></i> Thoát</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid main-content">
+        <div class="row h-100 g-3">
+            
+            <!-- CỘT 1: CẤU HÌNH & QUÉT -->
+            <div class="col-md-4 col-lg-4 h-100">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3">
+                        <!-- 1. Chọn chế độ -->
+                        <div class="btn-group w-100 mb-3" role="group">
+                            <input type="radio" class="btn-check" name="transMode" id="radioBorrow" autocomplete="off" checked onchange="setMode('borrow')">
+                            <label class="btn btn-outline-primary fw-bold" for="radioBorrow"><i class="fas fa-upload me-1"></i> MƯỢN HÀNG</label>
+                          
+                            <input type="radio" class="btn-check" name="transMode" id="radioReturn" autocomplete="off" onchange="setMode('return')">
+                            <label class="btn btn-outline-warning fw-bold text-dark" for="radioReturn"><i class="fas fa-download me-1"></i> TRẢ HÀNG</label>
+                        </div>
+
+                        <!-- 2. Chọn KTV -->
+                        <label for="techSelect" class="form-label fw-bold text-muted small text-uppercase d-flex align-items-center">
+                            Kỹ thuật viên: <img id="techAvatar" src="/default-avatar.png" class="tech-avatar me-2" alt="Avatar" style="display: none;">
+                        </label>
+                        <select id="techSelect" class="form-select form-select-lg mb-2 fw-bold">
+                            <option value="">-- Chọn người --</option>
+                        </select>
+                    </div>
+
+                    <div class="card-body d-flex flex-column bg-light">
+                        
+                        <!-- 3. Khu vực Lệnh (Trực tiếp / Phiếu chờ) -->
+                        <div id="commandSection" class="mb-3">
+                            <label class="form-label fw-bold text-muted small text-uppercase">Chọn giao dịch:</label>
+                            
+                            <!-- Mặc định: Giao dịch trực tiếp -->
+                            <div class="form-check p-3 bg-white border rounded mb-2 shadow-sm" id="directOptionDiv">
+                                <input class="form-check-input" type="radio" name="orderSource" id="sourceDirect" value="DIRECT" checked onchange="toggleOrderSource()">
+                                <label class="form-check-label fw-bold w-100" for="sourceDirect">
+                                    <span id="directLabel">Quét Mới Trực Tiếp</span>
+                                    <div class="small text-muted fw-normal">Quét mã và giao hàng ngay tại quầy</div>
+                                </label>
+                            </div>
+
+                            <!-- Tùy chọn: Phiếu chờ (Hiện ra nếu có) -->
+                            <div id="pendingOptionDiv" style="display:none;">
+                                <div class="form-check p-3 bg-white border border-warning rounded shadow-sm">
+                                    <input class="form-check-input" type="radio" name="orderSource" id="sourcePending" value="PENDING" onchange="toggleOrderSource()">
+                                    <label class="form-check-label fw-bold w-100 text-warning" for="sourcePending">
+                                        Duyệt Phiếu Chờ (<span id="pendingCount">0</span>)
+                                        <div class="small text-muted fw-normal">KTV đã gửi yêu cầu trước</div>
+                                    </label>
+                                </div>
+                                <!-- Dropdown chọn phiếu chờ -->
+                                <select id="pendingSelect" class="form-select mt-2" style="display:none;" onchange="loadPendingTicket()">
+                                    <option value="">-- Chọn phiếu --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr class="my-2">
+
+                        <!-- 4. Khu vực Quét Mã -->
+                        <div class="flex-grow-1 d-flex flex-column justify-content-center">
+                            <label class="form-label fw-bold theme-text text-center w-100 mb-2" style="font-size: 1.2rem;">
+                                <i class="fas fa-qrcode"></i> QUÉT MÃ VẬT TƯ
+                            </label>
+                            
+                            <div class="input-group mb-3">
+                                <input type="text" id="scanInput" class="form-control form-control-lg text-center fw-bold" placeholder="Click để quét hoặc tìm tên..." autocomplete="off" style="height: 60px; font-size: 1.5rem;">
+                                <div id="manualQtyGroup" class="input-group-append" style="display: none;">
+                                    <input type="number" id="manualQtyInput" class="form-control form-control-lg text-center fw-bold" value="1" min="1" style="height: 60px; width: 100px; font-size: 1.5rem;">
+                                </div>
+                            </div>
+                            
+                            <div class="form-check form-switch d-flex justify-content-center mb-3">
+                                <input class="form-check-input me-2" type="checkbox" id="autoQty" checked>
+                                <label class="form-check-label" for="autoQty">Tự động cộng số lượng (+1)</label>
+                            </div>
+
+                            <button class="btn btn-outline-secondary w-100" onclick="toggleCamera()">
+                                <i class="fas fa-camera"></i> Bật/Tắt Camera Laptop
+                            </button>
+                            <div id="cameraSection" class="mt-2 border rounded overflow-hidden" style="display:none; height: 200px;">
+                                <div id="reader" style="width:100%; height:100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CỘT 2: DANH SÁCH & XÁC NHẬN -->
+            <div class="col-md-8 col-lg-8 h-100">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 theme-text fw-bold" id="listTitle">DANH SÁCH VẬT TƯ</h5>
+                        <div>
+                            <span class="badge bg-secondary rounded-pill fs-6 me-2" id="totalQtyBadge">0 món</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearCart()">Xóa hết</button>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body p-0 scrollable-body bg-white">
+                        <table class="table table-striped table-hover align-middle mb-0" id="cartTable">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 50px;">#</th>
+                                    <th>Mã Hàng</th>
+                                    <th>Tên Vật Tư</th>
+                                    <th class="text-center" style="width: 140px;">Số Lượng</th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartBody">
+                                <tr><td colspan="5" class="text-center py-5 text-muted">Vui lòng quét mã vật tư...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer bg-light p-3">
+                        <div class="row align-items-center">
+                            <div class="col-md-7">
+                                <input type="text" id="transactionNote" class="form-control" placeholder="Ghi chú giao dịch (Không bắt buộc)...">
+                            </div>
+                            <div class="col-md-5">
+                                <button onclick="submitTransaction()" id="btnSubmit" class="btn w-100 btn-lg fw-bold theme-bg shadow">
+                                    XÁC NHẬN
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="common.js"></script>
+    <script src="borrow-return.js"></script>
+</body>
+</html>

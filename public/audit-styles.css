@@ -225,3 +225,47 @@ body.scan-success-highlight {
 .camera-on-mobile .btn-close-camera {
     display: block; /* Visible on mobile when camera is on */
 }
+
+        body { background-color: #f4f6f8; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        .main-content { flex: 1; padding: 15px; overflow: hidden; }
+        
+        /* Giao diện Mượn (Xanh) */
+        body.mode-borrow .theme-bg { background-color: #0d6efd !important; color: white; }
+        body.mode-borrow .theme-text { color: #0d6efd !important; }
+        body.mode-borrow .theme-border { border-color: #0d6efd !important; }
+        
+        /* Giao diện Trả (Cam) */
+        body.mode-return .theme-bg { background-color: #fd7e14 !important; color: white; }
+        body.mode-return .theme-text { color: #fd7e14 !important; }
+        body.mode-return .theme-border { border-color: #fd7e14 !important; }
+
+        /* Card container */
+        .h-100-card { height: 100%; display: flex; flex-direction: column; }
+        .scrollable-body { flex: 1; overflow-y: auto; }
+
+        /* Scanner Input Focus */
+        #scanInput:focus { box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); border-color: #86b7fe; }
+        body.mode-return #scanInput:focus { box-shadow: 0 0 0 0.25rem rgba(253, 126, 20, 0.25); border-color: #ffc107; }
+
+        /* Cửa sổ thông báo - Mở rộng để dễ đọc */
+        #notificationMenu {
+            min-width: 400px; /* Tăng chiều rộng tối thiểu */
+            max-width: 500px; /* Giới hạn chiều rộng tối đa */
+        }
+        
+        /* Notification hover - Cải thiện để nổi bật hơn */
+        #notificationMenu .dropdown-item:hover,
+        #notificationMenu .dropdown-item:focus {
+            background-color: #dbeafe; /* Màu xanh nhạt của Bootstrap 5, tương ứng với primary */
+            color: #000;
+            cursor: pointer;
+        }
+
+/* Avatar kỹ thuật viên */
+.tech-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #ddd;
+}

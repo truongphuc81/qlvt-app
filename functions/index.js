@@ -188,6 +188,15 @@ privateRouter.post('/dashboard', apiWrapper(async ({ sheets, spreadsheetId, db, 
     });
 }));
 
+// [MỚI] Lấy các phiếu mượn đang chờ của chính user
+privateRouter.post('/self/pending-borrow-notes', apiWrapper(async ({ db, user }) => {
+    // Hàm này không cần body, nó lấy email từ context `user` đã được xác thực
+    return dataProcessor.getSelfPendingBorrowNotes({ 
+        db, 
+        user 
+    });
+}));
+
 // 4b. Lịch sử Mượn 
 privateRouter.post('/history/byemail', apiWrapper(async ({ sheets, spreadsheetId, db, body, user }) => {
     return dataProcessor.getBorrowHistory({ 
@@ -246,6 +255,34 @@ privateRouter.post('/manager/items', canApproveBorrowsOrAdmin, apiWrapper(async 
 privateRouter.post('/manager/pendingCounts', canApproveBorrowsOrAdmin, apiWrapper(async ({ db }) => {
     return dataProcessor.getPendingCounts({ db });
 }));
+
+// [MỚI] Lấy phiếu mượn đang chờ của một KTV cụ thể
+privateRouter.post('/manager/pending-borrow-notes', canApproveBorrowsOrAdmin, apiWrapper(async ({ db, body }) => {
+    if (!body.email) {
+        throw new Error('Thiếu email kỹ thuật viên trong body.');
+    }
+    return dataProcessor.getPendingBorrowNotesForTech({ 
+        db, 
+        email: body.email
+    });
+}));
+
+// [MỚI] Lấy TẤT CẢ phiếu đang chờ (mượn & trả) cho chuông thông báo
+privateRouter.post('/manager/all-pending-notes', canApproveBorrowsOrAdmin, apiWrapper(async ({ db }) => {
+    return dataProcessor.getAllPendingNotes({ db });
+}));
+
+// [MỚI] Lấy phiếu TRẢ đang chờ của một KTV cụ thể
+privateRouter.post('/manager/pending-return-notes', canApproveBorrowsOrAdmin, apiWrapper(async ({ db, body }) => {
+    if (!body.email) {
+        throw new Error('Thiếu email kỹ thuật viên trong body.');
+    }
+    return dataProcessor.getPendingReturnNotesForTech({ 
+        db, 
+        email: body.email
+    });
+}));
+
 
 // === QUYỀN: CHỈ ADMIN (Tất cả các chức năng còn lại) ===
 

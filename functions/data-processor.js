@@ -1330,6 +1330,114 @@ async function getSpeechAudio({ text }) {
 /**
  * [MỚI] Lấy tổng quan tồn kho TẤT CẢ KTV
  */
+async function getPendingBorrowNotesForTech({ db, email }) {
+    const normEmail = utils.normalizeCode(email).toLowerCase();
+    try {
+        const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+            .where('email', '==', normEmail)
+            .where('isFulfilled', '==', false)
+            .get();
+        return pendingSnapshot.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error(`Lỗi khi đọc PENDING_NOTES_COLLECTION cho ${email}:`, e);
+        return [];
+    }
+}
+
+/**
+ * [MỚI] Lấy các phiếu mượn đang chờ của chính user đang đăng nhập
+ */
+async function getSelfPendingBorrowNotes({ db, user }) {
+    console.log(`[getSelfPending] Đang tải các phiếu mượn đang chờ cho: ${user.email}`);
+    const normEmail = utils.normalizeCode(user.email).toLowerCase();
+
+    try {
+        const pendingSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+            .where('email', '==', normEmail)
+            .where('isFulfilled', '==', false)
+            .where('status', '==', 'Pending') // Chỉ lấy các phiếu đang chờ thực sự
+            .orderBy('timestamp', 'desc') // Mới nhất lên đầu
+            .get();
+            
+        return pendingSnapshot.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error(`Lỗi khi đọc PENDING_NOTES_COLLECTION cho ${user.email}:`, e);
+        // Trả về mảng rỗng nếu có lỗi thay vì throw
+        return [];
+    }
+}
+
+
+/**
+ * [MỚI] Lấy các phiếu trả đang chờ của một KTV cụ thể
+ */
+async function getPendingReturnNotesForTech({ db, email }) {
+    const normEmail = utils.normalizeCode(email).toLowerCase();
+    try {
+        const pendingSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
+            .where('email', '==', normEmail)
+            .where('isFulfilled', '==', false)
+            .get();
+        return pendingSnapshot.docs.map(doc => doc.data());
+    } catch (e) {
+        console.error(`Lỗi khi đọc PENDING_RETURN_NOTES_COLLECTION cho ${email}:`, e);
+        return [];
+    }
+}
+
+/**
+ * [MỚI] Lấy TẤT CẢ các phiếu đang chờ (mượn và trả) cho chuông thông báo
+ */
+async function getAllPendingNotes({ db }) {
+    console.log("[getAllPendingNotes] Fetching all pending borrow and return notes.");
+    let allNotes = [];
+
+    // 1. Lấy danh sách KTV để map tên
+    const techs = await getTechnicians({ db });
+    const techMap = new Map(techs.map(t => [t.email, t.name]));
+
+    // 2. Lấy phiếu mượn chờ
+    try {
+        const borrowSnapshot = await db.collection(PENDING_NOTES_COLLECTION)
+            .where('isFulfilled', '==', false)
+            .where('status', 'not-in', ['Rejected'])
+            .get();
+        borrowSnapshot.forEach(doc => {
+            const data = doc.data();
+            allNotes.push({
+                ...data,
+                name: techMap.get(data.email) || data.email // Thêm tên KTV
+            });
+        });
+    } catch (error) {
+        console.error("Error fetching pending borrow notes:", error);
+    }
+
+    // 3. Lấy phiếu trả chờ
+    try {
+        const returnSnapshot = await db.collection(PENDING_RETURN_NOTES_COLLECTION)
+            .where('isFulfilled', '==', false)
+            .where('status', 'not-in', ['Rejected'])
+            .get();
+        returnSnapshot.forEach(doc => {
+            const data = doc.data();
+            allNotes.push({
+                ...data,
+                name: techMap.get(data.email) || data.email // Thêm tên KTV
+            });
+        });
+    } catch (error) {
+        console.error("Error fetching pending return notes:", error);
+    }
+
+    // 4. Sắp xếp tất cả theo timestamp, mới nhất lên đầu
+    allNotes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    console.log(`[getAllPendingNotes] Found ${allNotes.length} total pending notes.`);
+    return allNotes;
+}
+
+
 /**
  * [SỬA LỖI] Lấy tổng quan tồn kho TẤT CẢ KTV
  * (Chỉ tính sổ 3 liên CÓ EMAIL)
@@ -2414,21 +2522,25 @@ module.exports = {
     rejectBorrowNote,
     getPendingCounts,
     getSpeechAudio,
-    managerTransferItems,
     getGlobalInventoryOverview,
+    getPendingBorrowNotesForTech,
+    getSelfPendingBorrowNotes,
     fixNegativeInventory,
-    fixNegativeInventoryBatch, 
+    fixNegativeInventoryBatch,
+    updateTechnicianAvatar,
     createRepairTicket,
     getRepairTickets,
-    getRepairTicket, 
+    getRepairTicket,
     updateRepairTicket,
-    updateTechnicianAvatar,
     uploadInventoryBatch,
     getInventoryFromFirestore,
     updateAuditItem,
     finishAuditSession,
     resetAuditSession,
-    cleanupBadTickets
+    cleanupBadTickets,
+    // Add new functions here
+    getAllPendingNotes,
+    getPendingReturnNotesForTech,
 };
 
 /**
