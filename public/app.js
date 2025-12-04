@@ -250,22 +250,40 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
 }
 
 function submitBorrowForm(){
-    var note=(document.getElementById('borrowItems').value||'').trim();
-    if (!note){ showError('borrowErrorMessage','Vui lòng nhập nội dung mượn.'); return; }
-    var data={
+    const button = document.getElementById('submitBorrowButton');
+    button.disabled = true; // Disable button immediately
+
+    var note = (document.getElementById('borrowItems').value || '').trim();
+    if (!note) { 
+        showError('borrowErrorMessage', 'Vui lòng nhập nội dung mượn.');
+        button.disabled = false; // Re-enable on validation failure
+        return; 
+    }
+    
+    var data = {
       timestamp: new Date().toISOString(),
-      type:'Mượn', email:userEmail, date: new Date().toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
-      note:note, items: []
+      type: 'Mượn', 
+      email: userEmail, 
+      date: new Date().toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'}),
+      note: note, 
+      items: []
     };
-    document.getElementById('borrowSpinner').style.display='block';
+
+    document.getElementById('borrowSpinner').style.display = 'block';
+    
     callApi('/submit/borrow', data)
         .then(() => {
-            showSuccess('borrowSuccessMessage','Gửi yêu cầu mượn thành công!');
-            document.getElementById('borrowItems').value='';
+            showSuccess('borrowSuccessMessage', 'Gửi yêu cầu mượn thành công!');
+            document.getElementById('borrowItems').value = '';
             loadSelfDashboard();
         })
-        .catch(err => { showError('borrowErrorMessage','Lỗi gửi yêu cầu: '+err.message); })
-        .finally(() => { document.getElementById('borrowSpinner').style.display='none'; });
+        .catch(err => { 
+            showError('borrowErrorMessage', 'Lỗi gửi yêu cầu: ' + err.message); 
+        })
+        .finally(() => { 
+            document.getElementById('borrowSpinner').style.display = 'none';
+            button.disabled = false; // Re-enable after API call finishes
+        });
 }
 
 function submitReturnForm(){

@@ -765,6 +765,7 @@ async function saveExcelData({ sheets, spreadsheetId, db, data }) {
                 quantity: Number(r.quantity) || 0,
                 email: r.email || '',
                 note: r.note || '',
+                itemGroup: r.itemGroup || '', // Thêm trường nhóm vật tư
                 status: 'Chưa đối chiếu' // Luôn đặt là "Chưa đối chiếu"
             };
 
@@ -1111,7 +1112,8 @@ async function processExcelData({ sheets, spreadsheetId, data }) {
             ticket: ticket,
             quantity: Number(row.quantity) || 0,
             email: (email || '').toString().trim(),
-            note: row.note || ''
+            note: row.note || '',
+            itemGroup: (row['Nhóm VTHH'] || '').toString().trim()
         };
     });
     return processed;
@@ -1814,6 +1816,7 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
                 // === CẬP NHẬT DÒNG NÀY ===
                 items: data.items || [], // Danh sách chi tiết linh kiện
                 totalPrice: Number(data.totalPrice) || 0, // Tổng tiền tính toán được
+                photos: data.photos || [], // LƯU ẢNH BÁO GIÁ
                 // ========================
                 
                 warranty: data.warranty,
@@ -1826,6 +1829,41 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
         const formattedPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(updateData.quotation.totalPrice);
         logDetails = `Báo giá: ${formattedPrice} (${(data.items || []).length} hạng mục)`;
     }
+    
+    else if (action === 'ASSIGN_WORK') {
+        // Chỉ Admin hoặc quản lý kho mới được giao việc
+        if (!userRoles.admin && !userRoles.inventory_manager) {
+             throw new Error("Bạn không có quyền thực hiện thao tác này.");
+        }
+
+        const step = data.step; // 'CHECK' or 'REPAIR'
+        const technician = data.technician;
+
+        if (!step || !technician || !technician.email) {
+            throw new Error("Thiếu thông tin bước hoặc kỹ thuật viên được giao.");
+        }
+
+        const assignmentData = {
+            name: technician.name,
+            email: technician.email,
+            avatarUrl: technician.avatarUrl || '',
+            assignedBy: userName, // The user performing the assignment
+            assignedAt: new Date().toISOString()
+        };
+
+        if (step === 'CHECK') {
+            updateData.assignedTechCheck = assignmentData;
+            logAction = 'Phân công kiểm tra';
+            logDetails = `Giao việc cho KTV: ${technician.name}`;
+        } else if (step === 'REPAIR') {
+            updateData.assignedRepair = assignmentData;
+            logAction = 'Phân công sửa chữa';
+            logDetails = `Giao việc cho KTV: ${technician.name}`;
+        } else {
+            throw new Error(`Bước phân công không hợp lệ: ${step}`);
+        }
+    }
+
     else if (action === 'CUSTOMER_CONFIRM') {
         const isAgreed = data.isAgreed; 
         const techSolution = currentTicket.techCheck ? currentTicket.techCheck.solution : '';
@@ -1913,7 +1951,8 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
                     sentDate: new Date().toISOString(),
                     sentBy: userName,
                     unitName: data.unitName, // Tên đơn vị sửa
-                    note: data.note
+                    note: data.note,
+                    sentPhotos: data.photos || []
                 }
             };
             logAction = 'Gửi sửa ngoài';
@@ -1953,7 +1992,8 @@ async function updateRepairTicket({ db, ticketId, action, data, userEmail, userN
                     receivedDate: new Date().toISOString(),
                     receivedBy: userName,
                     qcResult: qcResultVal,
-                    qcNote: data.note
+                    qcNote: data.note,
+                    qcPhotos: data.photos || []
                 },
                 repair: {
                     technicianName: (prevLogistics.unitName || "Đơn vị ngoài") + " (Sửa ngoài)",
@@ -2087,7 +2127,7 @@ async function uploadInventoryBatch({ db, items }) {
     const batch = db.batch();
     let count = 0;
 
-    items.forEach(item => {
+    items.forEach((item, index) => {
         if (item && item.code) {
             // [FIX] Sanitize the document ID by replacing slashes
             const sanitizedCode = item.code.toString().toUpperCase().replace(/\//g, '-');
@@ -2097,12 +2137,19 @@ async function uploadInventoryBatch({ db, items }) {
             const itemData = {
                 code: sanitizedCode, // Store the sanitized code
                 name: item.name,
-                unit: item.unit,
+                unit: item.unit || '',
                 quantity: item.quantity,
                 value: item.value,
                 unitPrice: item.unitPrice,
+                itemGroup: item.itemGroup || '', 
                 lastUpdated: new Date().toISOString()
             };
+
+            // DEBUG: Log the first item being processed
+            if (index === 0) {
+                console.log("Debug: Saving itemData to Firestore (first item only):", itemData);
+            }
+
             batch.set(docRef, itemData, { merge: true });
             count++;
         }
@@ -2303,6 +2350,53 @@ async function finishAuditSession({ db, auditId, user }) {
 }
 
 // Xuất module
+
+/**
+ * [ADMIN-ONETIME] Dọn dẹp các ticket bị upload lỗi từ file vật tư
+ */
+async function cleanupBadTickets({ db }) {
+    const usageTicketsRef = db.collection('usage_tickets');
+    const snapshot = await usageTicketsRef.get();
+
+    if (snapshot.empty) {
+        return { ok: true, message: "Không có dữ liệu nào trong usage_tickets để kiểm tra." };
+    }
+
+    const batchArray = [db.batch()];
+    let operationCounter = 0;
+    let batchIndex = 0;
+    let deletedCount = 0;
+    const validDateRegex = /^\d{1,2}\/\d{1,2}\/\d{4}$/; // Matches DD/MM/YYYY
+
+    snapshot.forEach(doc => {
+        const date = doc.data().date;
+
+        // Nếu trường 'date' tồn tại và KHÔNG có dạng ngày tháng
+        if (date && !validDateRegex.test(date)) {
+            // Đây là dữ liệu lỗi, thêm vào batch để xóa
+            batchArray[batchIndex].delete(doc.ref);
+            operationCounter++;
+            deletedCount++;
+
+            // Giới hạn của Firestore là 500 operation mỗi batch
+            if (operationCounter >= 499) {
+                batchArray.push(db.batch());
+                batchIndex++;
+                operationCounter = 0;
+            }
+        }
+    });
+
+    if (deletedCount === 0) {
+        return { ok: true, message: "Không tìm thấy dữ liệu lỗi nào để xóa." };
+    }
+
+    // Gửi tất cả các batch
+    await Promise.all(batchArray.map(batch => batch.commit()));
+
+    return { ok: true, message: `Dọn dẹp thành công! Đã xóa ${deletedCount} mục dữ liệu lỗi.` };
+}
+
 module.exports = {
     getTechnicianDashboardData,
     getTechnicians,
@@ -2314,7 +2408,6 @@ module.exports = {
     submitErrorReport,
     processExcelData, 
     saveExcelData, 
-    // consumeBorrowNote, // (Hàm này không còn cần thiết, logic đã gộp vào submitTransaction)
     verifyAndRegisterUser,
     rejectReturnNote,
     getReturnHistory,
@@ -2328,13 +2421,14 @@ module.exports = {
     createRepairTicket,
     getRepairTickets,
     getRepairTicket, 
-    updateRepairTicket, // <-- THÊM DÒNG NÀY
+    updateRepairTicket,
     updateTechnicianAvatar,
     uploadInventoryBatch,
     getInventoryFromFirestore,
     updateAuditItem,
     finishAuditSession,
-    resetAuditSession
+    resetAuditSession,
+    cleanupBadTickets
 };
 
 /**

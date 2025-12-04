@@ -7,6 +7,7 @@
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="styles2.css?v=2">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="icon" href="/logo.png" type="image/png">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -203,26 +204,19 @@
         </div>
     </div>
     <div id="detailView" class="form-section" style="display:none;">
-    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:15px; margin-bottom:20px;">
-        <div style="display:flex; align-items:center; gap:15px;">
-            <button onclick="showView('list')" style="background:#f1f3f4; color:#333; border:none; padding:8px 15px; border-radius:20px; font-weight:600;">← Quay lại</button>
-            <div>
-                <h3 style="margin:0; color:var(--primary-color);">Phiếu: <span id="d_ticketId">...</span></h3>
-                <span id="d_createdAt" style="font-size:13px; color:#666;">...</span>
-            </div>
+    <div class="detail-header">
+        <h3 class="ticket-title">Phiếu: <span id="d_ticketId">...</span></h3>
+        <div class="ticket-meta">
+             <span id="d_createdAt" style="font-size:13px; color:#666;">...</span>
         </div>
-        <div style="display:flex; gap: 10px;">
-            <button class="btn-icon" onclick="printTicket()" style="background:#6c757d; padding: 8px 15px;">
-                🖨️ In Biên Nhận
-            </button>
-
-            <button class="btn-icon" onclick="printDeviceLabel()" style="background:#ffc107; color:#000; padding: 8px 15px;">
-                🏷️ In Tem Dán
-            </button>
+        <div class="action-buttons">
+            <button class="btn-action" onclick="showView('list')"><span class="material-icons">arrow_back</span> Quay lại</button>
+            <button class="btn-action" onclick="printTicket()"><span class="material-icons">print</span> In Biên Nhận</button>
+            <button class="btn-action" onclick="printDeviceLabel()"><span class="material-icons">label</span> In Tem</button>
         </div>
     </div>
 
-    <div class="timeline-wrapper" style="margin-bottom:30px; overflow-x:auto; padding-bottom:10px;">
+    <div class="timeline-wrapper" style="margin-bottom:30px; padding-bottom:10px;">
         <div class="timeline-steps">
             <div class="step active" id="step_new">
                 <div class="step-circle">1</div>
@@ -286,8 +280,7 @@
         <!-- Step 2: Kiểm tra -->
         <div class="view-card">
             <h4>2. Kỹ thuật kiểm tra</h4>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h5>Kết quả kiểm tra</h5>
+            <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px;">
                 <button id="btn_update_check" class="btn-sm" onclick="openUpdateModal('check')">Cập nhật</button>
             </div>
             <div id="content_techCheck" style="color:#666; font-style:italic;">Chưa có dữ liệu kiểm tra.</div>
@@ -302,11 +295,11 @@
                 </div>
                 <div id="content_external_logistics">---</div>
             </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <h5>Chi tiết báo giá</h5>
+            <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:10px;">
                 <button id="btn_update_quote" class="btn-sm" onclick="openUpdateModal('quote')" style="display:none;">Cập nhật</button>
             </div>
             <div id="content_quotation">Đang chờ kiểm tra...</div>
+            <div id="d_quotePhotos" class="photo-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 10px;"></div>
         </div>
 
         <!-- Step 4: Sửa chữa -->
@@ -445,6 +438,18 @@
         <label>Ghi chú thêm (Option):</label>
         <textarea id="quote_notes" rows="2" placeholder="VD: Giá chưa bao gồm VAT..."></textarea>
 
+        <label>Ảnh đính kèm (nếu cần):</label>
+        <div class="control-group">
+            <input type="file" id="quotePhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleQuotePhotoSelect(this)">
+            <input type="file" id="quotePhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleQuotePhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('quotePhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="quotePhotoGrid" class="photo-grid"></div>
+        </div>
+
         <div class="action-footer" style="margin-top:20px;">
             <button onclick="closeModal('modalQuote')" style="background:#ccc; color:#333;">Hủy</button>
             <button onclick="submitQuote()" style="background:var(--primary-color);">Gửi Báo Giá</button>
@@ -559,6 +564,18 @@
         <label>Ghi chú gửi hàng:</label>
         <textarea id="ext_send_note" rows="2" placeholder="VD: Gửi kèm sạc, pass máy là..."></textarea>
 
+        <label>Ảnh đính kèm (tình trạng máy lúc gửi):</label>
+        <div class="control-group">
+            <input type="file" id="extSendPhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleExtSendPhotoSelect(this)">
+            <input type="file" id="extSendPhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleExtSendPhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('extSendPhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="extSendPhotoGrid" class="photo-grid"></div>
+        </div>
+
         <div class="action-footer">
             <button onclick="closeModal('modalExtSend')" style="background:#ccc; color:#333;">Hủy</button>
             <button onclick="submitExternalAction('SEND')" style="background:var(--primary-color);">Xác nhận Gửi</button>
@@ -578,6 +595,18 @@
         
         <label>Ghi chú kiểm tra:</label>
         <textarea id="ext_qc_note" rows="3" placeholder="VD: Đã test full chức năng, tem bảo hành nguyên vẹn..."></textarea>
+
+        <label>Ảnh nhận về & QC:</label>
+        <div class="control-group">
+            <input type="file" id="extReceivePhotoInput_Cam" accept="image/*" capture="environment" style="display:none;" onchange="handleExtReceivePhotoSelect(this)">
+            <input type="file" id="extReceivePhotoInput_Gal" accept="image/*" multiple style="display:none;" onchange="handleExtReceivePhotoSelect(this)">
+            
+            <button onclick="openPhotoActionSheet('extReceivePhotoInput')" class="btn-icon" style="width:100%; justify-content:center; height:45px;">
+                📷 Thêm hình ảnh
+            </button>
+            
+            <div id="extReceivePhotoGrid" class="photo-grid"></div>
+        </div>
 
         <div class="action-footer">
             <button onclick="closeModal('modalExtReceive')" style="background:#ccc; color:#333;">Hủy</button>

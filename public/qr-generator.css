@@ -1,0 +1,116 @@
+/* Global print setting */
+body {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+}
+
+/* A4 Page Preview container styling */
+.a4-page-view {
+    background: #e0e0e0;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+/* A4 Page layout for both screen and print */
+.a4-page {
+    background: white;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+    
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    
+    /* A4 (210mm) - 4 labels * 50mm/label = 10mm free. Use a 5mm side margin. */
+    padding: 5mm; 
+    box-sizing: border-box;
+    gap: 0;
+}
+
+/* Label (Tem) Styling: 50mm x 20mm */
+.qr-item {
+    width: 50mm;
+    height: 20mm;
+    box-sizing: border-box;
+    border: 1px dotted #ccc;
+    
+    display: flex;
+    flex-direction: row;
+    align-items: center; /* Căn giữa dọc cho đẹp */
+    padding: 2px; /* Giảm padding để tận dụng không gian */
+    overflow: hidden;
+    background: white;
+    page-break-inside: avoid;
+}
+
+/* 1. ÉP KÍCH THƯỚC QR VỀ 55px */
+.qr-item .qr-code {
+    width: 55px;      /* Cố định chiều rộng hiển thị */
+    height: 55px;     /* Cố định chiều cao hiển thị */
+    min-width: 55px;  /* Không cho co nhỏ hơn */
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 5px; /* Khoảng cách với phần chữ */
+}
+
+/* Quan trọng: Bắt ảnh QR bên trong phải tuân theo kích thước cha (55px) */
+.qr-item .qr-code img, 
+.qr-item .qr-code canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
+}
+
+/* 2. CHỈNH FONT CHỮ NHỎ LẠI */
+.qr-item .info {
+    font-family: Arial, sans-serif;
+    font-weight: bold;
+    font-size: 10px; /* Nhỏ lại (khoảng 7.5pt) */
+    line-height: 1.1; /* Dòng sít lại một chút */
+    text-align: left;
+    
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    
+    /* Cho phép hiển thị tối đa 3 dòng (vì chữ đã nhỏ hơn) */
+    display: -webkit-box;
+    -webkit-line-clamp: 3; 
+    -webkit-box-orient: vertical;
+}
+
+/* Print-specific styles */
+@media print {
+    /* Hide non-printable elements */
+    .navbar, .card-header, #generateBtn, #exportPdfBtn, .col-md-6, hr {
+        display: none !important;
+    }
+
+    /* Remove preview styles */
+    .a4-page-view {
+        background: none;
+        padding: 0;
+        border: none;
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .a4-page {
+        margin: 0;
+        padding: 10mm; /* Consistent print margins */
+        box-shadow: none;
+        border: none;
+    }
+
+    .qr-item {
+         /* Hide the cutting guides for the final print */
+        border: 1px dotted transparent;
+    }
+}

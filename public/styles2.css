@@ -79,6 +79,11 @@ h2, h3, h4, h5 {
 .btn-add {
     background-color: var(--success-color);
 }
+.btn-logout {
+    padding: 6px 12px;
+    font-size: 14px;
+    background-color: var(--danger-color) !important;
+}
 .btn-sm {
     padding: 5px 10px !important;
     font-size: 12px !important;
@@ -755,4 +760,156 @@ body.dark-mode #step_repair.active .step-circle {
 body.dark-mode #step_done.active .step-circle {
     background-color: #059669; /* Darker Green */
     border-color: #059669;
+}
+
+/* Responsive layout for mobile */
+@media (max-width: 768px) {
+  body {
+    /* Remove horizontal padding on mobile to make content utilize more screen width */
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Remove container effect from form-section on mobile for a full-width list */
+  #listView.form-section {
+    padding: 0;
+    margin-bottom: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+  }
+}
+
+/* ==============================================
+   KANBAN TOGGLE ON MOBILE
+   ============================================== */
+@media (max-width: 768px) {
+  .kanban-header {
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+  }
+
+  .kanban-header::after {
+    content: '▼';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-size: 1em;
+    color: rgba(255, 255, 255, 0.7);
+    transition: transform 0.3s ease;
+  }
+
+  /* When open, rotate the icon back */
+  .kanban-column.open .kanban-header::after {
+    transform: translateY(-50%) rotate(0deg);
+  }
+
+  /* On mobile, override desktop styles to collapse cards by default */
+  .kanban-cards {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    overflow: hidden;
+    transition: all 0.4s ease-in-out;
+    min-height: 0;
+    border-top: none;
+  }
+
+  /* When open, expand the card list and enable scrolling */
+  .kanban-column.open .kanban-cards {
+    max-height: 60vh; /* A more reasonable height for mobile */
+    overflow-y: auto; /* IMPORTANT: This enables scrolling */
+    padding: 15px;
+  }
+
+  /* Remove large min-height on mobile to allow columns to collapse */
+  .kanban-column {
+    min-height: 0 !important;
+    transition: background-color 0.3s ease;
+  }
+
+  .kanban-column:not(.open) {
+    background-color: #f8f9fa;
+  }
+}
+
+/* New styles for Detail View Header */
+.detail-header {
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+.ticket-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 0 0 5px 0;
+}
+.ticket-meta {
+    margin-bottom: 15px;
+}
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 8px 15px;
+    font-size: 14px;
+    border-radius: 20px; /* Rounded buttons */
+}
+.btn-action .material-icons {
+    font-size: 20px;
+}
+
+/* Timeline adjustments */
+.timeline-wrapper {
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+.timeline-steps {
+    justify-content: space-between; /* This is key */
+    padding: 0;
+    min-width: 0; /* Override min-width */
+}
+.timeline-steps::before {
+    left: 15px;
+    right: 15px;
+}
+.step {
+   flex: 1;
+   width: auto;
+   max-width: none;
+}
+
+@media (max-width: 768px) {
+    .header-title {
+        font-size: 1.2rem;
+    }
+    .ticket-title {
+        font-size: 1.3rem;
+    }
+    .btn-action {
+        gap: 4px;
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+    .btn-action .material-icons {
+        font-size: 16px;
+    }
+    .step-label {
+        font-size: 11px; /* Smaller font for mobile */
+    }
+    #detailView.form-section {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
 }

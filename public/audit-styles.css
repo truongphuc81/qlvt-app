@@ -51,6 +51,19 @@ body {
     animation: highlight-scan 1.5s ease-out;
 }
 
+/* Hiệu ứng flash khi quét thành công */
+@keyframes highlight-scan-body {
+    0% { background-color: rgba(255, 193, 7, 0.5); }
+    100% { background-color: transparent; }
+}
+body.scan-success-highlight {
+    animation: highlight-scan-body 0.5s ease-out;
+}
+#reader.scan-success-highlight {
+    animation: highlight-scan 0.5s ease-out;
+}
+
+
 /* Sticky Header cho bảng dài */
 .sticky-top {
     z-index: 10;
@@ -62,4 +75,153 @@ body {
     border-radius: 8px;
     overflow: hidden;
     border: 1px solid #ccc;
+}
+
+
+@media (max-width: 767.98px) {
+    /* --- Camera-On Mobile Layout --- */
+
+    .camera-on-mobile .col-md-4 {
+        /* Thay display: none bằng visibility: hidden */
+        visibility: hidden; 
+        /* Thêm height: 0 để nó không chiếm diện tích cuộn trang */
+        height: 0;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Bắt buộc phải thêm dòng này để hiện lại Camera */
+    .camera-on-mobile #cameraSection {
+        visibility: visible;
+    }
+
+    .camera-on-mobile #cameraSection {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 50vh; /* Camera takes top 50% of the screen */
+        z-index: 1050;
+        background-color: black; /* Black background for camera */
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .camera-on-mobile #reader {
+        width: 100% !important;
+        height: 100% !important;
+        overflow: hidden;
+        border: none;
+        border-radius: 0;
+    }
+
+    .camera-on-mobile .col-md-8 {
+        /* Make the table container take the full width and remaining height */
+        position: fixed;
+        top: 50vh; /* Start below the camera */
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .camera-on-mobile .col-md-8 .card {
+        height: 100%;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+    }
+
+    .camera-on-mobile .col-md-8 .table-responsive {
+        height: 100%; /* Make the scroll area fill the card */
+    }
+
+
+    /* --- Default Mobile Layout (Card view for table) --- */
+
+    /* Responsive Table to Card layout */
+    #auditTable {
+        display: block;
+    }
+    #auditTable thead {
+        display: none; /* Hide table headers */
+    }
+    #auditTable tbody {
+        display: block;
+        width: 100%;
+    }
+    #auditTable tr {
+        display: block;
+        margin-bottom: 1rem;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 10px;
+        background-color: #fff;
+    }
+    #auditTable td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: right;
+        padding: 8px 5px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    #auditTable td:last-child {
+        border-bottom: none;
+    }
+
+    #auditTable td::before {
+        font-weight: bold;
+        text-align: left;
+        margin-right: 15px;
+        color: #333;
+    }
+    
+    /* Specific styles for card cells */
+    #auditTable td:nth-of-type(1)::before { content: 'Nhóm VTHH'; }
+    #auditTable td:nth-of-type(2)::before { content: 'Mã Hàng'; }
+    #auditTable td:nth-of-type(3)::before { content: 'Tên Vật Tư'; }
+    #auditTable td:nth-of-type(4)::before { content: 'Tồn Máy'; }
+    #auditTable td:nth-of-type(5)::before { content: 'Thực Tế'; }
+    #auditTable td:nth-of-type(6)::before { content: 'Lệch'; }
+    #auditTable td:nth-of-type(7)::before { content: 'Giá Trị Lệch'; }
+    #auditTable td:nth-of-type(8)::before { content: 'Xóa'; }
+
+    /* Adjustments for better card layout */
+    #auditTable td:nth-of-type(5) { /* Thực Tế */
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    #auditTable td:nth-of-type(8) { /* Xóa button */
+       justify-content: center;
+    }
+}
+
+.btn-close-camera {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    z-index: 1060; /* Higher than cameraSection's z-index */
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    font-size: 20px;
+    line-height: 30px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.camera-on-mobile .btn-close-camera {
+    display: block; /* Visible on mobile when camera is on */
 }

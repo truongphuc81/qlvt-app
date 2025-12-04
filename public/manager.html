@@ -61,6 +61,11 @@
                 Xem Lịch sử Kho
             </button>
         </a>
+        <a href="qr-generator.html" class="nav-item-link">
+            <button class="nav-btn">
+                <i class="fas fa-qrcode"></i> In Mã QR
+            </button>
+        </a>
     </div>
 
     <button id="darkModeToggle" onclick="toggleDarkMode()" style="display:none;"></button> 
@@ -316,7 +321,7 @@
         <button onclick="uploadExcel()">Tải lên và xem trước</button><br>
         <table id="excelDataTable" style="display:none;">
           <thead> <tr>
-              <th>Ngày</th><th>Số sổ</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Số lượng sử dụng</th><th>Email</th><th>Ghi chú</th>
+              <th>Ngày</th><th>Số sổ</th><th>Mã vật tư</th><th>Tên vật tư</th><th>Nhóm VT</th><th>Số lượng sử dụng</th><th>Email</th><th>Ghi chú</th>
             </tr>
           </thead>
           <tbody id="excelDataBody"></tbody>
@@ -346,6 +351,7 @@
                 <table id="inventoryPreviewTable">
                     <thead> 
                         <tr>
+                            <th>Nhóm VTHH</th>
                             <th>Mã hàng</th>
                             <th>Tên hàng</th>
                             <th>ĐVT</th>
@@ -424,6 +430,7 @@
           <label><input type="checkbox" id="roleCheckboxAuditor"> Kiểm duyệt viên (Xem lịch sử)</label>
         </div>
         <button id="submitSetRolesButton" onclick="submitSetRoles()">Lưu Quyền</button>
+        <button id="cleanupButton" onclick="runCleanup()" style="background-color: var(--error-color); margin-top: 15px;">Dọn dẹp Dữ liệu Lỗi (Sổ 3 liên)</button>
         <div id="roleManagerSpinner" style="display:none;text-align:center;"><div class="spinner"></div></div>
         <div id="roleManagerSuccessMessage" class="success" style="display:none;"></div>
         <div id="roleManagerErrorMessage" class="error" style="display:none;"></div>

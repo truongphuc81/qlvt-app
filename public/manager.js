@@ -398,17 +398,72 @@ function uploadExcel(){
     var fileInput=document.getElementById('excelFile');
     if (!fileInput.files[0]){ showError('excelErrorMessage','Vui lòng chọn file Excel.'); return; }
     document.getElementById('excelSpinner').style.display='block';
+    showError('excelErrorMessage', ''); // Clear previous errors
+
     var reader=new FileReader();
     reader.onload=function(e){
       try{
         var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-        var sheet=wb.SheetNames[0];
-        var json=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{ 
-        header:['date','ticket','itemCode','itemName','quantity','note'],
-        skipHeader:true 
-        });
-        if (!json.length){ showError('excelErrorMessage','File Excel trống.'); document.getElementById('excelSpinner').style.display='none'; return; }
-        callApi('/manager/processExcelData', { data: json })
+        var sheetName = wb.SheetNames[0];
+        var worksheet = wb.Sheets[sheetName];
+        
+        // 1. Chuyển đổi sheet thành mảng các mảng để lấy header
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        if (jsonData.length < 2) {
+            throw new Error("File Excel không có dữ liệu hoặc không có header.");
+        }
+
+        // 2. Lấy header và chuẩn hóa (trim, lowercase)
+        const header = jsonData[0].map(h => (h || '').toString().trim().toLowerCase());
+
+        // 3. Map header với các key cần thiết
+        const headerMap = {
+            date: header.indexOf('ngày chứng từ'),
+            ticket: header.indexOf('số chứng từ'),
+            itemCode: header.indexOf('mã hàng'),
+            itemName: header.indexOf('tên hàng'),
+            quantity: header.indexOf('số lượng bán'),
+            note: header.indexOf('ghi chú') // Cột này là tùy chọn
+        };
+
+        // 4. Kiểm tra các cột BẮT BUỘC
+        const requiredKeys = ['date', 'ticket', 'itemCode', 'itemName', 'quantity'];
+        for (const key of requiredKeys) {
+            if (headerMap[key] === -1) {
+                // Cung cấp thông báo lỗi rõ ràng hơn
+                const friendlyName = {
+                    date: 'Ngày chứng từ', ticket: 'Số chứng từ', itemCode: 'Mã hàng',
+                    itemName: 'Tên hàng', quantity: 'Số lượng bán'
+                }[key];
+                throw new Error(`Cột bắt buộc "${friendlyName}" không tồn tại trong file.`);
+            }
+        }
+
+        // 5. Xử lý dữ liệu từ các hàng còn lại
+        const dataRows = jsonData.slice(1);
+        const processedJson = dataRows.map((row, index) => {
+            const item = {};
+            item.date = row[headerMap.date] || '';
+            item.ticket = row[headerMap.ticket] || '';
+            item.itemCode = row[headerMap.itemCode] || '';
+            item.itemName = row[headerMap.itemName] || '';
+            item.quantity = parseFloat(row[headerMap.quantity]) || 0;
+            // Chỉ lấy Ghi chú nếu cột tồn tại
+            if (headerMap.note !== -1) {
+                item.note = row[headerMap.note] || '';
+            } else {
+                item.note = '';
+            }
+            return item;
+        }).filter(item => item.itemCode && item.ticket); // Lọc ra các hàng có vẻ hợp lệ
+
+        if (processedJson.length === 0) {
+            throw new Error("Không có dòng dữ liệu hợp lệ nào được tìm thấy.");
+        }
+
+        // 6. Gọi API với dữ liệu đã được xử lý
+        callApi('/manager/processExcelData', { data: processedJson })
           .then(data => {
             processedExcelData = data;
             displayExcelData(data);
@@ -417,6 +472,7 @@ function uploadExcel(){
           })
           .catch(err => { showError('excelErrorMessage','Lỗi xử lý: '+err.message); })
           .finally(() => { document.getElementById('excelSpinner').style.display='none'; });
+
       }catch(err){
         showError('excelErrorMessage','Lỗi đọc Excel: '+err.message);
         document.getElementById('excelSpinner').style.display='none';
@@ -429,7 +485,7 @@ function displayExcelData(excelData){
     var tbody=document.getElementById('excelDataBody');
     tbody.innerHTML='';
     if (!excelData||!excelData.length){
-        tbody.innerHTML='<tr><td colspan="7">Không có dữ liệu hợp lệ.</td></tr>';
+        tbody.innerHTML='<tr><td colspan="8">Không có dữ liệu hợp lệ.</td></tr>';
         return;
     }
     excelData.forEach(function(r){
@@ -439,6 +495,7 @@ function displayExcelData(excelData){
             '<td data-label="Số sổ">'+(r.ticket||'')+'</td>'+
             '<td data-label="Mã vật tư">'+(r.itemCode||'')+'</td>'+
             '<td data-label="Tên vật tư">'+(r.itemName||'')+'</td>'+
+            '<td data-label="Nhóm VT">'+(r.itemGroup||'')+'</td>'+
             '<td data-label="Số lượng">'+(r.quantity||0)+'</td>'+
             '<td data-label="Email">'+(r.email||'Không xác định')+'</td>'+
             '<td data-label="Ghi chú">'+(r.note||'')+'</td>';
@@ -1794,6 +1851,28 @@ async function handleAvatarUpload(input) {
     }
 }
 
+async function runCleanup() {
+    if (!confirm("Hệ thống sẽ tìm và xóa tất cả các mục trong 'Đối chiếu sổ 3 liên' có 'Số chứng từ' không phải là số (VD: 'Sổ ABC-123').\n\nBẠN CÓ CHẮC CHẮN MUỐN TIẾP TỤC KHÔNG?\nHành động này không thể hoàn tác.")) {
+        return;
+    }
+    const spinner = document.getElementById('roleManagerSpinner');
+    const successMsg = document.getElementById('roleManagerSuccessMessage');
+    const errorMsg = document.getElementById('roleManagerErrorMessage');
+
+    if(spinner) spinner.style.display = 'block';
+    if(successMsg) successMsg.style.display = 'none';
+    if(errorMsg) errorMsg.style.display = 'none';
+
+    try {
+        const result = await callApi('/admin/cleanup-bad-tickets', {});
+        showSuccess('roleManagerSuccessMessage', result.message || 'Dọn dẹp thành công!');
+    } catch (err) {
+        showError('roleManagerErrorMessage', 'Lỗi khi dọn dẹp: ' + err.message);
+    } finally {
+        if(spinner) spinner.style.display = 'none';
+    }
+}
+
 // [MỚI] Copy hàm này từ repair.js qua common.js để dùng chung
 // Nếu chưa có, hãy thêm hàm này vào `common.js`
 /*
@@ -1853,6 +1932,7 @@ function handleInventoryUpload() {
 
             // Tìm vị trí của các cột cần thiết
             const headerMap = {
+                group: header.indexOf('nhóm vthh'), // THÊM DÒNG NÀY
                 code: header.indexOf('mã hàng'),
                 name: header.indexOf('tên hàng'),
                 unit: header.indexOf('đơn vị tính'),
@@ -1862,6 +1942,9 @@ function handleInventoryUpload() {
 
             // Kiểm tra các cột bắt buộc
             for (const key in headerMap) {
+                // Bỏ qua kiểm tra cột 'nhóm vthh' và 'unit' vì nó là tùy chọn
+                if (key === 'group' || key === 'unit') continue; 
+
                 if (headerMap[key] === -1) {
                     throw new Error(`Cột bắt buộc "${key}" (hoặc "Mã hàng", "Tên hàng",...) không tồn tại trong file Excel.`);
                 }
@@ -1887,6 +1970,9 @@ function handleInventoryUpload() {
                 const quantity = parseFloat(row[headerMap.quantity]) || 0;
                 const value = parseFloat(row[headerMap.value]) || 0;
                 const unit = row[headerMap.unit] ? row[headerMap.unit].toString().trim() : '';
+                // Lấy Nhóm VTHH (nếu có)
+                const group = headerMap.group !== -1 && row[headerMap.group] ? row[headerMap.group].toString().trim() : '';
+
 
                 // Tự động tính đơn giá
                 const unitPrice = (quantity !== 0) ? (value / quantity) : 0;
@@ -1897,9 +1983,13 @@ function handleInventoryUpload() {
                     unit: unit,
                     quantity: quantity,
                     value: value,
-                    unitPrice: unitPrice
+                    unitPrice: unitPrice,
+                    itemGroup: group // THÊM DÒNG NÀY
                 });
             });
+
+            // DEBUG: Log parsed data
+            console.log("Debug: First 5 parsed items:", parsedInventoryData.slice(0, 5));
 
             if (parsedInventoryData.length === 0) {
                 throw new Error("Không có dữ liệu hợp lệ nào được tìm thấy trong file.");
@@ -1910,6 +2000,7 @@ function handleInventoryUpload() {
             parsedInventoryData.slice(0, 100).forEach(item => { // Chỉ preview 100 dòng đầu
                 tableHtml += `
                     <tr>
+                        <td>${item.itemGroup || ''}</td>
                         <td>${item.code}</td>
                         <td>${item.name}</td>
                         <td>${item.unit}</td>
@@ -1952,26 +2043,29 @@ async function confirmInventoryUpload() {
 
     const spinner = document.getElementById('inventoryUploadSpinner');
     const previewArea = document.getElementById('inventoryPreviewArea');
+    const successMessageEl = document.getElementById('inventoryUploadSuccessMessage');
     
     spinner.style.display = 'block';
     showError('inventoryUploadErrorMessage', '');
-    showSuccess('inventoryUploadSuccessMessage', `Đang tải lên ${parsedInventoryData.length} vật tư...`);
-
-    const BATCH_SIZE = 400; // Giới hạn của Firestore là 500, dùng 400 cho an toàn
+    
+    const BATCH_SIZE = 400; 
     const chunks = [];
 
     // Chia dữ liệu thành các lô nhỏ
-    for (let i = 0; i < parsedInventoryData.length; i <+ BATCH_SIZE) {
+    for (let i = 0; i < parsedInventoryData.length; i += BATCH_SIZE) {
         chunks.push(parsedInventoryData.slice(i, i + BATCH_SIZE));
     }
 
     try {
-        const uploadPromises = chunks.map((chunk, index) => {
-            console.log(`Đang gửi lô ${index + 1}/${chunks.length} với ${chunk.length} vật tư.`);
-            return callApi('/inventory/uploadBatch', { items: chunk });
-        });
+        // Tải lên tuần tự và báo cáo tiến trình
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const progressMessage = `Đang tải lên lô ${i + 1}/${chunks.length} (${chunk.length} vật tư)...`;
+            console.log(progressMessage);
+            showSuccess('inventoryUploadSuccessMessage', progressMessage); // Hiển thị tiến trình
 
-        await Promise.all(uploadPromises);
+            await callApi('/inventory/uploadBatch', { items: chunk });
+        }
 
         showSuccess('inventoryUploadSuccessMessage', `Tải lên thành công ${parsedInventoryData.length} vật tư! Danh mục đã được cập nhật.`);
         
@@ -1982,7 +2076,6 @@ async function confirmInventoryUpload() {
 
         // [QUAN TRỌNG] Tải lại danh sách vật tư cho autocomplete
         initItemSearch();
-
 
     } catch (err) {
         console.error("Lỗi tải lên lô vật tư:", err);

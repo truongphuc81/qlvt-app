@@ -405,6 +405,11 @@ privateRouter.post('/admin/setAvatar', isAdmin, apiWrapper(async ({ db, body }) 
     return dataProcessor.updateTechnicianAvatar({ db, email: body.email, avatarUrl: body.avatarUrl });
 }));
 
+// [ADMIN-ONETIME] API để dọn dẹp dữ liệu lỗi
+privateRouter.post('/admin/cleanup-bad-tickets', isAdmin, apiWrapper(async ({ db }) => {
+    return dataProcessor.cleanupBadTickets({ db });
+}));
+
 // [REPAIR] Tạo phiếu mới
 // (Cho phép user đã đăng nhập là được tạo, không cần quyền Admin)
 privateRouter.post('/repair/create', apiWrapper(async ({ db, body, user }) => {
@@ -446,6 +451,8 @@ const inventoryRouter = express.Router();
 inventoryRouter.use(authenticate); // Yêu cầu xác thực cho tất cả các route vật tư
 
 inventoryRouter.post('/uploadBatch', canApproveBorrowsOrAdmin, apiWrapper(async ({ db, body }) => {
+    // DEBUG: Log incoming payload
+    console.log("Debug: Received /inventory/uploadBatch payload (first 5 items):", (body.items || []).slice(0, 5));
     return dataProcessor.uploadInventoryBatch({ db, items: body.items });
 }));
 

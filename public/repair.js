@@ -5,6 +5,9 @@ let userEmail = '';
 let userName = '';
 let selectedPhotos = []; // Mảng chứa các File ảnh (Blob) đã nén
 let checkPhotos = []; 
+let quotePhotos = [];
+let extSendPhotos = [];
+let extReceivePhotos = [];
 let repairPhotos = [];
 let returnPhotos = [];
 let currentTicketId = ''; // Lưu ID phiếu đang thao tác
@@ -13,6 +16,7 @@ let ticketQrScanner = null;
 let lastLoadedTicketId = null
 let userRoles = {};
 let userMap = {};
+let currentPhotoInputPrefix = ''; // [MỚI] Lưu prefix của input ảnh đang dùng
 // === AUTH & INIT ===
 document.addEventListener('DOMContentLoaded', function(){ 
     populateMonthFilter();
@@ -79,6 +83,27 @@ document.addEventListener('DOMContentLoaded', function(){
     if (filterMonthSelect) {
         filterMonthSelect.addEventListener('change', () => fetchTicketsAPI(false)); // Tự động lọc khi chọn
     }
+
+    // Add Kanban toggle functionality
+    document.querySelectorAll('.kanban-header').forEach(header => {
+        header.addEventListener('click', () => {
+            // Only run toggle logic on mobile screen sizes
+            if (window.matchMedia("(max-width: 768px)").matches) {
+                const column = header.closest('.kanban-column');
+                if (column) {
+                    column.classList.toggle('open');
+                }
+            }
+        });
+    });
+
+    // On mobile, open the first column by default
+    if (window.matchMedia("(max-width: 768px)").matches) {
+        const firstColumn = document.querySelector('#kanban-new');
+        if (firstColumn) {
+            firstColumn.classList.add('open');
+        }
+    }
 });
 
 function debounce(func, delay) {
@@ -122,6 +147,33 @@ function populateMonthFilter() {
 }
 
 // === LOGIC GIAO DIỆN ===
+
+function openPhotoActionSheet(prefix) {
+    currentPhotoInputPrefix = prefix;
+    document.getElementById('photoActionSheet').style.display = 'flex';
+}
+
+function closePhotoActionSheet() {
+    document.getElementById('photoActionSheet').style.display = 'none';
+}
+
+function triggerPhotoInput(type) {
+    if (!currentPhotoInputPrefix) return;
+    
+    let inputId = '';
+    if (type === 'cam') {
+        inputId = `${currentPhotoInputPrefix}_Cam`;
+    } else {
+        inputId = `${currentPhotoInputPrefix}_Gal`;
+    }
+    
+    const inputElement = document.getElementById(inputId);
+    if (inputElement) {
+        inputElement.click();
+    }
+    
+    closePhotoActionSheet();
+}
 
 function showView(viewName) {
     const listView = document.getElementById('listView');
@@ -209,32 +261,52 @@ function handlePhotoSelect(input) {
     files.forEach(file => {
         compressImage(file, 1024, 0.7).then(compressedBlob => {
             selectedPhotos.push(compressedBlob);
-            renderPhotoGrid();
+            renderPhotoGridFor('photoPreviewGrid', selectedPhotos, 'selectedPhotos');
         }).catch(err => console.error("Lỗi nén ảnh:", err));
     });
     
     input.value = ''; 
 }
 
-function renderPhotoGrid() {
-    const grid = document.getElementById('photoPreviewGrid');
+// Generic function to render photos in a grid
+function renderPhotoGridFor(gridId, photoArray, arrayName) {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
     grid.innerHTML = '';
     
-    selectedPhotos.forEach((blob, index) => {
+    photoArray.forEach((blob, index) => {
         const url = URL.createObjectURL(blob);
         const div = document.createElement('div');
         div.className = 'photo-item';
+        // Pass the array's *name* as a string to the remove function
         div.innerHTML = `
             <img src="${url}">
-            <button class="photo-remove" onclick="removePhoto(${index})">×</button>
+            <button class="photo-remove" onclick="removePhotoFrom('${arrayName}', ${index}, '${gridId}')">×</button>
         `;
         grid.appendChild(div);
     });
 }
 
-function removePhoto(index) {
-    selectedPhotos.splice(index, 1);
-    renderPhotoGrid();
+// Generic function to remove a photo
+function removePhotoFrom(arrayName, index, gridId) {
+    let photoArray;
+    // This is a bit of a hack, but avoids eval.
+    switch(arrayName) {
+        case 'selectedPhotos': photoArray = selectedPhotos; break;
+        case 'checkPhotos': photoArray = checkPhotos; break;
+        case 'quotePhotos': photoArray = quotePhotos; break;
+        case 'extSendPhotos': photoArray = extSendPhotos; break;
+        case 'extReceivePhotos': photoArray = extReceivePhotos; break;
+        case 'repairPhotos': photoArray = repairPhotos; break;
+        case 'returnPhotos': photoArray = returnPhotos; break;
+        default: console.error('Unknown photo array:', arrayName); return;
+    }
+
+    if (photoArray) {
+        photoArray.splice(index, 1);
+        // Re-render the grid
+        renderPhotoGridFor(gridId, photoArray, arrayName);
+    }
 }
 
 /**
@@ -347,7 +419,7 @@ async function submitTicket(isPrint) {
 
         const result = await callApi('/repair/create', ticketData);
         
-        Swal.fire({
+        await Swal.fire({
             icon: 'success',
             title: 'Tạo phiếu thành công!',
             text: `Mã phiếu của bạn là: ${result.ticketId}`
@@ -369,7 +441,7 @@ async function submitTicket(isPrint) {
 
     } catch (error) {
         console.error("Lỗi tạo phiếu:", error);
-        Swal.fire({
+        await Swal.fire({
             icon: 'error',
             title: 'Lỗi tạo phiếu',
             text: error.message
@@ -494,41 +566,47 @@ function fetchTicketsAPI(isLoadMore) {
                 document.querySelectorAll('.kanban-cards').forEach(col => col.innerHTML = '');
             }
 
-            if (!tickets || tickets.length === 0) {
-                if (!isLoadMore) {
-                    // Hiển thị thông báo khi không có phiếu nào
-                    document.getElementById('kanban-new').querySelector('.kanban-cards').innerHTML = '<p class="text-center text-muted mt-3">Không có phiếu nào.</p>';
+            if (tickets && tickets.length > 0) {
+                lastLoadedTicketId = tickets[tickets.length - 1].ticketId;
+
+                if (btnMore) {
+                    if (tickets.length < 20) {
+                        btnMore.style.display = 'none';
+                    } else {
+                        btnMore.style.display = 'block';
+                        btnMore.innerText = 'Tải thêm';
+                        btnMore.disabled = false;
+                    }
                 }
-                if (btnMore) btnMore.style.display = 'none';
-                return;
+
+                tickets.forEach(t => {
+                    const columnId = statusToColumnId[t.currentStatus] || 'kanban-new';
+                    const column = document.getElementById(columnId);
+                    if (column) {
+                        const cardHTML = createTicketCardHTML(t);
+                        column.querySelector('.kanban-cards').insertAdjacentHTML('beforeend', cardHTML);
+                    }
+                });
+            } else {
+                if (btnMore && !isLoadMore) btnMore.style.display = 'none';
             }
 
-            lastLoadedTicketId = tickets[tickets.length - 1].ticketId;
-
-            if (btnMore) {
-                if (tickets.length < 20) {
-                    btnMore.style.display = 'none';
-                } else {
-                    btnMore.style.display = 'block';
-                    btnMore.innerText = 'Tải thêm';
-                    btnMore.disabled = false;
-                }
+            // After populating, check for empty columns and add placeholder
+            if (!isLoadMore) {
+                document.querySelectorAll('.kanban-cards').forEach(cardContainer => {
+                    if (cardContainer.innerHTML.trim() === '') {
+                        cardContainer.innerHTML = '<p class="text-center text-muted mt-3">Chưa có thiết bị</p>';
+                    }
+                });
             }
-
-            tickets.forEach(t => {
-                const columnId = statusToColumnId[t.currentStatus] || 'kanban-new';
-                const column = document.getElementById(columnId);
-                if (column) {
-                    const cardHTML = createTicketCardHTML(t);
-                    column.querySelector('.kanban-cards').insertAdjacentHTML('beforeend', cardHTML);
-                }
-            });
         })
         .catch(err => {
             Swal.close(); // Đảm bảo đóng loading khi có lỗi
             if (!isLoadMore) {
-                 // Xóa bảng nếu có lỗi khi tải lại từ đầu
-                document.querySelectorAll('.kanban-cards').forEach(col => col.innerHTML = '');
+                 // Xóa bảng nếu có lỗi khi tải lại từ đầu và đặt placeholder
+                document.querySelectorAll('.kanban-cards').forEach(col => {
+                    col.innerHTML = '<p class="text-center text-danger mt-3">Lỗi tải dữ liệu</p>';
+                });
             }
             Swal.fire({
                 icon: 'error',
@@ -707,18 +785,39 @@ function renderTicketDetail(t) {
         const isWarranty = techSol === 'Gửi hãng' || (log.unitName && log.unitName.toLowerCase().includes('hãng'));
         const typeLabel = isWarranty ? 'Bảo Hành' : 'Sửa Ngoài';
 
+        let sentPhotosHtml = '';
+        if (log.sentPhotos && log.sentPhotos.length > 0) {
+            sentPhotosHtml += '<h6 style="margin-top:10px; margin-bottom:5px; font-size:12px; color:#555; border-top:1px dashed #ccc; padding-top:8px;">Ảnh lúc gửi:</h6><div class="photo-grid" style="grid-template-columns: repeat(4, 1fr);">';
+            log.sentPhotos.forEach(url => {
+                sentPhotosHtml += `<div class="photo-item"><img src="${url}" onclick="openImageModal('${url}')"></div>`;
+            });
+            sentPhotosHtml += `</div>`;
+        }
+
         if (log.sentDate) {
             if (log.receivedDate) {
                 extContent.innerHTML = `
                     <div style="font-size:13px;">
                         <div><strong>Đơn vị:</strong> ${log.unitName}</div>
                         <div style="color:#666;">Gửi: ${new Date(log.sentDate).toLocaleString('vi-VN')}</div>
+                        ${sentPhotosHtml}
                         <div style="margin-top:5px; color:#155724; font-weight:bold; background:#d4edda; padding:5px; border-radius:4px;">
                             ✅ Đã nhận về: ${new Date(log.receivedDate).toLocaleString('vi-VN')}
                         </div>
                         <div style="font-size:12px; margin-top:2px;">
                             QC: <strong>${log.qcResult}</strong> - ${log.qcNote}
                         </div>
+                        ${(() => {
+                            if (log.qcPhotos && log.qcPhotos.length > 0) {
+                                let html = '<div class="photo-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 5px;">';
+                                log.qcPhotos.forEach(url => {
+                                    html += `<div class="photo-item"><img src="${url}" onclick="openImageModal('${url}')"></div>`;
+                                });
+                                html += '</div>';
+                                return html;
+                            }
+                            return '';
+                        })()}
                     </div>
                 `;
             } else {
@@ -727,6 +826,7 @@ function renderTicketDetail(t) {
                         <div><strong>Đơn vị:</strong> ${log.unitName}</div>
                         <div><strong>Gửi lúc:</strong> ${new Date(log.sentDate).toLocaleString('vi-VN')}</div>
                         <div style="color:#666; font-style:italic;">"${log.note || ''}"</div>
+                        ${sentPhotosHtml}
                         <div style="margin-top:5px; color:#0d47a1; font-weight:bold;">
                             ⏳ Đang ở đơn vị xử lý...
                         </div>
@@ -828,6 +928,18 @@ function renderTicketDetail(t) {
         const saleInfo = userMap[qSaleEmail] || {};
         const saleName = qSaleName || saleInfo.name || qSaleEmail || '---';
         const saleAvatar = `<img src="${saleInfo.avatarUrl || '/default-avatar.png'}" class="avatar-small" style="width:20px; height:20px; border-radius:50%;" alt="avt">`;
+
+        let quotePhotosHtml = '';
+        const quotePhotoContainer = document.getElementById('d_quotePhotos');
+        quotePhotoContainer.innerHTML = '';
+        if (t.quotation.photos && t.quotation.photos.length > 0) {
+            t.quotation.photos.forEach(url => {
+                const div = document.createElement('div');
+                div.className = 'photo-item';
+                div.innerHTML = `<img src="${url}" onclick="openImageModal('${url}')">`;
+                quotePhotoContainer.appendChild(div);
+            });
+        }
 
         quoteBlock.innerHTML = `
             <div style="background:#fff3cd; padding:10px; border-radius:6px; border-left:4px solid #ffc107;">
@@ -1219,6 +1331,8 @@ function openUpdateModal(type) {
     else if (type === 'quote') {
         const techInfo = document.getElementById('content_techCheck').innerText;
         document.getElementById('quote_tech_summary').innerText = techInfo || 'Chưa có thông tin';
+        quotePhotos = [];
+        document.getElementById('quotePhotoGrid').innerHTML = '';
 
         document.getElementById('quoteItemsBody').innerHTML = '';
         
@@ -1346,28 +1460,43 @@ async function submitQuote() {
         };
     }
 
-    const data = {
-        ticketId: currentTicketId,
-        action: 'SALE_QUOTE',
-        data: {
-            items: items,
-            totalPrice: totalPrice,
-            warranty: warranty,
-            notes: notes,
-            quoteType: quoteType,
-            externalInfo: externalData
-        }
-    };
-    
-    Swal.fire({ title: 'Đang gửi...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    closeModal('modalQuote');
+    Swal.fire({ title: 'Đang gửi...', text: 'Vui lòng chờ trong giây lát...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    callApi('/repair/update', data)
-        .then(() => {
-            Swal.fire('Thành công', 'Đã gửi báo giá thành công!', 'success');
-            closeModal('modalQuote');
-            viewTicketDetail(currentTicketId);
-        })
-        .catch(err => Swal.fire('Lỗi', err.message, 'error'));
+    try {
+        let photoUrls = [];
+        if (quotePhotos.length > 0) {
+            const storageRef = firebase.storage().ref();
+            const timestamp = Date.now();
+            const uploadPromises = quotePhotos.map((blob, index) => {
+                const fileName = `repair_photos/${currentTicketId}_quote_${timestamp}_${index}.jpg`;
+                return storageRef.child(fileName).put(blob).then(s => s.ref.getDownloadURL());
+            });
+            photoUrls = await Promise.all(uploadPromises);
+        }
+
+        const data = {
+            ticketId: currentTicketId,
+            action: 'SALE_QUOTE',
+            data: {
+                items: items,
+                totalPrice: totalPrice,
+                warranty: warranty,
+                notes: notes,
+                quoteType: quoteType,
+                externalInfo: externalData,
+                photos: photoUrls // Add photos here
+            }
+        };
+        
+        await callApi('/repair/update', data);
+
+        await Swal.fire('Thành công', 'Đã gửi báo giá thành công!', 'success');
+        viewTicketDetail(currentTicketId);
+
+    } catch (err) {
+        await Swal.fire('Lỗi', `Gửi báo giá thất bại: ${err.message}`, 'error');
+    }
 }
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
@@ -1376,15 +1505,59 @@ function closeModal(modalId) {
 // Xử lý ảnh cho Modal Kiểm tra (Tương tự ảnh lúc tạo)
 function handleCheckPhotoSelect(input) {
     const files = Array.from(input.files);
+    if (checkPhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
     files.forEach(file => {
         compressImage(file, 1024, 0.7).then(blob => {
             checkPhotos.push(blob);
-            // Render preview
-            const url = URL.createObjectURL(blob);
-            const div = document.createElement('div');
-            div.className = 'photo-item';
-            div.innerHTML = `<img src="${url}">`; // Tạm thời chưa làm nút xóa cho nhanh
-            document.getElementById('checkPhotoGrid').appendChild(div);
+            renderPhotoGridFor('checkPhotoGrid', checkPhotos, 'checkPhotos');
+        });
+    });
+    input.value = '';
+}
+
+function handleQuotePhotoSelect(input) {
+    const files = Array.from(input.files);
+    if (quotePhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
+    files.forEach(file => {
+        compressImage(file, 1024, 0.7).then(blob => {
+            quotePhotos.push(blob);
+            renderPhotoGridFor('quotePhotoGrid', quotePhotos, 'quotePhotos');
+        });
+    });
+    input.value = '';
+}
+
+function handleExtSendPhotoSelect(input) {
+    const files = Array.from(input.files);
+    if (extSendPhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
+    files.forEach(file => {
+        compressImage(file, 1024, 0.7).then(blob => {
+            extSendPhotos.push(blob);
+            renderPhotoGridFor('extSendPhotoGrid', extSendPhotos, 'extSendPhotos');
+        });
+    });
+    input.value = '';
+}
+
+function handleExtReceivePhotoSelect(input) {
+    const files = Array.from(input.files);
+    if (extReceivePhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
+    files.forEach(file => {
+        compressImage(file, 1024, 0.7).then(blob => {
+            extReceivePhotos.push(blob);
+            renderPhotoGridFor('extReceivePhotoGrid', extReceivePhotos, 'extReceivePhotos');
         });
     });
     input.value = '';
@@ -1402,6 +1575,7 @@ async function submitTechCheck() {
         return;
     }
 
+    closeModal('modalTechCheck');
     Swal.fire({ title: 'Đang lưu...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
@@ -1429,12 +1603,64 @@ async function submitTechCheck() {
         
         await callApi('/repair/update', data);
         
-        Swal.fire('Thành công', 'Cập nhật kiểm tra thành công!', 'success');
-        closeModal('modalTechCheck');
+        await Swal.fire('Thành công', 'Cập nhật kiểm tra thành công!', 'success');
         viewTicketDetail(currentTicketId);
 
     } catch (err) {
-        Swal.fire('Lỗi', err.message, 'error');
+        await Swal.fire('Lỗi', err.message, 'error');
+    }
+}
+
+async function submitUpdate(type) {
+    if (type !== 'quote') return;
+
+    Swal.fire({ title: 'Đang lưu báo giá...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    try {
+        const quoteItems = [];
+        const rows = document.querySelectorAll('#quoteItemsBody tr');
+        let isValid = true;
+        rows.forEach(tr => {
+            const name = tr.querySelector('.q-name').value.trim();
+            const qty = parseInt(tr.querySelector('.q-qty').value);
+            const price = parseFloat(tr.querySelector('.q-price').value);
+            const cost = parseFloat(tr.querySelector('.q-cost').value) || 0;
+
+            if (!name || isNaN(qty) || qty <= 0 || isNaN(price) || price < 0) {
+                isValid = false;
+            }
+            quoteItems.push({ name, qty, price, cost });
+        });
+
+        if (!isValid) {
+            Swal.fire('Dữ liệu không hợp lệ', 'Vui lòng kiểm tra lại tên, số lượng và giá của các mục trong báo giá.', 'warning');
+            return;
+        }
+
+        if (quoteItems.length === 0) {
+            Swal.fire('Chưa có mục nào', 'Vui lòng thêm ít nhất một dịch vụ hoặc linh kiện vào báo giá.', 'warning');
+            return;
+        }
+
+        const totalAmount = quoteItems.reduce((acc, item) => acc + (item.qty * item.price), 0);
+
+        const data = {
+            ticketId: currentTicketId,
+            action: 'CREATE_QUOTE',
+            data: {
+                items: quoteItems,
+                total: totalAmount
+            }
+        };
+
+        await callApi('/repair/update', data);
+
+        await Swal.fire('Thành công', 'Đã lưu và gửi báo giá cho khách.', 'success');
+        closeModal('modalQuote');
+        viewTicketDetail(currentTicketId);
+
+    } catch (err) {
+        await Swal.fire('Lỗi', `Không thể lưu báo giá: ${err.message}`, 'error');
     }
 }
 // public/repair.js - Logic Bảng Báo Giá
@@ -1545,14 +1771,14 @@ async function confirmCustomerChoice(isAgreed) {
 // Xử lý ảnh sửa chữa
 function handleRepairPhotoSelect(input) {
     const files = Array.from(input.files);
+    if (repairPhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
     files.forEach(file => {
         compressImage(file, 1024, 0.7).then(blob => {
             repairPhotos.push(blob);
-            const url = URL.createObjectURL(blob);
-            const div = document.createElement('div');
-            div.className = 'photo-item';
-            div.innerHTML = `<img src="${url}">`;
-            document.getElementById('repairPhotoGrid').appendChild(div);
+            renderPhotoGridFor('repairPhotoGrid', repairPhotos, 'repairPhotos');
         });
     });
     input.value = '';
@@ -1568,6 +1794,7 @@ async function submitRepairComplete() {
         return;
     }
 
+    closeModal('modalRepair');
     Swal.fire({ title: 'Đang xử lý...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
@@ -1594,25 +1821,24 @@ async function submitRepairComplete() {
 
         await callApi('/repair/update', data);
         
-        Swal.fire('Thành công', 'Đã cập nhật trạng thái: Sửa xong / Chờ trả máy!', 'success');
-        closeModal('modalRepair');
+        await Swal.fire('Thành công', 'Đã cập nhật trạng thái: Sửa xong / Chờ trả máy!', 'success');
         viewTicketDetail(currentTicketId);
 
     } catch(err) {
-        Swal.fire('Lỗi', err.message, 'error');
+        await Swal.fire('Lỗi', err.message, 'error');
     }
 }
 
 function handleReturnPhotoSelect(input) {
     const files = Array.from(input.files);
+    if (returnPhotos.length + files.length > 5) {
+        Swal.fire('Quá nhiều ảnh', 'Chỉ được phép tải lên tối đa 5 ảnh.', 'warning');
+        return;
+    }
     files.forEach(file => {
         compressImage(file, 1024, 0.7).then(blob => {
             returnPhotos.push(blob);
-            const url = URL.createObjectURL(blob);
-            const div = document.createElement('div');
-            div.className = 'photo-item';
-            div.innerHTML = `<img src="${url}">`;
-            document.getElementById('returnPhotoGrid').appendChild(div);
+            renderPhotoGridFor('returnPhotoGrid', returnPhotos, 'returnPhotos');
         });
     });
     input.value = '';
@@ -1627,6 +1853,7 @@ async function submitReturnDevice() {
     if (!amount) { Swal.fire('Thiếu thông tin', 'Vui lòng nhập số tiền thực thu.', 'warning'); return; }
     if (!ticketNum) { Swal.fire('Thiếu thông tin', 'Vui lòng nhập Số sổ 3 liên.', 'warning'); return; }
 
+    closeModal('modalReturn');
     Swal.fire({ title: 'Đang thanh toán...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
@@ -1655,12 +1882,11 @@ async function submitReturnDevice() {
 
         await callApi('/repair/update', data);
         
-        Swal.fire('Thành công', 'Đã trả máy thành công! Phiếu đã hoàn tất.', 'success');
-        closeModal('modalReturn');
+        await Swal.fire('Thành công', 'Đã trả máy thành công! Phiếu đã hoàn tất.', 'success');
         viewTicketDetail(currentTicketId);
 
     } catch (err) {
-        Swal.fire('Lỗi', err.message, 'error');
+        await Swal.fire('Lỗi', err.message, 'error');
     }
 }
 // --- LOGIC BÁO GIÁ GỬI NGOÀI ---
@@ -1712,6 +1938,8 @@ function openExternalModal(type) {
         }
         document.getElementById('ext_send_unit').value = unitName;
         document.getElementById('ext_send_note').value = '';
+        extSendPhotos = [];
+        document.getElementById('extSendPhotoGrid').innerHTML = '';
         document.getElementById('modalExtSend').style.display = 'flex';
     } 
     else if (type === 'RECEIVE') {
@@ -1748,6 +1976,8 @@ function openExternalModal(type) {
         }
 
         document.getElementById('ext_qc_note').value = '';
+        extReceivePhotos = [];
+        document.getElementById('extReceivePhotoGrid').innerHTML = '';
         document.getElementById('modalExtReceive').style.display = 'flex';
     }
 }
@@ -1755,34 +1985,59 @@ function openExternalModal(type) {
 // Gửi API
 async function submitExternalAction(subType) {
     let dataPayload = {};
+    let photoUrls = [];
 
-    if (subType === 'SEND') {
-        dataPayload = {
-            unitName: document.getElementById('ext_send_unit').value,
-            note: document.getElementById('ext_send_note').value.trim()
-        };
-    } else if (subType === 'RECEIVE_PASS') {
-        dataPayload = {
-            note: document.getElementById('ext_qc_note').value.trim()
-        };
-    }
-
-    const data = {
-        ticketId: currentTicketId,
-        action: 'EXTERNAL_ACTION',
-        data: { subType: subType, ...dataPayload }
-    };
-
+    closeModal('modalExtSend');
+    closeModal('modalExtReceive');
     Swal.fire({ title: 'Đang cập nhật...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    callApi('/repair/update', data)
-        .then(() => {
-            Swal.fire('Thành công', 'Cập nhật trạng thái thành công!', 'success');
-            closeModal('modalExtSend');
-            closeModal('modalExtReceive');
-            viewTicketDetail(currentTicketId);
-        })
-        .catch(err => Swal.fire('Lỗi', err.message, 'error'));
+    try {
+        if (subType === 'SEND') {
+            if (extSendPhotos.length > 0) {
+                const storageRef = firebase.storage().ref();
+                const timestamp = Date.now();
+                const uploadPromises = extSendPhotos.map((blob, index) => {
+                    const fileName = `repair_photos/${currentTicketId}_extsend_${timestamp}_${index}.jpg`;
+                    return storageRef.child(fileName).put(blob).then(s => s.ref.getDownloadURL());
+                });
+                photoUrls = await Promise.all(uploadPromises);
+            }
+
+            dataPayload = {
+                unitName: document.getElementById('ext_send_unit').value,
+                note: document.getElementById('ext_send_note').value.trim(),
+                photos: photoUrls
+            };
+        } else if (subType === 'RECEIVE_PASS') {
+             if (extReceivePhotos.length > 0) {
+                const storageRef = firebase.storage().ref();
+                const timestamp = Date.now();
+                const uploadPromises = extReceivePhotos.map((blob, index) => {
+                    const fileName = `repair_photos/${currentTicketId}_extreceive_${timestamp}_${index}.jpg`;
+                    return storageRef.child(fileName).put(blob).then(s => s.ref.getDownloadURL());
+                });
+                photoUrls = await Promise.all(uploadPromises);
+            }
+            dataPayload = {
+                note: document.getElementById('ext_qc_note').value.trim(),
+                photos: photoUrls
+            };
+        }
+
+        const data = {
+            ticketId: currentTicketId,
+            action: 'EXTERNAL_ACTION',
+            data: { subType: subType, ...dataPayload }
+        };
+
+        await callApi('/repair/update', data);
+        
+        await Swal.fire('Thành công', 'Cập nhật trạng thái thành công!', 'success');
+        viewTicketDetail(currentTicketId);
+
+    } catch (err) {
+        await Swal.fire('Lỗi', err.message, 'error');
+    }
 }
 /**
  * [SALE/ADMIN] Kích hoạt trạng thái Chờ Đặt Hàng
@@ -1875,34 +2130,41 @@ async function openAssignModal(step) {
 }
 
 async function submitAssignWork() {
-    const techEmail = document.getElementById('assign_tech_select').value;
+    const select = document.getElementById('assign_tech_select');
+    const selectedOption = select.options[select.selectedIndex];
+    const techEmail = selectedOption.value;
+    
     if (!techEmail) {
         Swal.fire('Chưa chọn', 'Vui lòng chọn một KTV để giao việc.', 'warning');
         return;
     }
 
-    const techName = document.querySelector('#assign_tech_select option:checked').innerText;
-    const avatarUrl = document.querySelector('#assign_tech_select option:checked').dataset.avatar;
-
+    const techName = selectedOption.innerText;
+    const techAvatar = selectedOption.dataset.avatar || '/default-avatar.png';
+    
     const data = {
         ticketId: currentTicketId,
-        action: `ASSIGN_${currentAssignStep}`,
+        action: 'ASSIGN_WORK', // Corrected action
         data: {
-            techEmail: techEmail,
-            techName: techName,
-            techAvatarUrl: avatarUrl
+            step: currentAssignStep, // 'CHECK' or 'REPAIR'
+            technician: {          // Corrected data structure
+                email: techEmail,
+                name: techName,
+                avatarUrl: techAvatar
+            }
         }
     };
     
+    closeModal('modalAssign');
     Swal.fire({ title: 'Đang giao việc...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-    callApi('/repair/update', data)
-        .then(() => {
-            Swal.fire('Thành công', `Đã giao việc cho ${techName}`, 'success');
-            closeModal('modalAssign');
-            viewTicketDetail(currentTicketId);
-        })
-        .catch(err => Swal.fire('Lỗi', err.message, 'error'));
+    try {
+        await callApi('/repair/update', data);
+        await Swal.fire('Thành công', `Đã giao việc cho ${techName}`, 'success');
+        viewTicketDetail(currentTicketId);
+    } catch (err) {
+        await Swal.fire('Lỗi', `Giao việc thất bại: ${err.message}`, 'error');
+    }
 }
 
 function handleAssignSelection() {

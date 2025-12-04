@@ -188,9 +188,12 @@ async function initializeAuditSession() {
     });
 }
 
-// Giữ focus luôn ở ô nhập liệu (trừ khi đang mở modal)
+// Giữ focus luôn ở ô nhập liệu (trừ khi đang mở modal hoặc camera mobile đang bật)
 function focusInput() {
-    if (!Swal.isVisible()) {
+    // Không focus vào ô input nếu camera đang bật trên giao diện mobile,
+    // vì lúc đó ô input đã bị ẩn đi để ưu tiên giao diện camera.
+    const isMobileCameraOn = document.body.classList.contains('camera-on-mobile');
+    if (!Swal.isVisible() && !isMobileCameraOn) {
         document.getElementById('scanInput').focus();
     }
 }
@@ -199,7 +202,7 @@ function focusInput() {
 // === 1. TẢI DỮ LIỆU TỒN KHO ===
 async function loadSystemInventory() {
     const tbody = document.getElementById('auditTableBody');
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><br>Đang đồng bộ dữ liệu từ Cloud...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5"><div class="spinner-border text-primary" role="status"></div><br>Đang đồng bộ dữ liệu từ Cloud...</td></tr>';
 
     try {
         const collectionName = 'inventory';
@@ -212,6 +215,7 @@ async function loadSystemInventory() {
             if (item.code) {
                 systemInventory[item.code] = {
                     name: item.name,
+                    group: item.itemGroup, // Fix: Changed to itemGroup
                     systemQty: Number(item.quantity) || 0,
                     unitPrice: Number(item.unitPrice) || 0,
                     unit: item.unit
@@ -227,7 +231,7 @@ async function loadSystemInventory() {
 
     } catch (error) {
         console.error("Error loading system inventory:", error);
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Lỗi tải dữ liệu: ${error.message}. Có thể bạn cần tạo chỉ mục (index) cho collection 'inventory' trên trường 'quantity'. Hãy kiểm tra F12-Console để xem link tạo tự động.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Lỗi tải dữ liệu: ${error.message}. Có thể bạn cần tạo chỉ mục (index) cho collection 'inventory' trên trường 'quantity'. Hãy kiểm tra F12-Console để xem link tạo tự động.</td></tr>`;
         return 0; // Trả về 0 nếu có lỗi
     }
 }
@@ -315,6 +319,13 @@ async function handleScannedItem(code) {
     } else {
         // Chế độ Nhập Số Lượng
 
+        const isCameraScanning = html5QrCode && html5QrCode.isScanning;
+
+        // Tạm dừng camera nếu đang chạy để tránh lỗi khi modal hiển thị
+        if (isCameraScanning) {
+            await html5QrCode.stop().catch(err => console.error("Không thể tạm dừng camera:", err));
+        }
+
         // FIX: Blur the main input before opening the modal to avoid focus conflicts.
         document.getElementById('scanInput').blur();
 
@@ -335,6 +346,19 @@ async function handleScannedItem(code) {
             await addQuantity(code, Number(qty));
             playSound();
             scrollToRow(code);
+        }
+
+        // Khởi động lại camera nếu nó đã bật trước đó và giao diện camera vẫn còn
+        const cameraSection = document.getElementById('cameraSection');
+        if (isCameraScanning && cameraSection.style.display !== 'none') {
+            await startScannerProcess().catch(err => {
+                console.error("Không thể khởi động lại camera:", err);
+                // If restart fails, fully shut down the camera UI
+                cameraSection.style.display = 'none';
+                if (window.innerWidth <= 767.98) {
+                    document.body.classList.remove('camera-on-mobile');
+                }
+            });
         }
 
         // After the modal closes, regardless of the outcome, return focus to the main input.
@@ -432,18 +456,34 @@ function renderTable() {
     let totalRealQty = 0;
     let countDiff = 0;
 
-    // Sắp xếp: Đưa những mã VỪA QUÉT (có trong sessionScannedInventory) lên đầu
+    // Sắp xếp: 1. Đã quét lên đầu, 2. Theo Nhóm VTHH, 3. Theo Tên
     allCodes.sort((a, b) => {
-        const aScan = sessionScannedInventory[a] ? 1 : 0;
-        const bScan = sessionScannedInventory[b] ? 1 : 0;
-        return bScan - aScan; // Scanned trước
+        const itemA = systemInventory[a];
+        const itemB = systemInventory[b];
+        const aScanned = sessionScannedInventory[a] !== undefined;
+        const bScanned = sessionScannedInventory[b] !== undefined;
+
+        // Ưu tiên 1: Hàng đã quét luôn ở trên cùng
+        if (aScanned !== bScanned) {
+            return bScanned - aScanned;
+        }
+
+        // Ưu tiên 2: Sắp xếp theo tên Nhóm VTHH
+        const groupA = itemA.group || 'Chưa phân nhóm';
+        const groupB = itemB.group || 'Chưa phân nhóm';
+        if (groupA !== groupB) {
+            return groupA.localeCompare(groupB);
+        }
+
+        // Ưu tiên 3: Sắp xếp theo tên vật tư
+        return (itemA.name || '').localeCompare(itemB.name || '');
     });
 
     allCodes.forEach(code => {
         const sysItem = systemInventory[code];
         
         // Filter tìm kiếm
-        if (filterText && !code.toLowerCase().includes(filterText) && !sysItem.name.toLowerCase().includes(filterText)) {
+        if (filterText && !code.toLowerCase().includes(filterText) && !sysItem.name.toLowerCase().includes(filterText) && !(sysItem.group && sysItem.group.toLowerCase().includes(filterText))) {
             return;
         }
 
@@ -455,22 +495,25 @@ function renderTable() {
         // Tính thống kê
         if (sessionScannedInventory[code] !== undefined) countScanned++;
         totalRealQty += realQty;
-        if (diff !== 0 && sessionScannedInventory[code] !== undefined) countDiff++; // Chỉ tính lệch nếu ĐÃ kiểm (realQty=0 mặc định chưa tính là lệch nếu chưa quét)
+        if (diff !== 0 && sessionScannedInventory[code] !== undefined) countDiff++;
 
         // Class màu sắc
         let diffClass = 'diff-zero';
         let rowClass = '';
         if (sessionScannedInventory[code] !== undefined) {
             // Đã quét
-            if (diff > 0) diffClass = 'diff-positive'; // Thừa
-            else if (diff < 0) diffClass = 'diff-negative'; // Thiếu
+            if (diff > 0) diffClass = 'diff-positive';
+            else if (diff < 0) diffClass = 'diff-negative';
             rowClass = 'table-active'; // Đánh dấu dòng đã kiểm
         }
 
         html += `
             <tr id="row-${code}" class="${rowClass}">
+                <td>${sysItem.group || '<i class="text-muted">Chưa có</i>'}</td>
                 <td class="fw-bold">${code}</td>
-                <td>${sysItem.name} <small class="text-muted">(${sysItem.unit})</small></td>
+                <td>
+                    ${sysItem.name} <small class="text-muted">(${sysItem.unit})</small>
+                </td>
                 <td class="text-center">${sysQty}</td>
                 <td class="text-center fw-bold fs-5 text-primary">${realQty > 0 ? realQty : '-'}</td>
                 <td class="text-center ${diffClass}">${realQty > 0 || sessionScannedInventory[code] !== undefined ? (diff > 0 ? '+'+diff : diff) : '-'}</td>
@@ -704,62 +747,93 @@ function startNewAuditSession() {
 }
 
 // === 5. CAMERA SCANNER (Dùng thư viện html5-qrcode) ===
-function toggleCamera() {
+
+// Tách hàm xử lý khi quét thành công để có thể tái sử dụng
+const onScanSuccess = (decodedText, decodedResult) => {
+    if (isScanning) return;
+    isScanning = true;
+
+    console.log(`Scan Code: ${decodedText}`);
+    document.getElementById('scanInput').value = decodedText;
+    
+    // Hàm này bây giờ sẽ xử lý việc tạm dừng/tiếp tục camera nếu cần
+    processInputManual(); 
+
+    if (bipAudio) {
+        bipAudio.play().catch(e => console.error("Audio play failed:", e));
+    }
+    
+    const isMobile = window.innerWidth <= 767.98;
+    const highlightElement = isMobile ? document.body : document.getElementById('reader');
+    if (highlightElement) {
+        highlightElement.classList.add('scan-success-highlight');
+    }
+
+    setTimeout(() => {
+        isScanning = false;
+        if (highlightElement) {
+            highlightElement.classList.remove('scan-success-highlight');
+        }
+    }, 1000);
+};
+
+// Hàm riêng để khởi động quá trình quét
+function startScannerProcess() {
+    const isMobile = window.innerWidth <= 767.98;
+    // Cấu hình camera, cho box nhỏ hơn trên mobile
+    const qrboxConfig = isMobile ? { width: 200, height: 200 } : 250;
+
+    if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+    }
+
+    return html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: qrboxConfig },
+        onScanSuccess,
+        (errorMessage) => { /* ignore */ }
+    );
+}
+
+// Hàm bật/tắt camera chính (đã được tái cấu trúc)
+async function toggleCamera() {
     const section = document.getElementById('cameraSection');
+    const isMobile = window.innerWidth <= 767.98;
+
+    // --- Logic bật camera ---
     if (section.style.display === 'none') {
-        // Initialize audio on user gesture to avoid autoplay issues
         if (!bipAudio) {
             bipAudio = new Audio('BIP.mp3');
         }
 
         section.style.display = 'block';
-        focusInput(); // Tự động focus vào ô nhập liệu
-        if (!html5QrCode) {
-            html5QrCode = new Html5Qrcode("reader");
+        if (isMobile) {
+            document.body.classList.add('camera-on-mobile');
         }
-        html5QrCode.start(
-            { facingMode: "environment" }, 
-            { fps: 10, qrbox: 250 },
-            (decodedText, decodedResult) => {
-                // ---- START DELAY LOGIC ----
-                if (isScanning) {
-                    return; // Đang trong thời gian chờ, bỏ qua lần quét này
+        
+        // Thêm một độ trễ nhỏ để đảm bảo trình duyệt đã áp dụng các thay đổi CSS
+        // và các phần tử đã sẵn sàng trước khi thư viện camera cố gắng sử dụng chúng.
+        setTimeout(async () => {
+            try {
+                await startScannerProcess();
+            } catch (err) {
+                console.error("Camera start failed:", err);
+                // Nếu có lỗi, đảm bảo UI được reset hoàn toàn
+                section.style.display = 'none';
+                if (isMobile) {
+                    document.body.classList.remove('camera-on-mobile');
                 }
-                isScanning = true;
-                // ---- END DELAY LOGIC ----
-
-                // Quét thành công
-                console.log(`Scan Code: ${decodedText}`);
-                document.getElementById('scanInput').value = decodedText;
-                processInputManual();
-                
-                // Play sound on successful scan
-                if (bipAudio) {
-                    bipAudio.play().catch(e => console.error("Audio play failed:", e));
-                }
-
-                // Thêm hiệu ứng UI để người dùng biết đã quét thành công
-                const readerElement = document.getElementById('reader');
-                if (readerElement) {
-                    readerElement.classList.add('scan-success-highlight');
-                }
-
-                // Đặt thời gian chờ trước khi cho phép quét lại
-                setTimeout(() => {
-                    isScanning = false;
-                    if (readerElement) {
-                        readerElement.classList.remove('scan-success-highlight');
-                    }
-                }, 1000); // Chờ 1 giây
-            },
-            (errorMessage) => {
-                // ignore
             }
-        ).catch(err => console.log(err));
+        }, 100); // Trễ 100ms
+
     } else {
+        // --- Logic tắt camera ---
         section.style.display = 'none';
-        if (html5QrCode) {
-            html5QrCode.stop().then(() => html5QrCode.clear());
+        if (isMobile) {
+            document.body.classList.remove('camera-on-mobile');
+        }
+        if (html5QrCode && html5QrCode.isScanning) {
+            await html5QrCode.stop().catch(err => console.error("Camera stop failed:", err));
         }
     }
 }

@@ -2034,6 +2034,25 @@ div.mode-external .ext-only {
     }
 
     .kanban-header {
-        border-radius: 8px 8px 0 0; /* Keep rounded corners on top */
+
+            border-radius: 8px 8px 0 0; /* Keep rounded corners on top */
+
+        }
+
     }
-}
+
+    
+
+    /* ==============================================
+
+       SWEETALERT2 Z-INDEX FIX
+
+       ============================================== */
+
+    .swal2-container {
+
+      z-index: 3500 !important;
+
+    }
+
+    

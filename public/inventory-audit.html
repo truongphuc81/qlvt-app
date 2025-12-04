@@ -48,7 +48,7 @@
     <div class="container-fluid mt-4">
         <div class="row">
             <div class="col-md-4 mb-4">
-                <div class="card shadow-sm border-0 mb-3">
+                <div class="card shadow-sm border-0 mb-3" id="scanAreaCard">
                     <div class="card-body">
                         <h5 class="card-title text-primary"><i class="fas fa-barcode"></i> Khu Vực Quét</h5>
                         
@@ -69,15 +69,16 @@
                         <small class="text-muted fst-italic">* Mẹo: Máy quét mã vạch sẽ tự động nhấn Enter.</small>
 
                         <div id="cameraSection" class="mt-3" style="display:none;">
+                            <button class="btn-close-camera" onclick="toggleCamera()">&times;</button>
                             <div id="reader" style="width: 100%;"></div>
                         </div>
                         <button class="btn btn-outline-secondary w-100 mt-2" onclick="toggleCamera()">
-                            <i class="fas fa-camera"></i> Bật/Tắt Camera Laptop
+                            <i class="fas fa-camera"></i> Bật/Tắt Camera
                         </button>
                     </div>
                 </div>
 
-                <div class="card shadow-sm border-0 bg-white">
+                <div class="card shadow-sm border-0 bg-white" id="sessionStatsCard">
                     <div class="card-body">
                         <h5 class="card-title text-success">📊 Thống Kê Phiên</h5>
                         <ul class="list-group list-group-flush">
@@ -117,6 +118,7 @@
                             <table class="table table-hover table-striped align-middle mb-0" id="auditTable">
                                 <thead class="table-light sticky-top">
                                     <tr>
+                                        <th>Nhóm VTHH</th>
                                         <th>Mã Hàng</th>
                                         <th>Tên Vật Tư</th>
                                         <th class="text-center">Tồn Máy</th>
