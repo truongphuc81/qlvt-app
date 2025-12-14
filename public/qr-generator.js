@@ -230,6 +230,121 @@ document.addEventListener('DOMContentLoaded', function() {
 
         exportPdfBtn.disabled = !hasItemsToPrint;
     });
+
+    // --- Quick Generate V2 (with list) ---
+    const quickAddBtn = document.getElementById('quick-add-btn');
+    const quickItemCodeInput = document.getElementById('quick-item-code');
+    const quickItemNameInput = document.getElementById('quick-item-name');
+    const quickQuantityInput = document.getElementById('quick-quantity');
+    const quickListContainer = document.getElementById('quick-list-container');
+    const quickGenerateFromListBtn = document.getElementById('quick-generate-from-list-btn');
+
+    let quickAddList = [];
+
+    function renderQuickList() {
+        quickListContainer.innerHTML = ''; // Clear current list display
+        
+        if (quickAddList.length === 0) {
+            quickGenerateFromListBtn.style.display = 'none'; // Hide generate button if list is empty
+            return;
+        }
+
+        const listGroup = document.createElement('ul');
+        listGroup.className = 'list-group';
+
+        quickAddList.forEach((item, index) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+            
+            listItem.innerHTML = `
+                <div class="me-2">
+                    <small class="fw-bold">${item.name}</small>
+                    <br>
+                    <small class="text-muted">${item.code} | SL: ${item.quantity}</small>
+                </div>
+                <button class="btn btn-danger btn-sm" data-index="${index}">&times;</button>
+            `;
+
+            listGroup.appendChild(listItem);
+        });
+
+        quickListContainer.appendChild(listGroup);
+        quickGenerateFromListBtn.style.display = 'block'; // Show generate button
+    }
+    
+    // Event listener for the "Remove" button on each list item
+    quickListContainer.addEventListener('click', function(e) {
+        if (e.target && e.target.matches('button.btn-danger')) {
+            const indexToRemove = parseInt(e.target.getAttribute('data-index'), 10);
+            quickAddList.splice(indexToRemove, 1); // Remove item from array
+            renderQuickList(); // Re-render the list
+        }
+    });
+
+
+    quickAddBtn.addEventListener('click', () => {
+        const code = quickItemCodeInput.value.trim();
+        const name = quickItemNameInput.value.trim();
+        const quantity = parseInt(quickQuantityInput.value, 10);
+
+        if (!code || !name) {
+            alert("Vui lòng nhập đầy đủ Mã và Tên vật tư.");
+            return;
+        }
+        if (isNaN(quantity) || quantity < 1) {
+            alert("Số lượng in phải là một số lớn hơn 0.");
+            return;
+        }
+
+        // Add item to the list
+        quickAddList.push({ code, name, quantity });
+
+        // Re-render the list display
+        renderQuickList();
+
+        // Clear inputs for next entry
+        quickItemCodeInput.value = '';
+        quickItemNameInput.value = '';
+        quickQuantityInput.value = '1';
+        quickItemCodeInput.focus();
+    });
+
+    quickGenerateFromListBtn.addEventListener('click', () => {
+        if (quickAddList.length === 0) {
+            alert("Danh sách in nhanh trống. Vui lòng thêm vật tư.");
+            return;
+        }
+
+        qrContainer.innerHTML = ''; // Clear previous QRs
+
+        quickAddList.forEach(material => {
+            for (let i = 0; i < material.quantity; i++) {
+                const qrItem = document.createElement('div');
+                qrItem.className = 'qr-item';
+
+                const qrCodeDiv = document.createElement('div');
+                qrCodeDiv.className = 'qr-code';
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'info';
+                infoDiv.textContent = material.name;
+                
+                qrItem.appendChild(qrCodeDiv);
+                qrItem.appendChild(infoDiv);
+                qrContainer.appendChild(qrItem);
+
+                new QRCode(qrCodeDiv, {
+                    text: material.code,
+                    width: 256,
+                    height: 256,
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
+        });
+
+        exportPdfBtn.disabled = false; // Enable PDF export
+    });
+
     function removeVietnameseTones(str) {
         str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g,"a"); 
         str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g,"e"); 
@@ -252,49 +367,99 @@ document.addEventListener('DOMContentLoaded', function() {
         str = str.trim(); 
         return str;
     }
-    exportPdfBtn.addEventListener('click', () => {
+    exportPdfBtn.addEventListener('click', async () => {
         const selectedGroup = groupFilter.value;
         const filename = `qrcodes-${selectedGroup.replace(/\s+/g, '_') || 'all'}.pdf`;
 
+        exportPdfBtn.disabled = true;
+        exportPdfBtn.textContent = 'Đang xuất PDF...';
+
         const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-            orientation: 'p',
-            unit: 'mm',
-            format: 'a4'
-        });
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+        const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
 
-        const qrContainerElement = document.getElementById('qr-container');
+        // --- CẤU HÌNH LẠI LAYOUT CHO KHỚP VỚI CSS ---
         
-        html2canvas(qrContainerElement, { 
-            scale: 5, // Higher scale for better resolution
-            useCORS: true,
-            width: qrContainerElement.offsetWidth,
-            height: qrContainerElement.offsetHeight
-        }).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
+        // 1. Chỉnh lại lề giống với padding: 5mm trong CSS .a4-page
+        const margin = 5; 
+        
+        // 2. Cập nhật kích thước item đúng với CSS .qr-item (50mm x 20mm)
+        const itemWidth = 50; 
+        const itemHeight = 20; 
 
-            // Calculate the aspect ratio to avoid distortion
-            const canvasAspectRatio = canvas.width / canvas.height;
-            
-            let finalImgWidth, finalImgHeight;
+        // 3. Tính toán lại số cột và hàng dựa trên kích thước thật
+        // (210 - 10) / 50 = 4 cột
+        const numCols = Math.floor((pdfWidth - 2 * margin) / itemWidth);
+        
+        // (297 - 10) / 20 = ~14 hàng
+        const numRows = Math.floor((pdfHeight - 2 * margin) / itemHeight);
 
-            // Fit image to page width while maintaining aspect ratio
-            finalImgWidth = pdfWidth;
-            finalImgHeight = finalImgWidth / canvasAspectRatio;
+        // Khoảng cách thực tế giữa các cột/hàng (nếu muốn căn đều)
+        // Hiện tại set bằng itemWidth/Height để xếp sát nhau như tem nhãn
+        const colWidth = itemWidth; 
+        const rowHeight = itemHeight;
 
-            // If the calculated height is greater than the page height, 
-            // it means the content is very long. For now, we'll cap it at the page height.
-            // A more advanced solution for multi-page is possible but much more complex.
-            if (finalImgHeight > pdfHeight) {
-                console.warn("Nội dung dài hơn một trang, có thể bị cắt bớt trong PDF.");
-                finalImgHeight = pdfHeight;
+        // Kích thước vẽ cuối cùng (giữ nguyên tỷ lệ)
+        const finalItemWidth = itemWidth;
+        const finalItemHeight = itemHeight;
+
+        const qrItems = Array.from(document.querySelectorAll('#qr-container .qr-item'));
+
+        if (qrItems.length === 0) {
+            alert("Không có mã QR để xuất.");
+            exportPdfBtn.disabled = false;
+            exportPdfBtn.textContent = 'Xuất PDF';
+            return;
+        }
+
+        let pageNumber = 1;
+        let col = 0;
+        let row = 0;
+
+        // Use a for...of loop to handle async operations correctly
+        for (const item of qrItems) {
+            try {
+                const canvas = await html2canvas(item, {
+                    scale: 4, 
+                    useCORS: true,
+                    // Bỏ width/height cứng ở đây để html2canvas tự lấy kích thước thực của element
+                    backgroundColor: null 
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+
+                // Tính toán vị trí:
+                // Căn giữa trang hoặc bắt đầu từ lề trái
+                // Ở đây ta bắt đầu từ lề trái (margin)
+                const x = margin + (col * colWidth);
+                const y = margin + (row * rowHeight);
+
+                // Quan trọng: Vẽ ảnh với kích thước finalItemWidth (50) và finalItemHeight (20)
+                // Điều này khớp với tỷ lệ ảnh gốc chụp từ html2canvas
+                pdf.addImage(imgData, 'PNG', x, y, finalItemWidth, finalItemHeight, undefined, 'FAST');
+
+                // Move to the next position
+                col++;
+                if (col >= numCols) {
+                    col = 0;
+                    row++;
+                    if (row >= numRows) {
+                        row = 0;
+                        pageNumber++;
+                        pdf.addPage();
+                    }
+                }
+            } catch (error) {
+                console.error("Lỗi khi xử lý một mã QR:", error);
+                // Optionally, skip the item and continue
             }
+        }
 
-            // Add image to PDF, ensuring no distortion and disabling compression
-            pdf.addImage(imgData, 'PNG', 0, 0, finalImgWidth, finalImgHeight, undefined, 'NONE');
-            pdf.save(filename);
-        });
+        pdf.save(filename);
+
+        // Re-enable the button
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.textContent = 'Xuất PDF';
     });
 });

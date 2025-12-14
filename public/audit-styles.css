@@ -269,3 +269,51 @@ body.scan-success-highlight {
     object-fit: cover;
     border: 2px solid #ddd;
 }
+
+/* Style cho các lựa chọn nguồn giao dịch */
+#directOptionDiv, #pendingOptionDiv .form-check {
+    transition: all 0.2s ease-in-out;
+}
+
+.source-direct-selected {
+    background-color: #eaf2ff !important;
+    border: 2px solid #599eff !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 123, 255, 0.1) !important;
+}
+
+.source-pending-selected {
+    background-color: #fff8e1 !important;
+    border: 2px solid #ffc107 !important;
+    box-shadow: 0 0.5rem 1rem rgba(255, 193, 7, 0.1) !important;
+}
+
+/* Tô sáng ô ghi chú khi duyệt lệnh */
+.note-highlight {
+    background-color: #fffbeb !important;
+    border-color: #ffdf7e !important;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.2) !important;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Tô màu cho nút Mượn/Trả được chọn */
+.btn-check:checked+.btn-outline-primary {
+    background-color: #0d6efd;
+    color: white;
+}
+
+/* Giữ màu cam cho nút TRẢ HÀNG khi chưa chọn */
+.btn-outline-warning {
+    color: #fd7e14;
+    border-color: #fd7e14;
+}
+.btn-outline-warning:hover {
+    background-color: #fd7e14;
+    color: white;
+}
+
+/* Tô màu cam cho nút TRẢ HÀNG khi ĐƯỢC CHỌN */
+.btn-check:checked+.btn-outline-warning {
+    background-color: #fd7e14;
+    color: white;
+    border-color: #fd7e14;
+}

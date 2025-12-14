@@ -75,6 +75,38 @@
                             <!-- Checkboxes will be inserted here -->
                         </div>
                         <hr>
+
+                        <!-- Quick Print Section -->
+                        <div class="card mt-3">
+                            <div class="card-header bg-secondary text-white">
+                                <h6 class="mb-0"><i class="fas fa-bolt me-2"></i>In Nhanh (cho vật tư chưa có)</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <label for="quick-item-code" class="form-label">Mã Vật Tư:</label>
+                                    <input type="text" id="quick-item-code" class="form-control form-control-sm" placeholder="VD: COM-LAP-001">
+                                </div>
+                                <div class="mb-2">
+                                    <label for="quick-item-name" class="form-label">Tên Vật Tư:</label>
+                                    <input type="text" id="quick-item-name" class="form-control form-control-sm" placeholder="VD: Laptop Dell XPS 15">
+                                </div>
+                                <div class="mb-2">
+                                    <label for="quick-quantity" class="form-label">Số Lượng In:</label>
+                                    <input type="number" id="quick-quantity" class="form-control form-control-sm" value="1" min="1">
+                                </div>
+                                <button id="quick-add-btn" class="btn btn-info w-100 mb-3">
+                                    <i class="fas fa-plus me-2"></i>Thêm vào danh sách
+                                </button>
+                                
+                                <div id="quick-list-container" class="border-top pt-2">
+                                    <!-- Quick-added items will be displayed here -->
+                                </div>
+
+                                <button id="quick-generate-from-list-btn" class="btn btn-warning w-100 mt-2" style="display: none;">
+                                    <i class="fas fa-print me-2"></i>Tạo QR từ danh sách nhanh
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Right Column: QR Code Preview -->

@@ -2,17 +2,34 @@
 
 // === GLOBAL VARIABLES ===
 let systemInventory = {};
-let cart = {}; // { 'CODE': { name, unit, qty } }
+let cart = []; // [{ id, code, name, unit, serial }]
 let currentMode = 'borrow'; // 'borrow' | 'return'
 let currentSource = 'DIRECT'; // 'DIRECT' | 'PENDING'
-let pendingNotesMap = {}; // Cache phiếu chờ
+let pendingNotesMap = {}; // Cache phiếu chờ của KTV đang chọn
 let currentPendingId = null; // ID phiếu đang chọn duyệt
 let html5QrCode = null;
 let beepAudio = new Audio('chime.mp3');
-let technicianData = []; // Cache a list of technician objects
+let technicianData = []; // Cache a list of technician objects {email, name, avatarUrl}
+let technicianMap = new Map(); // To map email to name for notifications
+
+// Realtime listeners
+let pendingBorrowListener = null;
+let pendingReturnListener = null;
+let allPendingBorrows = [];
+let allPendingReturns = [];
+
+// History Section Globals
+let technicianHistoryListener = null;
+let technicianHistoryCache = [];
+let technicianHistoryLastDoc = null;
+const HISTORY_PAGE_SIZE = 10;
+
 
 // === INIT ===
 document.addEventListener('DOMContentLoaded', async function() {
+    // NOTE: firebase.firestore() is available globally from scripts in borrow-return.html
+    const db = firebase.firestore();
+
     auth.onAuthStateChanged(async user => {
         if (!user) { window.location.href = 'index.html'; return; }
         
@@ -25,11 +42,14 @@ document.addEventListener('DOMContentLoaded', async function() {
 
         document.getElementById('userEmailDisplay').innerText = user.email;
         
+        // Load essential data first
         await Promise.all([ 
             loadTechnicians(), 
             loadInventory(),
-            loadAllPendingRequests() // Tải thông báo chờ duyệt
         ]);
+        
+        // Now, set up the real-time listener for all pending notes
+        setupRealtimePendingNotesListener(db);
         
         // Setup initial state for quantity input
         toggleQtyInput();
@@ -44,6 +64,22 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Auto Qty checkbox listener
     document.getElementById('autoQty').addEventListener('change', toggleQtyInput);
+
+    // History filter listener
+    document.getElementById('historyFilterType').addEventListener('change', () => {
+        const email = document.getElementById('techSelect').value;
+        if (email) {
+            // Detach old listener and start a new one with the new filter
+            if (technicianHistoryListener) technicianHistoryListener();
+            listenForTechnicianHistory(email);
+        }
+    });
+
+    // History load more listener
+    document.getElementById('loadMoreTechnicianHistory').addEventListener('click', () => {
+         const email = document.getElementById('techSelect').value;
+         if(email) loadMoreTechnicianHistory(email);
+    });
 });
 
 // Focus Helper
@@ -51,131 +87,164 @@ function focusInput() {
     if (!Swal.isVisible()) document.getElementById('scanInput').focus();
 }
 document.addEventListener('click', (e) => {
-    // Đừng chuyển focus nếu click vào các control cần nhập liệu
     if (!['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName) && !e.target.closest('.ui-autocomplete')) {
         focusInput();
     }
 });
 
-// === 1. DATA LOADING & NOTIFICATIONS ===
+// === 1. REAL-TIME NOTIFICATIONS & DATA LOADING ===
 
-async function loadAllPendingRequests() {
+function setupRealtimePendingNotesListener(db) {
+    if (pendingBorrowListener) pendingBorrowListener();
+    if (pendingReturnListener) pendingReturnListener();
+
+    const borrowQuery = db.collection('pending_notes')
+        .where('isFulfilled', '==', false)
+        .where('status', 'not-in', ['Rejected']);
+
+    pendingBorrowListener = borrowQuery.onSnapshot(snapshot => {
+        allPendingBorrows = snapshot.docs.map(doc => doc.data());
+        combineAndRenderAllPending();
+    }, err => {
+        console.error("Lỗi listener phiếu mượn chờ:", err);
+        showErrorInNotificationMenu("Lỗi tải phiếu mượn");
+    });
+
+    const returnQuery = db.collection('pending_return_notes')
+        .where('isFulfilled', '==', false)
+        .where('status', 'not-in', ['Rejected']);
+
+    pendingReturnListener = returnQuery.onSnapshot(snapshot => {
+        allPendingReturns = snapshot.docs.map(doc => doc.data());
+        combineAndRenderAllPending();
+    }, err => {
+        console.error("Lỗi listener phiếu trả chờ:", err);
+        showErrorInNotificationMenu("Lỗi tải phiếu trả");
+    });
+}
+
+function combineAndRenderAllPending() {
+    let allPending = [...allPendingBorrows, ...allPendingReturns];
+    allPending.forEach(note => {
+        note.name = technicianMap.get(note.email) || note.email.split('@')[0];
+    });
+    allPending.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    renderPendingNotificationsUI(allPending);
+}
+
+function renderPendingNotificationsUI(allPending) {
     const badge = document.getElementById('notificationBadge');
     const menu = document.getElementById('notificationMenu');
+    menu.innerHTML = ''; 
     
-    try {
-        const allPending = await callApi('/manager/all-pending-notes', {}); 
-        
-        menu.innerHTML = ''; 
-        
-        if (allPending && allPending.length > 0) {
-            badge.innerText = allPending.length;
-            badge.style.display = 'block';
+    if (allPending && allPending.length > 0) {
+        badge.innerText = allPending.length;
+        badge.style.display = 'block';
 
-            allPending.forEach(note => {
-                const li = document.createElement('li');
-                const a = document.createElement('a');
-                a.className = 'dropdown-item';
-                a.href = '#';
-                
-                const techName = note.name || note.email.split('@')[0];
-                const itemQty = note.items ? note.items.length : 0;
-                const noteType = note.type === 'Mượn' ? 'mượn' : 'trả';
+        allPending.forEach(note => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.href = '#';
+            const techName = note.name;
+            const itemQty = note.items ? note.items.length : 0;
+            const noteType = note.type === 'Mượn' ? 'mượn' : 'trả';
 
-                // [FIX] Ưu tiên hiển thị note của KTV
-                let noteContentHtml = '';
-                if (note.note && note.note.trim() !== '') {
-                    const truncatedNote = note.note.length > 35 ? note.note.substring(0, 32) + '...' : note.note;
-                    noteContentHtml = `<div class="small text-dark" style="white-space: normal;">Ghi chú: "${truncatedNote}"</div>`;
-                } else if (itemQty > 0) {
-                    noteContentHtml = `<div class="small text-muted">Yêu cầu ${noteType} ${itemQty} món</div>`;
-                } else {
-                    noteContentHtml = `<div class="small text-muted">Yêu cầu ${noteType} (chi tiết trống)</div>`;
-                }
+            let noteContentHtml = '';
+            if (note.note && note.note.trim() !== '') {
+                const truncatedNote = note.note.length > 35 ? note.note.substring(0, 32) + '...' : note.note;
+                noteContentHtml = `<div class="small text-dark" style="white-space: normal;">Ghi chú: "${truncatedNote}"</div>`;
+            } else if (itemQty > 0) {
+                noteContentHtml = `<div class="small text-muted">Yêu cầu ${noteType} ${itemQty} món</div>`;
+            } else {
+                noteContentHtml = `<div class="small text-muted">Yêu cầu ${noteType} (chi tiết trống)</div>`;
+            }
 
-                a.innerHTML = `
-                    <div class="fw-bold">${techName}</div>
-                    ${noteContentHtml}
-                    <div class="small text-muted fst-italic">${new Date(note.timestamp).toLocaleString('vi-VN')}</div>
-                `;
-                
-                a.onclick = () => handleNotificationClick(note.email, note.timestamp, note.type);
-                
-                li.appendChild(a);
-                menu.appendChild(li);
-            });
-
-        } else {
-            badge.style.display = 'none';
-            menu.innerHTML = '<li><a class="dropdown-item disabled" href="#">Không có thông báo mới</a></li>';
-        }
-    } catch (error) {
-        console.error("Lỗi tải thông báo chờ:", error);
+            a.innerHTML = `
+                <div class="fw-bold">${techName}</div>
+                ${noteContentHtml}
+                <div class="small text-muted fst-italic">${new Date(note.timestamp).toLocaleString('vi-VN')}</div>
+            `;
+            a.onclick = () => handleNotificationClick(note.email, note.timestamp, note.type);
+            li.appendChild(a);
+            menu.appendChild(li);
+        });
+    } else {
         badge.style.display = 'none';
-        menu.innerHTML = '<li><a class="dropdown-item text-danger" href="#">Lỗi tải thông báo</a></li>';
+        menu.innerHTML = '<li><a class="dropdown-item disabled" href="#">Không có thông báo mới</a></li>';
     }
 }
 
+function showErrorInNotificationMenu(message) {
+    const badge = document.getElementById('notificationBadge');
+    const menu = document.getElementById('notificationMenu');
+    badge.style.display = 'none';
+    menu.innerHTML = `<li><a class="dropdown-item text-danger" href="#">${message}</a></li>`;
+}
+
 async function handleNotificationClick(email, timestamp, type) {
-    // 1. Chuyển chế độ (Mượn/Trả) nếu cần
     const targetMode = type === 'Mượn' ? 'borrow' : 'return';
     if (currentMode !== targetMode) {
-        // Chuyển radio và gọi setMode
         document.getElementById(targetMode === 'borrow' ? 'radioBorrow' : 'radioReturn').checked = true;
         setMode(targetMode);
     }
-
-    // 2. Chọn đúng KTV
     const techSelect = document.getElementById('techSelect');
     techSelect.value = email;
-    // Manually trigger change event to update avatar
     techSelect.dispatchEvent(new Event('change'));
-    
-    // 3. Tải phiếu chờ của KTV đó
     await checkPending(email);
-
-    // 4. Chọn đúng phiếu chờ và tải nó
     const pendingSelect = document.getElementById('pendingSelect');
     if (pendingSelect.querySelector(`option[value="${timestamp}"]`)) {
         pendingSelect.value = timestamp;
-        toggleOrderSource(); // Chuyển sang chế độ duyệt phiếu
-        loadPendingTicket();
+        document.getElementById('sourcePending').checked = true;
+        toggleOrderSource();
     }
 }
 
 async function loadTechnicians() {
-    const techs = await callApi('/public/technicians');
-    technicianData = techs || []; // Cache the full technician objects
-    
-    const select = document.getElementById('techSelect');
-    select.innerHTML = '<option value="">-- Chọn Kỹ Thuật Viên --</option>';
-    
-    technicianData.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.email;
-        opt.text = `${t.name} (${t.email})`;
-        select.appendChild(opt);
-    });
+    try {
+        const techs = await callApi('/public/technicians');
+        technicianData = techs || [];
+        const select = document.getElementById('techSelect');
+        select.innerHTML = '<option value="">-- Chọn Kỹ Thuật Viên --</option>';
+        technicianMap.clear();
+        technicianData.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.email;
+            opt.text = `${t.name} (${t.email})`;
+            select.appendChild(opt);
+            technicianMap.set(t.email, t.name);
+        });
 
-    // Event change user
-    select.addEventListener('change', async function() {
-        const email = this.value;
-        const avatarImg = document.getElementById('techAvatar');
+        select.addEventListener('change', async function() {
+            const email = this.value;
+            const avatarImg = document.getElementById('techAvatar');
 
-        if (email) {
-            const selectedTech = technicianData.find(t => t.email === email);
-            if (selectedTech && avatarImg) {
-                avatarImg.src = selectedTech.avatarUrl || '/default-avatar.png';
-                avatarImg.style.display = 'inline-block';
+            // Detach old history listener
+            if (technicianHistoryListener) {
+                technicianHistoryListener();
+                technicianHistoryListener = null;
             }
-            await checkPending(email);
-        } else {
-            if (avatarImg) {
-                avatarImg.style.display = 'none';
+            document.getElementById('technicianHistoryBody').innerHTML = '<tr><td colspan="3" class="text-center text-muted">Chọn một KTV để xem lịch sử.</td></tr>';
+            document.getElementById('loadMoreTechnicianHistory').style.display = 'none';
+
+
+            if (email) {
+                const selectedTech = technicianData.find(t => t.email === email);
+                if (selectedTech && avatarImg) {
+                    avatarImg.src = selectedTech.avatarUrl || '/default-avatar.png';
+                    avatarImg.style.display = 'inline-block';
+                }
+                // Load pending tickets for this tech AND their history
+                await checkPending(email);
+                listenForTechnicianHistory(email); // Start listening for history
+            } else {
+                if (avatarImg) avatarImg.style.display = 'none';
+                resetPendingUI();
             }
-            resetPendingUI();
-        }
-    });
+        });
+    } catch (e) {
+        console.error("Lỗi tải danh sách KTV:", e);
+    }
 }
 
 async function loadInventory() {
@@ -184,80 +253,61 @@ async function loadInventory() {
         systemInventory = {};
         list.forEach(i => systemInventory[i.code] = { name: i.name, unit: i.unit });
         initItemSearch(); 
-    } catch(e) { console.error(e); }
+    } catch(e) { console.error("Lỗi tải danh mục vật tư:", e); }
 }
 
 function initItemSearch() {
-    const source = Object.keys(systemInventory).map(code => {
-        const item = systemInventory[code];
-        return {
-            label: `${item.name} (${code})`,
-            value: code,
-            name: item.name,
-            unit: item.unit
-        };
-    });
-
+    const source = Object.keys(systemInventory).map(code => ({
+        label: `${systemInventory[code].name} (${code})`, value: code, name: systemInventory[code].name, unit: systemInventory[code].unit
+    }));
     $("#scanInput").autocomplete({
-        source: source,
-        minLength: 1, 
+        source: source, minLength: 1, 
         select: function(event, ui) {
             event.preventDefault(); 
-            
-            const selectedCode = ui.item.value;
-            const selectedItem = { name: ui.item.name, unit: ui.item.unit };
-
-            addToCart(selectedCode, selectedItem);
-            
+            addToCart(ui.item.value, { name: ui.item.name, unit: ui.item.unit });
             $(this).val('');
         },
-        open: function() {
-            // Thêm class custom để style riêng cho menu autocomplete
-            $(this).autocomplete("widget").addClass("custom-autocomplete-menu");
-        }
+        open: function() { $(this).autocomplete("widget").addClass("custom-autocomplete-menu"); }
     });
 }
 
-// === 2. PENDING TICKETS LOGIC ===
-
+// === 2. PENDING TICKETS LOGIC (Per Technician) ===
+let checkPendingPromise = null;
 async function checkPending(email) {
-    resetPendingUI();
-
-    // API này chỉ cần trả về phiếu mượn chờ của KTV đã chọn
-    const endpoint = currentMode === 'borrow' 
-        ? '/manager/pending-borrow-notes' 
-        : '/manager/pending-return-notes'; // Giả sử có endpoint cho phiếu trả
-
-    try {
-        const notes = await callApi(endpoint, { email: email });
-        
-        if (notes.length > 0) {
-            document.getElementById('pendingOptionDiv').style.display = 'block';
-            document.getElementById('pendingCount').innerText = notes.length;
-            
-            const select = document.getElementById('pendingSelect');
-            pendingNotesMap = {};
-            
-            notes.forEach(n => {
-                pendingNotesMap[n.timestamp] = n;
-                const d = new Date(n.timestamp).toLocaleString('vi-VN');
-                const opt = document.createElement('option');
-                opt.value = n.timestamp;
-                const noteContent = n.items && n.items.length > 0 
-                    ? `${n.items.length} món` 
-                    : (n.note || 'Trống');
-                opt.text = `${d} - ${noteContent}`;
-                select.appendChild(opt);
-            });
+    if (checkPendingPromise) return checkPendingPromise;
+    checkPendingPromise = (async () => {
+        try {
+            resetPendingUI();
+            const endpoint = currentMode === 'borrow' ? '/manager/pending-borrow-notes' : '/manager/pending-return-notes';
+            const notes = await callApi(endpoint, { email: email });
+            if (notes.length > 0) {
+                document.getElementById('pendingOptionDiv').style.display = 'block';
+                document.getElementById('pendingCount').innerText = notes.length;
+                const select = document.getElementById('pendingSelect');
+                pendingNotesMap = {};
+                notes.forEach(n => {
+                    pendingNotesMap[n.timestamp] = n;
+                    const d = new Date(n.timestamp).toLocaleString('vi-VN');
+                    const opt = document.createElement('option');
+                    opt.value = n.timestamp;
+                    const noteContent = n.items && n.items.length > 0 ? `${n.items.length} món` : (n.note || 'Trống');
+                    opt.text = `${d} - ${noteContent}`;
+                    select.appendChild(opt);
+                });
+            }
+        } catch (e) { 
+            console.warn(`Lỗi khi tải phiếu chờ (${currentMode}):`, e); 
+        } finally {
+            checkPendingPromise = null;
         }
-    } catch (e) { 
-        console.warn(`Lỗi khi tải phiếu chờ (${currentMode}):`, e); 
-    }
+    })();
+    return checkPendingPromise;
 }
 
 function resetPendingUI() {
     document.getElementById('pendingOptionDiv').style.display = 'none';
     document.getElementById('pendingSelect').style.display = 'none';
+    document.getElementById('btnRejectPending').style.display = 'none';
     document.getElementById('pendingSelect').innerHTML = '<option value="">-- Chọn phiếu --</option>';
     document.getElementById('sourceDirect').checked = true;
     currentSource = 'DIRECT';
@@ -266,119 +316,111 @@ function resetPendingUI() {
 }
 
 function toggleOrderSource() {
-    const val = document.querySelector('input[name="orderSource"]:checked').value;
-    currentSource = val;
+    currentSource = document.querySelector('input[name="orderSource"]:checked').value;
     const pendingSelect = document.getElementById('pendingSelect');
-    const directOption = document.getElementById('directOptionDiv');
+    const directOptionDiv = document.getElementById('directOptionDiv');
+    const pendingCheckDiv = document.getElementById('pendingOptionDiv').querySelector('.form-check');
+    const rejectBtn = document.getElementById('btnRejectPending');
 
-    if (val === 'PENDING') {
+    if (currentSource === 'PENDING') {
         pendingSelect.style.display = 'block';
-        directOption.classList.remove('shadow-sm'); // Bỏ highlight khỏi mục quét trực tiếp
-        // Tự động tải phiếu đầu tiên nếu có
+        directOptionDiv.classList.remove('source-direct-selected');
+        if (pendingCheckDiv) pendingCheckDiv.classList.add('source-pending-selected');
         if (pendingSelect.value) {
-            loadPendingTicket(); 
+            loadPendingTicket();
+        } else {
+             rejectBtn.style.display = 'none';
         }
     } else {
         pendingSelect.style.display = 'none';
-        directOption.classList.add('shadow-sm'); // Highlight lại mục quét trực tiếp
+        rejectBtn.style.display = 'none';
+        directOptionDiv.classList.add('source-direct-selected');
+        if (pendingCheckDiv) pendingCheckDiv.classList.remove('source-pending-selected');
         clearCart(); 
         currentPendingId = null;
+        document.getElementById('transactionNote').value = '';
+        document.getElementById('transactionNote').classList.remove('note-highlight');
     }
     focusInput();
 }
 
 function loadPendingTicket() {
     const id = document.getElementById('pendingSelect').value;
+    const transactionNoteEl = document.getElementById('transactionNote');
+    const rejectBtn = document.getElementById('btnRejectPending');
+
     if (!id) {
         clearCart();
+        transactionNoteEl.value = '';
+        transactionNoteEl.classList.remove('note-highlight');
+        rejectBtn.style.display = 'none';
         return;
     }
+    
+    rejectBtn.style.display = 'inline-block';
 
     const note = pendingNotesMap[id];
     if (!note) return;
 
     currentPendingId = id;
-    cart = {};
-    
+    cart = []; // Reset cart to an empty array
     (note.items || []).forEach(i => {
         const info = systemInventory[i.code] || { name: i.name, unit: 'Cái' };
-        cart[i.code] = {
-            name: info.name,
-            unit: info.unit,
-            qty: parseInt(i.quantity)
-        };
+        const quantity = parseInt(i.quantity);
+        for (let j = 0; j < quantity; j++) {
+            // Add a unique ID for each individual item
+            const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2) + j;
+            cart.push({ ...info, code: i.code, id: uniqueId, serial: '' });
+        }
     });
-
-    document.getElementById('transactionNote').value = note.note || '';
+    transactionNoteEl.value = note.note || '';
+    if (note.note && note.note.trim() !== '') {
+        transactionNoteEl.classList.add('note-highlight');
+    } else {
+        transactionNoteEl.classList.remove('note-highlight');
+    }
     renderCart();
-    
-    Swal.fire({
-        toast: true, position: 'top-end', icon: 'info', 
-        title: 'Đã tải phiếu chờ', showConfirmButton: false, timer: 1500
-    });
+    Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Đã tải phiếu chờ', showConfirmButton: false, timer: 1500 });
 }
 
 // === 3. MODE & UI LOGIC ===
 
 function setMode(mode) {
-    // Không cần hỏi confirm nữa vì handleNotificationClick sẽ tự chuyển
-    // if (Object.keys(cart).length > 0) { ... }
-
     currentMode = mode;
     const body = document.body;
     const directLabel = document.getElementById('directLabel');
     const title = document.getElementById('listTitle');
     const btn = document.getElementById('btnSubmit');
-
     if (mode === 'borrow') {
-        body.classList.remove('mode-return');
-        body.classList.add('mode-borrow');
-        directLabel.innerText = "Quét Mượn Trực Tiếp";
-        title.innerText = "DANH SÁCH MƯỢN";
-        btn.innerText = "XÁC NHẬN MƯỢN";
+        body.classList.remove('mode-return'); body.classList.add('mode-borrow');
+        directLabel.innerText = "Quét Mượn Trực Tiếp"; title.innerText = "DANH SÁCH MƯỢN"; btn.innerText = "XÁC NHẬN MƯỢN";
     } else {
-        body.classList.remove('mode-borrow');
-        body.classList.add('mode-return');
-        directLabel.innerText = "Quét Trả Trực Tiếp";
-        title.innerText = "DANH SÁCH TRẢ";
-        btn.innerText = "XÁC NHẬN TRẢ";
+        body.classList.remove('mode-borrow'); body.classList.add('mode-return');
+        directLabel.innerText = "Quét Trả Trực Tiếp"; title.innerText = "DANH SÁCH TRẢ"; btn.innerText = "XÁC NHẬN TRẢ";
     }
-
     const email = document.getElementById('techSelect').value;
-    if (email) checkPending(email);
-    else resetPendingUI();
+    if (email) checkPending(email); else resetPendingUI();
 }
 
 function toggleQtyInput() {
     const autoQty = document.getElementById('autoQty').checked;
     const qtyGroup = document.getElementById('manualQtyGroup');
     const qtyInput = document.getElementById('manualQtyInput');
-
-    if (autoQty) {
-        qtyGroup.style.display = 'none';
-    } else {
-        qtyGroup.style.display = 'flex';
-        qtyInput.focus();
-        qtyInput.select();
-    }
+    qtyGroup.style.display = autoQty ? 'none' : 'flex';
+    if (!autoQty) { qtyInput.focus(); qtyInput.select(); }
 }
 
-// === 4. SCANNING LOGIC ===
+// === 4. SCANNING & CART LOGIC ===
 
 function processScan() {
     const input = document.getElementById('scanInput');
     const rawCode = input.value.trim();
     if (!rawCode) return;
-
     const item = systemInventory[rawCode];
     if (item) {
         addToCart(rawCode, item);
-        beepAudio.currentTime = 0; 
-        beepAudio.play().catch(()=>{});
-        
-        Swal.mixin({
-            toast: true, position: 'top-end', showConfirmButton: false, timer: 800
-        }).fire({ icon: 'success', title: item.name });
+        beepAudio.currentTime = 0; beepAudio.play().catch(()=>{});
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 800 }).fire({ icon: 'success', title: item.name });
     } else {
         Swal.fire('Lỗi', `Mã "${rawCode}" không tồn tại`, 'error');
     }
@@ -389,147 +431,189 @@ function processScan() {
 function addToCart(code, item) {
     const autoQty = document.getElementById('autoQty').checked;
     const qtyInput = document.getElementById('manualQtyInput');
-    
-    if (!cart[code]) cart[code] = { ...item, qty: 0 };
+    let quantityToAdd = autoQty ? 1 : (parseInt(qtyInput.value) || 1);
 
-    let quantityToAdd = 1;
-    if (!autoQty) {
-        quantityToAdd = parseInt(qtyInput.value) || 1;
+    for (let i = 0; i < quantityToAdd; i++) {
+        // Add a unique ID to each item for easier deletion/updates
+        const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        cart.push({ ...item, code: code, id: uniqueId, serial: '' });
     }
 
-    cart[code].qty += quantityToAdd;
-    
-    // Reset Qty input to 1 for next time and re-render
     qtyInput.value = '1';
     renderCart();
-    
-    // Return focus to main scan input
-    if(!autoQty) {
-        focusInput();
-    }
+    if (!autoQty) focusInput();
 }
+
 
 function renderCart() {
     const tbody = document.getElementById('cartBody');
     tbody.innerHTML = '';
-    let total = 0;
     let idx = 1;
-
-    Object.keys(cart).reverse().forEach(code => {
-        const it = cart[code];
-        total += it.qty;
-        
+    cart.forEach(it => {
         const tr = document.createElement('tr');
+        // Note: The 'onchange' event calls updateSerial to save the serial number
         tr.innerHTML = `
             <td>${idx++}</td>
-            <td class="fw-bold text-primary">${code}</td>
+            <td class="fw-bold text-primary">${it.code}</td>
             <td>${it.name}</td>
-            <td class="text-center">
-                <div class="input-group input-group-sm justify-content-center" style="width:120px;">
-                    <button class="btn btn-outline-secondary" onclick="updateItem('${code}', -1)">-</button>
-                    <input class="form-control text-center fw-bold" value="${it.qty}" readonly>
-                    <button class="btn btn-outline-secondary" onclick="updateItem('${code}', 1)">+</button>
-                </div>
-            </td>
-            <td><button class="btn btn-sm text-danger" onclick="delItem('${code}')"><i class="fas fa-times"></i></button></td>
-        `;
+            <td><input type="text" class="form-control form-control-sm" value="${it.serial || ''}" data-id="${it.id}" onchange="updateSerial(this)" placeholder="Nhập serial (nếu có)"></td>
+            <td class="text-center">${it.unit}</td>
+            <td><button class="btn btn-sm text-danger" onclick="delItem('${it.id}')"><i class="fas fa-times"></i></button></td>`;
         tbody.appendChild(tr);
     });
-
-    document.getElementById('totalQtyBadge').innerText = `${total} món`;
-    
-    if (total === 0) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-5 text-muted">Vui lòng chọn KTV và quét mã...</td></tr>';
+    document.getElementById('totalQtyBadge').innerText = `${cart.length} món`;
+    if (cart.length === 0) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-muted">Vui lòng chọn KTV và quét mã...</td></tr>';
 }
 
-function updateItem(code, delta) {
-    if (cart[code]) {
-        cart[code].qty += delta;
-        if (cart[code].qty <= 0) delete cart[code];
-        renderCart();
+function updateSerial(input) {
+    const id = input.dataset.id;
+    const serial = input.value.trim();
+    const item = cart.find(i => i.id === id);
+    if (item) {
+        item.serial = serial;
     }
 }
-function delItem(code) {
-    delete cart[code];
+
+function delItem(id) {
+    cart = cart.filter(i => i.id !== id);
     renderCart();
-}
-function clearCart() {
-    cart = {};
-    renderCart();
-    focusInput();
 }
 
-// === 5. SUBMIT ===
+function clearCart() { 
+    cart = []; 
+    renderCart(); 
+    focusInput(); 
+}
+
+// === 5. SUBMIT & REJECT ===
 
 async function submitTransaction() {
     const email = document.getElementById('techSelect').value;
     const note = document.getElementById('transactionNote').value;
+    const submitBtn = document.getElementById('btnSubmit');
+    if (!email) return Swal.fire('Thiếu thông tin', 'Chưa chọn Kỹ thuật Viên', 'warning');
+    if (cart.length === 0) return Swal.fire('Trống', 'Chưa quét vật tư nào', 'warning');
 
-    if (!email) return Swal.fire('Thiếu thông tin', 'Chưa chọn Kỹ thuật viên', 'warning');
-    if (Object.keys(cart).length === 0) return Swal.fire('Trống', 'Chưa quét vật tư nào', 'warning');
+    // Create payload by grouping items with the same code, and collecting serials
+    const groupedItems = cart.reduce((acc, item) => {
+        if (!acc[item.code]) {
+            acc[item.code] = {
+                code: item.code,
+                name: item.name,
+                quantity: 0,
+                serials: []
+            };
+        }
+        acc[item.code].quantity++;
+        if (item.serial) {
+            acc[item.code].serials.push(item.serial);
+        }
+        return acc;
+    }, {});
 
-    // 1. Chuẩn bị payload
-    const items = Object.keys(cart).map(c => ({
-        code: c, name: cart[c].name, quantity: cart[c].qty,
-        quantityReturned: currentMode === 'return' ? cart[c].qty : undefined
-    }));
+    const items = Object.values(groupedItems).map(g => {
+        const itemPayload = {
+            code: g.code,
+            name: g.name,
+            quantity: g.quantity,
+        };
+        // Only add serials array if it's not empty
+        if (g.serials.length > 0) {
+            itemPayload.serials = g.serials;
+        }
+        // For return mode, specify the quantity being returned
+        if (currentMode === 'return') {
+            itemPayload.quantityReturned = g.quantity;
+        }
+        return itemPayload;
+    });
 
-    // 2. Xác định mode backend và các thông tin khác
-    let modeAPI = '';
+    let modeAPI;
     if (currentSource === 'PENDING' && currentPendingId) {
-        // Áp dụng cho cả duyệt mượn và duyệt trả
-        modeAPI = 'NOTE'; 
+        if (currentMode === 'borrow') modeAPI = 'NOTE';
     } else {
-        // Áp dụng cho cả mượn trực tiếp và trả trực tiếp
         modeAPI = currentMode === 'borrow' ? 'DIRECT' : 'MANAGER_DIRECT';
     }
-
+    
     const payload = {
-        email: email,
-        type: currentMode === 'borrow' ? 'Mượn' : 'Trả',
-        mode: modeAPI,
+        email: email, type: currentMode === 'borrow' ? 'Mượn' : 'Trả', mode: modeAPI,
         date: new Date().toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'}),
-        timestamp: new Date().toISOString(),
-        items: items,
-        note: note,
-        // Gửi ID phiếu chờ vào đúng trường dựa trên mode
+        timestamp: new Date().toISOString(), items: items, note: note,
         borrowTimestamp: (currentMode === 'borrow' && currentSource === 'PENDING') ? currentPendingId : undefined,
         returnTimestamp: (currentMode === 'return' && currentSource === 'PENDING') ? currentPendingId : undefined
     };
 
     const actionName = currentMode === 'borrow' ? 'XUẤT MƯỢN' : 'NHẬP TRẢ';
-    const result = await Swal.fire({
-        title: `Xác nhận ${actionName}`,
-        html: `Cho KTV: <b>${email}</b><br>Số lượng: <b>${document.getElementById('totalQtyBadge').innerText}</b>`,
-        icon: 'question', showCancelButton: true, confirmButtonText: 'Đồng ý'
-    });
-
+    const result = await Swal.fire({ title: `Xác nhận ${actionName}`, html: `Cho KTV: <b>${email}</b><br>Tổng số lượng: <b>${cart.length} món</b>`, icon: 'question', showCancelButton: true, confirmButtonText: 'Đồng ý' });
+    
     if (result.isConfirmed) {
-        Swal.showLoading();
+        submitBtn.disabled = true;
+        Swal.fire({ title: 'Đang xử lý...', text: 'Vui lòng chờ trong giây lát.', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         try {
-            // 3. [FIX] Chọn đúng API endpoint dựa trên mode
-            const apiEndpoint = currentMode === 'borrow' 
-                ? '/manager/submitBorrow' 
-                : '/manager/submitReturn';
-
-            console.log(`Calling API: ${apiEndpoint} with payload:`, payload);
+            const apiEndpoint = currentMode === 'borrow' ? '/manager/submitBorrow' : '/manager/submitReturn';
             await callApi(apiEndpoint, payload);
-            
             await Swal.fire('Thành công', 'Giao dịch đã được lưu', 'success');
-            
             clearCart();
             document.getElementById('transactionNote').value = '';
-            
-            // Tải lại cả thông báo chung và phiếu chờ của KTV hiện tại
-            await Promise.all([
-                loadAllPendingRequests(),
-                checkPending(email) 
-            ]);
-
+            document.getElementById('transactionNote').classList.remove('note-highlight');
+            await checkPending(email);
         } catch (e) {
             Swal.fire('Lỗi', e.message, 'error');
+        } finally {
+            submitBtn.disabled = false;
         }
     }
 }
+
+
+async function rejectPendingTransaction() {
+    const email = document.getElementById('techSelect').value;
+    if (!currentPendingId || !email) {
+        return Swal.fire('Lỗi', 'Không có phiếu chờ nào được chọn.', 'error');
+    }
+
+    const { value: reason } = await Swal.fire({
+        title: 'Từ chối yêu cầu',
+        input: 'text',
+        inputLabel: 'Lý do từ chối',
+        inputPlaceholder: 'VD: Không đủ hàng, yêu cầu không hợp lệ...',
+        showCancelButton: true,
+        confirmButtonText: 'Xác nhận Từ chối',
+        cancelButtonText: 'Hủy',
+        inputValidator: (value) => {
+            if (!value) {
+                return 'Bạn phải nhập lý do từ chối!';
+            }
+        }
+    });
+
+    if (reason) {
+        Swal.fire({ title: 'Đang xử lý...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        const payload = {
+            email: email,
+            timestamp: currentPendingId,
+            reason: reason
+        };
+        const endpoint = currentMode === 'borrow' ? '/manager/rejectBorrowNote' : '/manager/rejectReturnNote';
+
+        try {
+            await callApi(endpoint, payload);
+            await Swal.fire('Thành công', 'Đã từ chối yêu cầu.', 'success');
+            
+            // Reset UI
+            clearCart();
+            document.getElementById('transactionNote').value = '';
+            document.getElementById('transactionNote').classList.remove('note-highlight');
+            
+            // Reload pending list for the technician
+            await checkPending(email);
+        } catch (e) {
+            Swal.fire('Lỗi', `Không thể từ chối yêu cầu: ${e.message}`, 'error');
+        }
+    }
+}
+
 
 // === 6. CAMERA ===
 function toggleCamera() {
@@ -537,15 +621,154 @@ function toggleCamera() {
     if (box.style.display === 'none') {
         box.style.display = 'block';
         if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
-            (txt) => {
-                document.getElementById('scanInput').value = txt;
-                processScan();
-            }, 
-            () => {}
-        );
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (txt) => { document.getElementById('scanInput').value = txt; processScan(); }, () => {}).catch(err => console.error("QR Code scanner failed to start.", err));
     } else {
         box.style.display = 'none';
-        if (html5QrCode) html5QrCode.stop().then(() => html5QrCode.clear());
+        if (html5QrCode && html5QrCode.isScanning) { html5QrCode.stop().then(() => console.log("QR Code scanner stopped.")).catch(err => console.error("QR Code scanner failed to stop.", err)); }
     }
+}
+
+// === 7. TECHNICIAN HISTORY SECTION (NEW) ===
+
+function formatTransactionHistoryContent(doc) {
+    let html = '';
+    let statusHtml = '';
+    if (doc.status === 'Pending') {
+        statusHtml = `<span class="badge bg-primary">Đang chờ</span><br>`;
+    } else if (doc.status === 'Rejected') {
+        let reason = doc.rejectionReason ? `: ${doc.rejectionReason}` : '';
+        statusHtml = `<span class="badge bg-danger">Bị từ chối${reason}</span><br>`;
+    } else if (doc.status === 'Fulfilled') {
+         statusHtml = `<span class="badge bg-success">Hoàn thành</span><br>`;
+    }
+
+    let noteDisplay = (doc.status === 'Rejected' && doc.note) ? `<s>${doc.note}</s>` : doc.note;
+    if (noteDisplay) {
+        html += `<div class="history-note"><strong>Ghi chú:</strong> ${noteDisplay}</div>`;
+    }
+    html += statusHtml;
+
+    if (doc.items && doc.items.length > 0) {
+        html += `<small class="text-muted">`;
+        doc.items.forEach(item => {
+            let itemText = `&bull; ${item.name || item.code}: ${item.quantity}`;
+            // Display serials if they exist
+            if (item.serials && item.serials.length > 0) {
+                itemText += ` (Serials: ${item.serials.join(', ')})`;
+            }
+            html += itemText + '<br>';
+        });
+        html += `</small>`;
+    }
+    return html;
+}
+
+function renderTechnicianHistoryTable() {
+    const tbody = document.getElementById('technicianHistoryBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const filteredCache = technicianHistoryCache.filter(doc => doc.note !== 'Điều chỉnh kho âm (Tự động)');
+
+    if (filteredCache.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Không có dữ liệu.</td></tr>';
+        return;
+    }
+    
+    filteredCache.forEach(doc => {
+        const tr = document.createElement('tr');
+        const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
+        const typeClass = doc.type === 'Mượn' ? 'text-primary' : 'text-success';
+        tr.innerHTML = `
+            <td data-label="Thời gian"><small>${timestamp}</small></td>
+            <td data-label="Loại"><strong class="${typeClass}">${doc.type}</strong></td>
+            <td data-label="Nội dung">${formatTransactionHistoryContent(doc)}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function listenForTechnicianHistory(email) {
+    if (!email) return;
+    if (technicianHistoryListener) technicianHistoryListener(); // Detach old one
+
+    technicianHistoryCache = [];
+    technicianHistoryLastDoc = null;
+
+    const spinner = document.getElementById('technicianHistorySpinner');
+    if (spinner) spinner.style.display = 'block';
+
+    const loadMoreBtn = document.getElementById('loadMoreTechnicianHistory');
+    if (loadMoreBtn) { loadMoreBtn.style.display = 'none'; loadMoreBtn.disabled = false; loadMoreBtn.innerText = 'Tải thêm'; }
+
+    const filterType = document.getElementById('historyFilterType').value;
+
+    let historyQuery = firebase.firestore().collection('history_transactions').where('email', '==', email);
+    if (filterType !== 'Tất cả') {
+        historyQuery = historyQuery.where('type', '==', filterType);
+    }
+    historyQuery = historyQuery.orderBy('timestamp', 'desc').limit(HISTORY_PAGE_SIZE);
+
+    technicianHistoryListener = historyQuery.onSnapshot(snapshot => {
+        if (spinner) spinner.style.display = 'none';
+        
+        snapshot.docChanges().forEach(change => {
+            const docData = change.doc.data();
+            const docId = docData.timestamp;
+            if (change.type === 'added') {
+                if (!technicianHistoryCache.find(item => item.timestamp === docId)) {
+                    technicianHistoryCache.push(docData);
+                }
+            } else if (change.type === 'modified') {
+                const index = technicianHistoryCache.findIndex(item => item.timestamp === docId);
+                if (index > -1) technicianHistoryCache[index] = docData;
+            } else if (change.type === 'removed') {
+                technicianHistoryCache = technicianHistoryCache.filter(item => item.timestamp !== docId);
+            }
+        });
+
+        technicianHistoryCache.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        const snapshotSize = snapshot.size;
+        technicianHistoryLastDoc = (snapshotSize > 0) ? snapshot.docs[snapshotSize - 1] : null;
+
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = snapshotSize < HISTORY_PAGE_SIZE ? 'none' : 'block';
+        }
+        renderTechnicianHistoryTable();
+    }, error => {
+        console.error("Lỗi tải lịch sử KTV:", error);
+        if (spinner) spinner.style.display = 'none';
+        document.getElementById('technicianHistoryBody').innerHTML = '<tr><td colspan="3" class="text-danger">Lỗi tải lịch sử.</td></tr>';
+    });
+}
+
+function loadMoreTechnicianHistory(email) {
+    if (!technicianHistoryLastDoc || !email) return;
+
+    const btn = document.getElementById('loadMoreTechnicianHistory');
+    btn.disabled = true; btn.innerText = 'Đang tải...';
+
+    const filterType = document.getElementById('historyFilterType').value;
+    let nextQuery = firebase.firestore().collection('history_transactions').where('email', '==', email);
+    if (filterType !== 'Tất cả') {
+        nextQuery = nextQuery.where('type', '==', filterType);
+    }
+    nextQuery = nextQuery.orderBy('timestamp', 'desc')
+                         .startAfter(technicianHistoryLastDoc)
+                         .limit(HISTORY_PAGE_SIZE);
+
+    nextQuery.get().then(snapshot => {
+        const snapshotSize = snapshot.size;
+        if (snapshotSize > 0) {
+            technicianHistoryLastDoc = snapshot.docs[snapshotSize - 1];
+            snapshot.forEach(doc => technicianHistoryCache.push(doc.data()));
+            renderTechnicianHistoryTable();
+        }
+        btn.disabled = false; btn.innerText = 'Tải thêm';
+        if (snapshotSize < HISTORY_PAGE_SIZE) btn.style.display = 'none';
+    }).catch(err => {
+        console.error("Lỗi tải thêm lịch sử:", err);
+        btn.disabled = false; btn.innerText = 'Lỗi! Thử lại';
+    });
 }

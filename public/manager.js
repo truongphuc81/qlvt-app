@@ -141,6 +141,7 @@ function showManagerPage() {
         ticketRange: document.getElementById('ticketRangeForm'),
         excelUpload: document.getElementById('excelUploadForm'),
         inventoryUpload: document.getElementById('inventoryUploadSection'),
+        newItemSection: document.getElementById('newItemSection'),
         transfer: document.getElementById('transferForm'),
         roleManager: document.getElementById('roleManagerForm'),
         managerHistory: document.getElementById('managerHistorySection'),
@@ -164,6 +165,7 @@ function showManagerPage() {
         if (sections.managerBorrow) sections.managerBorrow.style.display = '';
         if (sections.managerOverview) sections.managerOverview.style.display = '';
         if (sections.inventoryUpload) sections.inventoryUpload.style.display = '';
+        if (sections.newItemSection) sections.newItemSection.style.display = '';
         if (sections.managerHistory) sections.managerHistory.style.display = '';
         if (sections.technicianSelector) sections.technicianSelector.style.display = '';
         selectMode('borrow');
@@ -362,7 +364,7 @@ function displayBorrowedItems(items, isManagerView, email){
           let actionHtml = '';
           if (remaining < 0 && userRoles.admin) {
               const amountToFix = Math.abs(remaining);
-              const itemNameEscaped = (item.name || '').replace(/'/g, "\\'");
+              const itemNameEscaped = (item.name || '').replace(/'/g, "'\'");
               actionHtml = `<button 
                               onclick="fixNegativeInventory('${email}', '${item.code}', '${itemNameEscaped}', ${amountToFix})"
                               style="background-color: var(--error-color);">
@@ -370,13 +372,13 @@ function displayBorrowedItems(items, isManagerView, email){
                             </button>`;
           }
 
-          row.innerHTML = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                        '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+
-                        '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
-                        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
+          row.innerHTML = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+ 
+                        '<td data-label="Mã vật tư">'+(item.code||'')+'</td>'+ 
+                        '<td data-label="Tổng mượn">'+item.quantity+'</td>'+ 
+                        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+ 
                         '<td data-label="Đã trả">'+item.totalReturned+'</td>'+ 
                         '<td data-label="Còn lại">'+remaining+'</td>'+ 
-                        '<td data-label="Chi tiết số sổ">'+unreFull+'</td>' +
+                        '<td data-label="Chi tiết số sổ">'+unreFull+'</td>' + 
                         '<td data-label="Hành động">' + actionHtml + '</td>';
 
           overviewBody.appendChild(row);
@@ -491,13 +493,13 @@ function displayExcelData(excelData){
     excelData.forEach(function(r){
         var tr=document.createElement('tr');
         tr.innerHTML=
-            '<td data-label="Ngày">'+(r.date||'')+'</td>'+
-            '<td data-label="Số sổ">'+(r.ticket||'')+'</td>'+
-            '<td data-label="Mã vật tư">'+(r.itemCode||'')+'</td>'+
-            '<td data-label="Tên vật tư">'+(r.itemName||'')+'</td>'+
-            '<td data-label="Nhóm VT">'+(r.itemGroup||'')+'</td>'+
-            '<td data-label="Số lượng">'+(r.quantity||0)+'</td>'+
-            '<td data-label="Email">'+(r.email||'Không xác định')+'</td>'+
+            '<td data-label="Ngày">'+(r.date||'')+'</td>'+ 
+            '<td data-label="Số sổ">'+(r.ticket||'')+'</td>'+ 
+            '<td data-label="Mã vật tư">'+(r.itemCode||'')+'</td>'+ 
+            '<td data-label="Tên vật tư">'+(r.itemName||'')+'</td>'+ 
+            '<td data-label="Nhóm VT">'+(r.itemGroup||'')+'</td>'+ 
+            '<td data-label="Số lượng">'+(r.quantity||0)+'</td>'+ 
+            '<td data-label="Email">'+(r.email||'Không xác định')+'</td>'+ 
             '<td data-label="Ghi chú">'+(r.note||'')+'</td>';
         tbody.appendChild(tr);
     });
@@ -562,7 +564,7 @@ function toggleBorrowInput(){
         document.getElementById('technicianNote').value = ''; 
     } else { 
         document.getElementById('managerBorrowNote').value = ''; 
-    }
+    } 
     
     // Ẩn/Hiện nút Từ chối (Chỉ hiện khi duyệt lệnh KTV)
     // Tìm nút từ chối trong footer của borrowRightPanel
@@ -682,7 +684,7 @@ function loadUnusedItems(){
             } else {
                 returnableItems.forEach(function(it, index){
                     const remainingQty = it.remaining;
-                    const safeName = (it.name || '').replace(/'/g, "\\'");
+                    const safeName = (it.name || '').replace(/'/g, "'\'");
                     var tr = document.createElement('tr');
                     tr.dataset.code = it.code; 
                     tr.id = `return-item-row-${index}`; 
@@ -738,7 +740,7 @@ function approveReturnNote(){
         return; 
     }
 
-    var data={ 
+    var data={
         timestamp: new Date().toISOString(), 
         type:'Trả', 
         email:email, 
@@ -942,7 +944,7 @@ function loadPendingNotifications() {
     if (!notificationArea || !notificationText || !spinner) return;
     spinner.style.display = 'block';
     notificationArea.style.display = 'none';
-    callApi('/manager/pendingCounts', {})
+    callApi('/manager/pendingCounts', {}) 
         .then(result => {
             const borrowEmails = result.pendingBorrowEmails || [];
             const returnEmails = result.pendingReturnEmails || [];
@@ -1064,14 +1066,15 @@ function renderManagerHistoryTable() {
 
     tbody.innerHTML = '';
 
-    // XÓA BỘ LỌC CŨ (VÌ QUERY ĐÃ LỌC RỒI)
+    // Lọc bỏ các giao dịch "Điều chỉnh kho âm" tự động
+    const filteredCache = managerHistoryCache.filter(doc => doc.note !== 'Điều chỉnh kho âm (Tự động)');
 
-    if (managerHistoryCache.length === 0) {
+    if (filteredCache.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3">Không có dữ liệu khớp với bộ lọc.</td></tr>';
         return;
     }
 
-    managerHistoryCache.forEach(doc => { // Dùng cache trực tiếp
+    filteredCache.forEach(doc => { // Dùng cache đã lọc
         const tr = document.createElement('tr');
         const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
         const typeClass = doc.type === 'Mượn' ? 'unreconciled' : 'success'; 
@@ -1226,7 +1229,7 @@ function submitManagerReturnList() {
         timestamp: new Date().toISOString(), 
         type: 'Trả', 
         email: email, 
-        date: dateVal, // <-- Bây giờ biến này đã được định nghĩa ở trên
+        date: dateVal, // <--Bây giờ biến này đã được định nghĩa ở trên
         items: managerReturnItems, 
         note: note || 'Quản lý trả vật tư không sử dụng', 
         returnTimestamp: '', 
@@ -1298,7 +1301,7 @@ function loadGlobalInventoryOverview() {
     tbody.innerHTML = '<tr><td colspan="7">Đang tải...</td></tr>'; // Sửa colspan="7"
     spinner.style.display = 'block';
 
-    callApi('/manager/global-overview', {})
+    callApi('/manager/global-overview', {}) 
         .then(overviewList => {
             tbody.innerHTML = '';
             if (!overviewList || overviewList.length === 0) {
@@ -1392,8 +1395,8 @@ async function startQrScanner(scanMode = 'borrow') {
         if (!cameras || cameras.length === 0) throw new Error("Không tìm thấy camera nào.");
         let cameraId = null;
         const backCamera = cameras.find(camera => (camera.label && camera.label.toLowerCase().includes('back')) || camera.facingMode === 'environment');
-        if (backCamera) { cameraId = backCamera.id; }
-        else { cameraId = cameras[cameras.length - 1].id; }
+        if (backCamera) { cameraId = backCamera.id; } 
+        else { cameraId = cameras[cameras.length - 1].id; } // Fallback to the last camera
         await html5QrCodeScanner.start(
             cameraId,
             { fps: 10, qrbox: (w, h) => { const s = Math.floor(Math.min(w, h) * 0.8); return { width: Math.max(50, s), height: Math.max(50, s) }; } },
@@ -1507,9 +1510,12 @@ function checkItemInfo() {
  * [ADMIN] Gọi API để sửa kho âm
  */
 async function fixNegativeInventory(email, itemCode, itemName, amount) {
-    const confirmMsg = `Bạn có chắc chắn muốn điều chỉnh kho cho KTV ${email}?\n` +
-                       `Vật tư: ${itemName} (${itemCode})\n` +
-                       `Số lượng đang âm: -${amount}\n` +
+    const confirmMsg = `Bạn có chắc chắn muốn điều chỉnh kho cho KTV ${email}?
+` +
+                       `Vật tư: ${itemName} (${itemCode})
+` +
+                       `Số lượng đang âm: -${amount}
+` +
                        `Hệ thống sẽ tạo 1 giao dịch MƯỢN ${amount} để đưa số nợ về 0.`;
                        
     if (!confirm(confirmMsg)) {
@@ -1690,7 +1696,7 @@ function handleQrScanError(errorMessage) { /* (Bỏ qua lỗi "không tìm thấ
 
 
 // === KHỞI ĐỘNG (Cho trang Manager) ===
-document.addEventListener('DOMContentLoaded', function(){ 
+document.addEventListener('DOMContentLoaded', function(){
     const authButton = document.getElementById('authButton');
     const signOutButton = document.getElementById('signOutButton');
     
@@ -1873,11 +1879,54 @@ async function runCleanup() {
     }
 }
 
-// [MỚI] Copy hàm này từ repair.js qua common.js để dùng chung
-// Nếu chưa có, hãy thêm hàm này vào `common.js`
-/*
-function compressImage(file, maxWidth, quality) { ... }
-*/
+async function submitNewItem() {
+    const codeInput = document.getElementById('newItemCode');
+    const nameInput = document.getElementById('newItemName');
+    const unitInput = document.getElementById('newItemUnit');
+    const groupInput = document.getElementById('newItemGroup');
+    const unitPriceInput = document.getElementById('newItemUnitPrice');
+
+    const newItem = {
+        code: codeInput.value.trim(),
+        name: nameInput.value.trim(),
+        unit: unitInput.value.trim(),
+        group: groupInput.value.trim(),
+        unitPrice: parseFloat(unitPriceInput.value) || 0
+    };
+
+    if (!newItem.code || !newItem.name) {
+        showError('newItemErrorMessage', 'Mã vật tư và Tên vật tư là bắt buộc.');
+        return;
+    }
+
+    const spinner = document.getElementById('newItemSpinner');
+    const successMsg = document.getElementById('newItemSuccessMessage');
+    const errorMsg = document.getElementById('newItemErrorMessage');
+    
+    spinner.style.display = 'block';
+    successMsg.style.display = 'none';
+    errorMsg.style.display = 'none';
+
+    try {
+        const result = await callApi('/inventory/create', newItem);
+        showSuccess(successMsg, result.message || 'Tạo vật tư mới thành công!');
+        
+        // Clear form
+        codeInput.value = '';
+        nameInput.value = '';
+        unitInput.value = '';
+        groupInput.value = '';
+        unitPriceInput.value = '';
+
+        // Refresh autocomplete cache
+        initItemSearch();
+
+    } catch (err) {
+        showError(errorMsg, 'Lỗi tạo vật tư: ' + err.message);
+    } finally {
+        spinner.style.display = 'none';
+    }
+}
 
 // =================================================================
 // [MỚI] CHỨC NĂNG UPLOAD DANH MỤC VẬT TƯ
@@ -1946,7 +1995,7 @@ function handleInventoryUpload() {
                 if (key === 'group' || key === 'unit') continue; 
 
                 if (headerMap[key] === -1) {
-                    throw new Error(`Cột bắt buộc "${key}" (hoặc "Mã hàng", "Tên hàng",...) không tồn tại trong file Excel.`);
+                    throw new Error(`Cột bắt buộc "${key}" (hoặc "Mã hàng", "Tên hàng",...) không tồn tại trong file.`);
                 }
             }
             

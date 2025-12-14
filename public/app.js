@@ -446,7 +446,11 @@ function renderKtvHistoryTable() {
     if (!tbody) return; 
     const filterValue = document.getElementById('ktvHistoryFilterType').value;
     tbody.innerHTML = '';
-    const filteredDocs = ktvHistoryCache.filter(doc => (filterValue === 'Tất cả' || doc.type === filterValue));
+    const filteredDocs = ktvHistoryCache.filter(doc => {
+        const typeMatch = (filterValue === 'Tất cả' || doc.type === filterValue);
+        const isHiddenNote = doc.note === 'Điều chỉnh kho âm (Tự động)';
+        return typeMatch && !isHiddenNote;
+    });
     if (filteredDocs.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3">Không có dữ liệu.</td></tr>';
         return;

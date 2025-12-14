@@ -370,6 +370,37 @@
         <div id="inventoryUploadErrorMessage" class="error" style="display:none;"></div>
       </div>
     </div>
+
+    <div id="newItemSection" class="form-section toggle-section">
+      <h3 class="toggle-header">Tạo Vật Tư Mới</h3>
+      <div class="toggle-content" style="display: none;">
+        <p class="form-hint">Tạo một mã vật tư mới trong hệ thống.</p>
+        <div class="control-group">
+          <label for="newItemCode">Mã vật tư mới (VD: MUC-IN-HP-26A):</label>
+          <input type="text" id="newItemCode" placeholder="Mã không dấu, không khoảng trắng, viết hoa">
+        </div>
+        <div class="control-group">
+          <label for="newItemName">Tên vật tư mới:</label>
+          <input type="text" id="newItemName" placeholder="VD: Mực in HP 26A">
+        </div>
+        <div class="control-group">
+          <label for="newItemUnit">Đơn vị tính:</label>
+          <input type="text" id="newItemUnit" placeholder="VD: Hộp, Cái, Chiếc">
+        </div>
+        <div class="control-group">
+          <label for="newItemGroup">Nhóm vật tư:</label>
+          <input type="text" id="newItemGroup" placeholder="VD: Mực in, Linh kiện máy tính">
+        </div>
+        <div class="control-group">
+          <label for="newItemUnitPrice">Đơn giá (VNĐ):</label>
+          <input type="number" id="newItemUnitPrice" placeholder="VD: 350000">
+        </div>
+        <button onclick="submitNewItem()">Lưu Vật Tư Mới</button>
+        <div id="newItemSpinner" style="display:none;text-align:center; margin-top: 15px;"><div class="spinner"></div></div>
+        <div id="newItemSuccessMessage" class="success" style="display:none;"></div>
+        <div id="newItemErrorMessage" class="error" style="display:none;"></div>
+      </div>
+    </div>
     
     <div id="transferForm" class="form-section toggle-section">
       <h3 class="toggle-header">Chuyển vật tư (Toàn hệ thống)</h3>

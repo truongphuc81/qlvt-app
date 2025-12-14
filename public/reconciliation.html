@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đối Soát Sổ 3 Liên - QLVT</title>
+    <link rel="icon" href="/logo.png" type="image/png">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="reconciliation.css">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYiUIRQE1l-snjrZM7TJdp8YE7X8MMpEw",
+            authDomain: "quan-ly-vat-tu-backend.firebaseapp.com",
+            projectId: "quan-ly-vat-tu-backend",
+            storageBucket: "quan-ly-vat-tu-backend.firebasestorage.app",
+            messagingSenderId: "323292129107",
+            appId: "1:323292129107:web:8e467d10c217197b9b63a6"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+    </script>
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/manager.html">
+                <i class="fas fa-cogs me-2"></i> QUẢN LÝ
+            </a>
+            <div class="d-flex text-white align-items-center">
+                <span id="userEmailDisplay" class="me-3">Đang tải...</span>
+                <button onclick="window.location.href='index.html'" class="btn btn-outline-light btn-sm">Thoát</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="card shadow-sm">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-sync-alt me-2"></i>Đối Soát và Chỉnh Sửa Sổ 3 Liên</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3 align-items-end">
+                    <div class="col-md-3">
+                        <label for="monthFilter" class="form-label">Lọc theo tháng:</label>
+                        <input type="month" id="monthFilter" class="form-control">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="emailFilter" class="form-label">Lọc theo KTV:</label>
+                        <select id="emailFilter" class="form-select">
+                            <option value="">Tất cả KTV</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="statusFilter" class="form-label">Lọc theo trạng thái:</label>
+                        <select id="statusFilter" class="form-select">
+                            <option value="">Tất cả</option>
+                            <option value="Chưa đối chiếu">Chưa đối chiếu</option>
+                            <option value="Đã đối chiếu">Đã đối chiếu</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="ticketSearch" class="form-label">Tìm kiếm:</label>
+                        <input type="text" id="ticketSearch" class="form-control" placeholder="Tìm theo số sổ...">
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover" id="ticketsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Số Sổ</th>
+                                <th>Ngày</th>
+                                <th>Email KTV</th>
+                                <th>Số Lượng Vật Tư</th>
+                                <th>Trạng Thái</th>
+                                <th>Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ticketsTableBody">
+                            <!-- Ticket rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="loadingSpinner" class="text-center mt-3" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Ticket Modal -->
+    <div class="modal fade" id="editTicketModal" tabindex="-1" aria-labelledby="editTicketModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editTicketModalLabel">Chỉnh Sửa Sổ: <span id="modalTicketId"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>Danh sách vật tư</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Mã Vật Tư</th>
+                                    <th>Tên Vật Tư</th>
+                                    <th>Số Lượng</th>
+                                    <th>Hành Động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ticketItemsTableBody">
+                                <!-- Item rows will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <h6>Thêm vật tư mới</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="newItemCode" class="form-label">Mã Vật Tư</label>
+                            <input type="text" id="newItemCode" class="form-control">
+                        </div>
+                        <div class="col-md-5">
+                            <label for="newItemName" class="form-label">Tên Vật Tư</label>
+                            <input type="text" id="newItemName" class="form-control" disabled>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="newItemQuantity" class="form-label">Số Lượng</label>
+                            <input type="number" id="newItemQuantity" class="form-control" value="1" min="1">
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button id="addItemBtn" class="btn btn-primary w-100">Thêm</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="button" class="btn btn-primary" id="saveChangesBtn">Lưu Thay Đổi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
+    <script src="common.js"></script>
+    <script src="reconciliation.js"></script>
+
+</body>
+</html>

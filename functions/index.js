@@ -483,6 +483,31 @@ privateRouter.post('/repair/update', apiWrapper(async ({ db, body, user }) => {
     });
 }));
 
+// --- ROUTER 4: RECONCILIATION (Đối soát sổ 3 liên) ---
+const reconciliationRouter = express.Router();
+reconciliationRouter.use(authenticate);
+reconciliationRouter.use(canApproveBorrowsOrAdmin);
+
+reconciliationRouter.post('/tickets', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.getReconciliationTickets({ db, month: body.month });
+}));
+
+reconciliationRouter.post('/item', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.addReconciliationItem({ db, itemData: body });
+}));
+
+reconciliationRouter.post('/item/update/:docId', apiWrapper(async ({ db, params, body }) => {
+    return dataProcessor.updateReconciliationItem({ db, docId: params.docId, newQuantity: body.quantity });
+}));
+
+reconciliationRouter.post('/ticket/delete/:ticketId', apiWrapper(async ({ db, params }) => {
+    return dataProcessor.deleteReconciliationTicket({ db, ticketId: params.ticketId });
+}));
+
+reconciliationRouter.post('/item/delete/:docId', apiWrapper(async ({ db, params }) => {
+    return dataProcessor.deleteReconciliationItem({ db, docId: params.docId });
+}));
+
 // --- ROUTER 3: INVENTORY (VẬT TƯ) ---
 const inventoryRouter = express.Router();
 inventoryRouter.use(authenticate); // Yêu cầu xác thực cho tất cả các route vật tư
@@ -495,6 +520,10 @@ inventoryRouter.post('/uploadBatch', canApproveBorrowsOrAdmin, apiWrapper(async 
 
 inventoryRouter.post('/list', canApproveBorrowsOrAdmin, apiWrapper(async ({ db }) => {
     return dataProcessor.getInventoryFromFirestore({ db });
+}));
+
+inventoryRouter.post('/create', canApproveBorrowsOrAdmin, apiWrapper(async ({ db, body }) => {
+    return dataProcessor.createInventoryItem({ db, newItem: body });
 }));
 
 
@@ -536,8 +565,43 @@ auditRouter.post('/resetSession', isAuditorOrAdmin, apiWrapper(async ({ db, body
 // Gắn router kiểm kho vào app
 app.use('/api/audit', auditRouter);
 
+
+// --- ROUTER 5: HISTORY (Lịch sử giao dịch) ---
+const historyRouter = express.Router();
+historyRouter.use(authenticate);
+historyRouter.use(isAdmin); // Chỉ Admin mới có quyền xem, sửa, xóa lịch sử
+
+historyRouter.post('/list', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.getHistoryTransactions({ 
+        db,
+        filters: body.filters,
+        page: body.page,
+        limit: body.limit
+    });
+}));
+
+historyRouter.post('/update', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.updateHistoryTransaction({ 
+        db,
+        txId: body.txId,
+        itemIndex: body.itemIndex,
+        newData: body.newData
+    });
+}));
+
+historyRouter.post('/delete', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.deleteHistoryTransaction({ 
+        db,
+        txId: body.txId,
+        itemIndex: body.itemIndex
+    });
+}));
+
+
 app.use('/api', privateRouter);
+app.use('/api/reconciliation', reconciliationRouter); // Gắn router đối soát
 app.use('/api/inventory', inventoryRouter); // Gắn router vật tư
+app.use('/api/history', historyRouter); // Gắn router lịch sử
 
 
 // 5. EXPORT HÀM GCF

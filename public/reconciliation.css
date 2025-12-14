@@ -1,0 +1,8 @@
+.table-hover tbody tr:hover {
+    cursor: pointer;
+    background-color: #f5f5f5;
+}
+
+#ticketsTable th:last-child, #ticketsTable td:last-child {
+    text-align: center;
+}
