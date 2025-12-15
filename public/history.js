@@ -2,13 +2,15 @@
 document.addEventListener('DOMContentLoaded', () => {
     let currentUser = null;
     let transactions = [];
+    let groupedTransactions = [];
     let currentPage = 1;
     let totalPages = 1;
     let allItems = [];
     const LIMIT = 50;
     let filterTimeout;
 
-    const editModal = new bootstrap.Modal(document.getElementById('editTxModal'));
+    const transactionEditorModal = new bootstrap.Modal(document.getElementById('transactionEditorModal'));
+    let currentEditingTx = null;
 
     auth.onAuthStateChanged(user => {
         if (user) {
@@ -19,6 +21,30 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = 'index.html';
         }
     });
+
+    function groupTransactions(flatList) {
+        const groups = new Map();
+        if (!flatList) return [];
+
+        flatList.forEach(item => {
+            const txId = item.txId || (item.itemId ? item.itemId.split('_')[0] : null);
+            if (!txId) return;
+
+            if (!groups.has(txId)) {
+                groups.set(txId, {
+                    txId: txId,
+                    timestamp: item.timestamp,
+                    date: item.date,
+                    email: item.email,
+                    type: item.type,
+                    note: item.note, // Main note from the first item encountered
+                    items: []
+                });
+            }
+            groups.get(txId).items.push(item);
+        });
+        return Array.from(groups.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     function initializePage() {
         // Init Daterangepicker
@@ -47,8 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('searchFilter').addEventListener('input', () => debouncedLoadHistory(300));
 
         document.getElementById('historyTableBody').addEventListener('click', handleTableClick);
-        document.getElementById('saveTxChangesBtn').addEventListener('click', handleSaveChanges);
+        document.getElementById('saveTxChangesBtn').addEventListener('click', handleSaveTransactionChanges);
         document.getElementById('pagination').addEventListener('click', handlePaginationClick);
+        document.getElementById('addNewItemBtn').addEventListener('click', handleAddNewItem);
 
         loadFilterData();
         loadHistory();
@@ -78,12 +105,22 @@ document.addEventListener('DOMContentLoaded', () => {
         
          try {
             allItems = await callApi('/inventory/list', {});
+            const itemSource = allItems.map(item => ({ label: `${item.name} (${item.code})`, value: item.code }));
+            
             $("#itemFilter").autocomplete({
-                source: allItems.map(item => ({ label: `${item.name} (${item.code})`, value: item.code })),
+                source: itemSource,
                 select: function(event, ui) {
                     event.preventDefault();
                     $(this).val(ui.item.value);
                     debouncedLoadHistory();
+                }
+            });
+
+            $("#addNewItemInput").autocomplete({
+                source: itemSource,
+                select: function(event, ui) {
+                    event.preventDefault();
+                    $(this).val(ui.item.value);
                 }
             });
         } catch (e) {
@@ -113,9 +150,15 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         try {
-            const response = await callApi('/history/list', { filters, page: currentPage, limit: LIMIT });
+            // Fetch a larger number of items to ensure full transactions are likely retrieved
+            const response = await callApi('/history/list', { filters, page: 1, limit: 500 });
             transactions = response.transactions;
-            totalPages = Math.ceil(response.total / LIMIT);
+            groupedTransactions = groupTransactions(transactions);
+
+            // Paginate on the client side
+            totalPages = Math.ceil(groupedTransactions.length / LIMIT);
+            currentPage = Math.min(currentPage, totalPages) || 1;
+            
             renderTable();
             renderPagination();
         } catch (error) {
@@ -129,28 +172,57 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderTable() {
         const tableBody = document.getElementById('historyTableBody');
         tableBody.innerHTML = '';
-        if (transactions.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="9" class="text-center">Không tìm thấy giao dịch nào.</td></tr>`;
+        
+        const paginatedGroups = groupedTransactions.slice((currentPage - 1) * LIMIT, currentPage * LIMIT);
+
+        if (paginatedGroups.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="8" class="text-center">Không tìm thấy giao dịch nào.</td></tr>`;
             return;
         }
 
-        transactions.forEach(tx => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
+        paginatedGroups.forEach(tx => {
+            const totalQty = tx.items.reduce((sum, item) => sum + item.quantity, 0);
+            const mainRow = document.createElement('tr');
+            mainRow.className = 'transaction-row';
+            mainRow.dataset.txId = tx.txId;
+            mainRow.innerHTML = `
                 <td>${tx.timestamp}</td>
                 <td>${tx.date}</td>
                 <td>${tx.email}</td>
                 <td><span class="badge ${tx.type === 'Mượn' ? 'bg-primary' : 'bg-success'}">${tx.type}</span></td>
-                <td>${tx.code || ''}</td>
-                <td>${tx.name || ''}</td>
-                <td>${tx.quantity}</td>
                 <td class="text-truncate" style="max-width: 150px;">${tx.note || ''}</td>
+                <td>${tx.items.length}</td>
+                <td>${totalQty}</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary edit-btn" data-item-id="${tx.itemId}" title="Sửa"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-outline-danger delete-btn" data-item-id="${tx.itemId}" title="Xóa"><i class="fas fa-trash"></i></button>
+                    <button class="btn btn-sm btn-outline-info expand-btn" title="Xem chi tiết"><i class="fas fa-chevron-down"></i></button>
+                    <button class="btn btn-sm btn-outline-primary edit-tx-btn" title="Sửa giao dịch"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-outline-danger delete-tx-btn" title="Xóa giao dịch"><i class="fas fa-trash"></i></button>
                 </td>
             `;
-            tableBody.appendChild(tr);
+
+            const detailsRow = document.createElement('tr');
+            detailsRow.className = 'transaction-details-row';
+            detailsRow.id = `details-${tx.txId}`;
+            detailsRow.style.display = 'none';
+
+            let detailsHtml = '<td colspan="8" class="p-0"><div class="p-3 bg-light">';
+            detailsHtml += '<h6>Chi tiết vật tư:</h6><table class="table table-sm table-bordered mb-0"><thead><tr><th>Mã VT</th><th>Tên VT</th><th>SL</th><th>Đơn vị</th><th>Ghi chú</th></tr></thead><tbody>';
+            tx.items.forEach(item => {
+                detailsHtml += `
+                    <tr>
+                        <td>${item.code || ''}</td>
+                        <td>${item.name || ''}</td>
+                        <td>${item.quantity}</td>
+                        <td>${item.unit || ''}</td>
+                        <td>${item.note || ''}</td>
+                    </tr>
+                `;
+            });
+            detailsHtml += '</tbody></table></div></td>';
+            detailsRow.innerHTML = detailsHtml;
+
+            tableBody.appendChild(mainRow);
+            tableBody.appendChild(detailsRow);
         });
     }
 
@@ -162,17 +234,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const ul = document.createElement('ul');
         ul.className = 'pagination';
 
-        for (let i = 1; i <= totalPages; i++) {
-            const li = document.createElement('li');
-            li.className = `page-item ${i === currentPage ? 'active' : ''}`;
-            const a = document.createElement('a');
-            a.className = 'page-link';
-            a.href = '#';
-            a.textContent = i;
-            a.dataset.page = i;
-            li.appendChild(a);
-            ul.appendChild(li);
+        // Simplified pagination display logic
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+
+        if (currentPage > 1) {
+            ul.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage - 1}">&laquo;</a></li>`;
         }
+
+        for (let i = startPage; i <= endPage; i++) {
+            ul.innerHTML += `<li class="page-item ${i === currentPage ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+        }
+
+        if (currentPage < totalPages) {
+            ul.innerHTML += `<li class="page-item"><a class="page-link" href="#" data-page="${currentPage + 1}">&raquo;</a></li>`;
+        }
+
         paginationEl.appendChild(ul);
     }
     
@@ -182,7 +259,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const page = parseInt(e.target.dataset.page, 10);
             if (page !== currentPage) {
                 currentPage = page;
-                loadHistory();
+                renderTable(); // Re-render the same data with new page
+                renderPagination();
             }
         }
     }
@@ -191,81 +269,179 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = e.target.closest('button');
         if (!target) return;
 
-        const itemId = target.dataset.itemId;
-        
-        if (target.classList.contains('edit-btn')) {
-            const tx = transactions.find(t => t.itemId === itemId);
-            if (tx) {
-                document.getElementById('editTxId').value = tx.txId;
-                // The item ID is the txId + index, we need to extract the index
-                const itemIndex = tx.itemId.split('_')[1];
-                document.getElementById('editTxItemId').value = itemIndex;
+        const txRow = target.closest('.transaction-row');
+        if (!txRow) return;
 
-                document.getElementById('editTxTimestamp').value = tx.timestamp;
-                document.getElementById('editTxEmail').value = tx.email;
-                document.getElementById('editTxItem').value = `${tx.name} (${tx.code})`;
-                document.getElementById('editTxType').value = tx.type;
-                document.getElementById('editTxQuantity').value = tx.quantity;
-                document.getElementById('editTxNote').value = tx.note;
-                
-                // Convert DD/MM/YYYY to YYYY-MM-DD for date input
-                const dateParts = tx.date.split('/');
-                if(dateParts.length === 3) {
-                    document.getElementById('editTxDate').value = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
-                }
+        const txId = txRow.dataset.txId;
 
-                editModal.show();
+        if (target.classList.contains('expand-btn')) {
+            const detailsRow = document.getElementById(`details-${txId}`);
+            const icon = target.querySelector('i');
+            if (detailsRow.style.display === 'none') {
+                detailsRow.style.display = '';
+                icon.classList.remove('fa-chevron-down');
+                icon.classList.add('fa-chevron-up');
+            } else {
+                detailsRow.style.display = 'none';
+                icon.classList.remove('fa-chevron-up');
+                icon.classList.add('fa-chevron-down');
             }
-        } else if (target.classList.contains('delete-btn')) {
-            const tx = transactions.find(t => t.itemId === itemId);
-            if(tx && confirm(`Bạn có chắc muốn xóa vật tư "${tx.name}" khỏi giao dịch ngày ${tx.date} không?`)) {
-                const txId = tx.txId;
-                const itemIndex = tx.itemId.split('_')[1];
-                deleteTransaction(txId, itemIndex);
-            }
+        } else if (target.classList.contains('edit-tx-btn')) {
+            const transaction = groupedTransactions.find(t => t.txId === txId);
+            if (transaction) openEditTransactionModal(transaction);
+        } else if (target.classList.contains('delete-tx-btn')) {
+            deleteEntireTransaction(txId);
         }
     }
 
-    async function handleSaveChanges() {
-        const txId = document.getElementById('editTxId').value;
-        const itemIndex = document.getElementById('editTxItemId').value;
+    function openEditTransactionModal(transaction) {
+        currentEditingTx = JSON.parse(JSON.stringify(transaction)); // Deep copy to avoid modifying original data
+        
+        document.getElementById('modalTxId').textContent = currentEditingTx.txId;
+        document.getElementById('modalTxEmail').textContent = currentEditingTx.email;
+        document.getElementById('modalTxDate').textContent = currentEditingTx.date;
 
-        const newData = {
-            type: document.getElementById('editTxType').value,
-            quantity: parseInt(document.getElementById('editTxQuantity').value, 10),
-            note: document.getElementById('editTxNote').value,
-            // Convert YYYY-MM-DD to DD/MM/YYYY before sending
-            date: document.getElementById('editTxDate').value
-        };
+        renderEditItems();
+        
+        transactionEditorModal.show();
+    }
 
-        if (!txId || itemIndex === null) {
-            alert('Lỗi: Thiếu thông tin giao dịch.');
-            return;
+    function renderEditItems() {
+        const itemsBody = document.getElementById('editItemsTableBody');
+        itemsBody.innerHTML = '';
+        if (!currentEditingTx || !currentEditingTx.items) return;
+
+        currentEditingTx.items.forEach((item, index) => {
+            const row = document.createElement('tr');
+            row.dataset.index = index;
+            row.dataset.id = item.id; // Assuming item has a unique ID
+            row.innerHTML = `
+                <td>${item.name} (${item.code})</td>
+                <td><input type="number" class="form-control form-control-sm item-qty-input" value="${item.quantity}" min="1"></td>
+                <td>${item.unit || ''}</td>
+                <td>
+                    <button class="btn btn-sm btn-outline-danger remove-item-btn" data-index="${index}"><i class="fas fa-trash"></i></button>
+                </td>
+            `;
+            itemsBody.appendChild(row);
+        });
+    }
+
+    document.getElementById('editItemsTableBody').addEventListener('click', function(e) {
+        if (e.target.closest('.remove-item-btn')) {
+            const button = e.target.closest('.remove-item-btn');
+            const indexToRemove = parseInt(button.dataset.index, 10);
+            currentEditingTx.items.splice(indexToRemove, 1);
+            renderEditItems(); // Re-render the list
         }
+    });
+
+    async function handleSaveTransactionChanges() {
+        if (!currentEditingTx) return;
+
+        const confirmed = confirm('Bạn có chắc muốn lưu các thay đổi vào giao dịch này không?');
+        if (!confirmed) return;
+
+        const spinner = document.getElementById('loadingSpinner');
+        spinner.style.display = 'block';
+
+        const updatedItems = [];
+        const itemRows = document.getElementById('editItemsTableBody').querySelectorAll('tr');
+        itemRows.forEach(row => {
+            const index = parseInt(row.dataset.index, 10);
+            const originalItem = currentEditingTx.items[index];
+            const newQuantity = parseInt(row.querySelector('.item-qty-input').value, 10);
+
+            if (originalItem && newQuantity > 0) {
+                 updatedItems.push({
+                    ...originalItem,
+                    quantity: newQuantity,
+                 });
+            }
+        });
+        currentEditingTx.items = updatedItems;
 
         try {
-            await callApi('/history/update', { txId, itemIndex, newData });
-            alert('Cập nhật thành công!');
-            editModal.hide();
+            await callApi('/history/updateTransaction', {
+                txId: currentEditingTx.txId,
+                updatedItems: currentEditingTx.items
+            });
+
+            transactionEditorModal.hide();
+            spinner.style.display = 'none';
+            alert('Cập nhật giao dịch thành công!');
             loadHistory();
         } catch (error) {
-            console.error('Error updating transaction:', error);
-            alert('Lỗi khi cập nhật: ' + error.message);
+            spinner.style.display = 'none';
+            console.error('Error saving transaction changes:', error);
+            alert('Lỗi khi lưu thay đổi: ' + error.message);
         }
     }
+     function handleAddNewItem() {
+        const itemCode = $('#addNewItemInput').val();
+        const itemQty = parseInt($('#addNewItemQty').val(), 10);
 
-    async function deleteTransaction(txId, itemIndex) {
-         if (!txId || itemIndex === null) {
+        if (!itemCode || isNaN(itemQty) || itemQty <= 0) {
+            alert('Vui lòng chọn một vật tư và nhập số lượng hợp lệ.');
+            return;
+        }
+
+        const selectedItem = allItems.find(i => i.code === itemCode);
+        if (!selectedItem) {
+            alert('Vật tư không hợp lệ.');
+            return;
+        }
+        
+        const isAlreadyInTx = currentEditingTx.items.some(i => i.code === selectedItem.code);
+        if(isAlreadyInTx) {
+            alert('Vật tư này đã có trong giao dịch. Vui lòng cập nhật số lượng trực tiếp.');
+            return;
+        }
+
+        currentEditingTx.items.push({
+            // Structure of a new item might be different, adjust as needed
+            // This assumes a structure similar to existing items
+            id: selectedItem.id, // This might need to be generated or handled server-side
+            code: selectedItem.code,
+            name: selectedItem.name,
+            quantity: itemQty,
+            unit: selectedItem.unit,
+            note: 'Hàng thêm mới', // Default note for new items
+            // Essential fields for a transaction item
+            txId: currentEditingTx.txId,
+            email: currentEditingTx.email,
+            date: currentEditingTx.date,
+            timestamp: currentEditingTx.timestamp,
+            type: currentEditingTx.type,
+        });
+
+        renderEditItems();
+
+        // Clear inputs
+        $('#addNewItemInput').val('');
+        $('#addNewItemQty').val(1);
+    }
+
+    async function deleteEntireTransaction(txId) {
+        if (!txId) {
             alert('Lỗi: Thiếu thông tin giao dịch.');
             return;
         }
+
+        if (!confirm(`Bạn có chắc muốn XÓA TOÀN BỘ giao dịch này không? Hành động này không thể hoàn tác.`)) {
+            return;
+        }
+
         try {
-            await callApi('/history/delete', { txId, itemIndex });
-            alert('Xóa thành công!');
+            // Assume a new endpoint for deleting the whole transaction
+            await callApi('/history/deleteTransaction', { txId });
+            alert('Xóa toàn bộ giao dịch thành công!');
+            // Reset to page 1 and reload
+            currentPage = 1;
             loadHistory();
         } catch (error) {
             console.error('Error deleting transaction:', error);
-            alert('Lỗi khi xóa: ' + error.message);
+            alert('Lỗi khi xóa giao dịch: ' + error.message);
         }
     }
 });

@@ -580,20 +580,18 @@ historyRouter.post('/list', apiWrapper(async ({ db, body }) => {
     });
 }));
 
-historyRouter.post('/update', apiWrapper(async ({ db, body }) => {
-    return dataProcessor.updateHistoryTransaction({ 
+historyRouter.post('/updateTransaction', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.updateEntireTransaction({ 
         db,
         txId: body.txId,
-        itemIndex: body.itemIndex,
-        newData: body.newData
+        updatedItems: body.updatedItems
     });
 }));
 
-historyRouter.post('/delete', apiWrapper(async ({ db, body }) => {
-    return dataProcessor.deleteHistoryTransaction({ 
+historyRouter.post('/deleteTransaction', apiWrapper(async ({ db, body }) => {
+    return dataProcessor.deleteEntireTransaction({ 
         db,
-        txId: body.txId,
-        itemIndex: body.itemIndex
+        txId: body.txId
     });
 }));
 

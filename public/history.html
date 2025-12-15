@@ -85,11 +85,10 @@
                                 <th style="width: 8%;">Ngày</th>
                                 <th style="width: 15%;">Email KTV</th>
                                 <th style="width: 8%;">Loại</th>
-                                <th style="width: 10%;">Mã VT</th>
-                                <th>Tên VT</th>
-                                <th style="width: 5%;">SL</th>
-                                <th style="width: 10%;">Ghi chú</th>
-                                <th style="width: 8%;">Hành động</th>
+                                <th>Ghi chú</th>
+                                <th style="width: 8%;">Số loại VT</th>
+                                <th style="width: 8%;">Tổng SL</th>
+                                <th style="width: 10%;">Hành động</th>
                             </tr>
                         </thead>
                         <tbody id="historyTableBody">
@@ -107,9 +106,9 @@
         </div>
     </div>
 
-    <!-- Edit Transaction Modal -->
-    <div class="modal fade" id="editTxModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
+    <!-- Transaction Editor Modal -->
+    <div class="modal fade" id="transactionEditorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Chỉnh Sửa Giao Dịch</h5>
@@ -117,42 +116,42 @@
                 </div>
                 <div class="modal-body">
                     <input type="hidden" id="editTxId">
-                    <input type="hidden" id="editTxItemId">
-                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Timestamp</label>
-                            <input type="text" id="editTxTimestamp" class="form-control" disabled>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">KTV</label>
-                            <input type="text" id="editTxEmail" class="form-control" disabled>
-                        </div>
+                    
+                    <div class="row border-bottom pb-3 mb-3">
+                        <div class="col-md-4"><strong>Transaction ID:</strong> <span id="modalTxId"></span></div>
+                        <div class="col-md-4"><strong>KTV:</strong> <span id="modalTxEmail"></span></div>
+                        <div class="col-md-4"><strong>Ngày:</strong> <span id="modalTxDate"></span></div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Vật tư</label>
-                        <input type="text" id="editTxItem" class="form-control" disabled>
-                    </div>
+
+                    <h6>Vật tư trong giao dịch</h6>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Tên vật tư</th>
+                                <th style="width: 120px;">Số lượng</th>
+                                <th style="width: 80px;">Đơn vị</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="editItemsTableBody">
+                            <!-- Items will be dynamically inserted here -->
+                        </tbody>
+                    </table>
+
+                    <hr>
+                    <h6>Thêm vật tư mới</h6>
                     <div class="row">
-                        <div class="col-md-4 mb-3">
-                            <label for="editTxType" class="form-label">Loại Giao Dịch</label>
-                            <select id="editTxType" class="form-select">
-                                <option value="Mượn">Mượn</option>
-                                <option value="Trả">Trả</option>
-                            </select>
+                        <div class="col-md-8">
+                             <input type="text" id="addNewItemInput" class="form-control" placeholder="Tìm kiếm để thêm vật tư...">
                         </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="editTxQuantity" class="form-label">Số Lượng</label>
-                            <input type="number" id="editTxQuantity" class="form-control" min="0">
+                        <div class="col-md-2">
+                             <input type="number" id="addNewItemQty" class="form-control" value="1" min="1">
                         </div>
-                         <div class="col-md-4 mb-3">
-                            <label for="editTxDate" class="form-label">Ngày</label>
-                            <input type="date" id="editTxDate" class="form-control">
+                        <div class="col-md-2">
+                            <button class="btn btn-success w-100" id="addNewItemBtn">Thêm</button>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label for="editTxNote" class="form-label">Ghi chú</label>
-                        <textarea id="editTxNote" class="form-control" rows="2"></textarea>
-                    </div>
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>

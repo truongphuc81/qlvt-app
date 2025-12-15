@@ -48,11 +48,8 @@ document.addEventListener('DOMContentLoaded', async function() {
             loadInventory(),
         ]);
         
-        // Now, set up the real-time listener for all pending notes
-        setupRealtimePendingNotesListener(db);
-        
-        // Setup initial state for quantity input
-        toggleQtyInput();
+        // Setup initial state for quantity input - REMOVED
+        // toggleQtyInput();
         
         focusInput();
     });
@@ -62,8 +59,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (e.key === 'Enter') processScan();
     });
     
-    // Auto Qty checkbox listener
-    document.getElementById('autoQty').addEventListener('change', toggleQtyInput);
+    // Auto Qty checkbox listener - REMOVED
+    // document.getElementById('autoQty').addEventListener('change', toggleQtyInput);
 
     // History filter listener
     document.getElementById('historyFilterType').addEventListener('change', () => {
@@ -264,7 +261,7 @@ function initItemSearch() {
         source: source, minLength: 1, 
         select: function(event, ui) {
             event.preventDefault(); 
-            addToCart(ui.item.value, { name: ui.item.name, unit: ui.item.unit });
+            handleAddItem(ui.item.value, { name: ui.item.name, unit: ui.item.unit });
             $(this).val('');
         },
         open: function() { $(this).autocomplete("widget").addClass("custom-autocomplete-menu"); }
@@ -363,16 +360,18 @@ function loadPendingTicket() {
     if (!note) return;
 
     currentPendingId = id;
-    cart = []; // Reset cart to an empty array
+    cart = []; // Reset cart
     (note.items || []).forEach(i => {
         const info = systemInventory[i.code] || { name: i.name, unit: 'Cái' };
-        const quantity = parseInt(i.quantity);
-        for (let j = 0; j < quantity; j++) {
-            // Add a unique ID for each individual item
-            const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2) + j;
-            cart.push({ ...info, code: i.code, id: uniqueId, serial: '' });
-        }
+        cart.push({
+            ...info,
+            code: i.code,
+            id: i.code, // Use code as the unique ID for the grouped item
+            quantity: parseInt(i.quantity) || 1,
+            serials: i.serials || [] // Load serials if they exist on the pending note
+        });
     });
+
     transactionNoteEl.value = note.note || '';
     if (note.note && note.note.trim() !== '') {
         transactionNoteEl.classList.add('note-highlight');
@@ -402,25 +401,43 @@ function setMode(mode) {
     if (email) checkPending(email); else resetPendingUI();
 }
 
-function toggleQtyInput() {
-    const autoQty = document.getElementById('autoQty').checked;
-    const qtyGroup = document.getElementById('manualQtyGroup');
-    const qtyInput = document.getElementById('manualQtyInput');
-    qtyGroup.style.display = autoQty ? 'none' : 'flex';
-    if (!autoQty) { qtyInput.focus(); qtyInput.select(); }
-}
-
 // === 4. SCANNING & CART LOGIC ===
+
+async function handleAddItem(code, item) {
+    const autoQty = document.getElementById('autoQty').checked;
+    if (autoQty) {
+        addToCart(code, item, 1);
+        beepAudio.currentTime = 0; beepAudio.play().catch(()=>{});
+        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 800 }).fire({ icon: 'success', title: item.name });
+    } else {
+        const { value: quantity } = await Swal.fire({
+            title: `Nhập số lượng cho ${item.name}`,
+            input: 'number',
+            inputAttributes: {
+                min: 1,
+                step: 1
+            },
+            inputValue: 1,
+            showCancelButton: true,
+            confirmButtonText: 'Xác nhận'
+        });
+
+        if (quantity && parseInt(quantity) > 0) {
+            addToCart(code, item, parseInt(quantity));
+            beepAudio.currentTime = 0; beepAudio.play().catch(()=>{});
+            Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 800 }).fire({ icon: 'success', title: item.name });
+        }
+    }
+}
 
 function processScan() {
     const input = document.getElementById('scanInput');
     const rawCode = input.value.trim();
     if (!rawCode) return;
+
     const item = systemInventory[rawCode];
     if (item) {
-        addToCart(rawCode, item);
-        beepAudio.currentTime = 0; beepAudio.play().catch(()=>{});
-        Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 800 }).fire({ icon: 'success', title: item.name });
+        handleAddItem(rawCode, item);
     } else {
         Swal.fire('Lỗi', `Mã "${rawCode}" không tồn tại`, 'error');
     }
@@ -428,54 +445,94 @@ function processScan() {
     focusInput();
 }
 
-function addToCart(code, item) {
-    const autoQty = document.getElementById('autoQty').checked;
-    const qtyInput = document.getElementById('manualQtyInput');
-    let quantityToAdd = autoQty ? 1 : (parseInt(qtyInput.value) || 1);
+function addToCart(code, item, quantityToAdd) {
+    const existingItem = cart.find(i => i.code === code);
 
-    for (let i = 0; i < quantityToAdd; i++) {
-        // Add a unique ID to each item for easier deletion/updates
+    if (existingItem) {
+        existingItem.quantity += quantityToAdd;
+    } else {
         const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-        cart.push({ ...item, code: code, id: uniqueId, serial: '' });
+        cart.push({ 
+            ...item, 
+            code: code, 
+            id: uniqueId, // Keep a unique ID for potential future use, though code is the primary key now
+            quantity: quantityToAdd,
+            serials: [] // Initialize serials array
+        });
     }
-
-    qtyInput.value = '1';
+    
     renderCart();
-    if (!autoQty) focusInput();
+    focusInput();
 }
 
 
 function renderCart() {
     const tbody = document.getElementById('cartBody');
+    const thead = document.querySelector('#cartTable thead tr');
     tbody.innerHTML = '';
-    let idx = 1;
-    cart.forEach(it => {
+
+    // Adjust header for new structure
+    thead.innerHTML = `
+        <th style="width: 50px;">#</th>
+        <th>Mã Hàng</th>
+        <th>Tên Vật Tư</th>
+        <th style="width: 100px;">Số lượng</th>
+        <th style="width: 200px;">Số Serial (nếu có)</th>
+        <th class="text-center" style="width: 80px;">Đơn vị</th>
+        <th style="width: 50px;"></th>
+    `;
+
+    let totalItems = 0;
+    cart.forEach((it, idx) => {
         const tr = document.createElement('tr');
-        // Note: The 'onchange' event calls updateSerial to save the serial number
+        // Join serials array into a comma-separated string for the textarea
+        const serialsString = it.serials ? it.serials.join(', ') : '';
+        
         tr.innerHTML = `
-            <td>${idx++}</td>
+            <td>${idx + 1}</td>
             <td class="fw-bold text-primary">${it.code}</td>
             <td>${it.name}</td>
-            <td><input type="text" class="form-control form-control-sm" value="${it.serial || ''}" data-id="${it.id}" onchange="updateSerial(this)" placeholder="Nhập serial (nếu có)"></td>
+            <td><input type="number" class="form-control form-control-sm" value="${it.quantity}" data-code="${it.code}" onchange="updateQuantity(this)" min="1"></td>
+            <td><textarea class="form-control form-control-sm" data-code="${it.code}" onchange="updateSerials(this)" placeholder="Nhập các serial, cách nhau bằng dấu phẩy">${serialsString}</textarea></td>
             <td class="text-center">${it.unit}</td>
-            <td><button class="btn btn-sm text-danger" onclick="delItem('${it.id}')"><i class="fas fa-times"></i></button></td>`;
+            <td><button class="btn btn-sm text-danger" onclick="delItem('${it.code}')"><i class="fas fa-times"></i></button></td>`;
         tbody.appendChild(tr);
+        totalItems += it.quantity;
     });
-    document.getElementById('totalQtyBadge').innerText = `${cart.length} món`;
-    if (cart.length === 0) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 text-muted">Vui lòng chọn KTV và quét mã...</td></tr>';
-}
 
-function updateSerial(input) {
-    const id = input.dataset.id;
-    const serial = input.value.trim();
-    const item = cart.find(i => i.id === id);
-    if (item) {
-        item.serial = serial;
+    document.getElementById('totalQtyBadge').innerText = `${totalItems} món`;
+    if (cart.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted">Vui lòng chọn KTV và quét mã...</td></tr>';
     }
 }
 
-function delItem(id) {
-    cart = cart.filter(i => i.id !== id);
+function updateQuantity(input) {
+    const code = input.dataset.code;
+    const quantity = parseInt(input.value);
+    const item = cart.find(i => i.code === code);
+    if (item) {
+        if (quantity > 0) {
+            item.quantity = quantity;
+        } else {
+            // If quantity is 0 or less, remove the item
+            delItem(code);
+        }
+    }
+    renderCart(); // Re-render to update total count
+}
+
+function updateSerials(textarea) {
+    const code = textarea.dataset.code;
+    const serialsString = textarea.value.trim();
+    const item = cart.find(i => i.code === code);
+    if (item) {
+        // Split by comma, trim whitespace from each serial, and filter out empty strings
+        item.serials = serialsString ? serialsString.split(',').map(s => s.trim()).filter(s => s) : [];
+    }
+}
+
+function delItem(code) {
+    cart = cart.filter(i => i.code !== code);
     renderCart();
 }
 
@@ -494,36 +551,25 @@ async function submitTransaction() {
     if (!email) return Swal.fire('Thiếu thông tin', 'Chưa chọn Kỹ thuật Viên', 'warning');
     if (cart.length === 0) return Swal.fire('Trống', 'Chưa quét vật tư nào', 'warning');
 
-    // Create payload by grouping items with the same code, and collecting serials
-    const groupedItems = cart.reduce((acc, item) => {
-        if (!acc[item.code]) {
-            acc[item.code] = {
-                code: item.code,
-                name: item.name,
-                quantity: 0,
-                serials: []
-            };
-        }
-        acc[item.code].quantity++;
-        if (item.serial) {
-            acc[item.code].serials.push(item.serial);
-        }
-        return acc;
-    }, {});
-
-    const items = Object.values(groupedItems).map(g => {
+    // With the new cart structure, we just need to map it. No more grouping needed.
+    const items = cart.map(item => {
         const itemPayload = {
-            code: g.code,
-            name: g.name,
-            quantity: g.quantity,
+            code: item.code,
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit
         };
         // Only add serials array if it's not empty
-        if (g.serials.length > 0) {
-            itemPayload.serials = g.serials;
+        if (item.serials && item.serials.length > 0) {
+            // Ensure the number of serials matches the quantity
+            if (item.serials.length !== item.quantity) {
+                 throw new Error(`Số lượng serials (${item.serials.length}) không khớp với số lượng vật tư (${item.quantity}) cho mã ${item.code}.`);
+            }
+            itemPayload.serials = item.serials;
         }
         // For return mode, specify the quantity being returned
         if (currentMode === 'return') {
-            itemPayload.quantityReturned = g.quantity;
+            itemPayload.quantityReturned = item.quantity;
         }
         return itemPayload;
     });
@@ -543,8 +589,9 @@ async function submitTransaction() {
         returnTimestamp: (currentMode === 'return' && currentSource === 'PENDING') ? currentPendingId : undefined
     };
 
+    const totalQty = cart.reduce((sum, item) => sum + item.quantity, 0);
     const actionName = currentMode === 'borrow' ? 'XUẤT MƯỢN' : 'NHẬP TRẢ';
-    const result = await Swal.fire({ title: `Xác nhận ${actionName}`, html: `Cho KTV: <b>${email}</b><br>Tổng số lượng: <b>${cart.length} món</b>`, icon: 'question', showCancelButton: true, confirmButtonText: 'Đồng ý' });
+    const result = await Swal.fire({ title: `Xác nhận ${actionName}`, html: `Cho KTV: <b>${email}</b><br>Tổng số lượng: <b>${totalQty} món</b>`, icon: 'question', showCancelButton: true, confirmButtonText: 'Đồng ý' });
     
     if (result.isConfirmed) {
         submitBtn.disabled = true;
@@ -651,7 +698,9 @@ function formatTransactionHistoryContent(doc) {
     if (doc.items && doc.items.length > 0) {
         html += `<small class="text-muted">`;
         doc.items.forEach(item => {
-            let itemText = `&bull; ${item.name || item.code}: ${item.quantity}`;
+            const itemInfo = systemInventory[item.code];
+            const unit = item.unit || (itemInfo ? itemInfo.unit : ''); // Lấy đơn vị từ item, fallback về inventory
+            let itemText = `&bull; ${item.name || item.code}: ${item.quantity} ${unit}`;
             // Display serials if they exist
             if (item.serials && item.serials.length > 0) {
                 itemText += ` (Serials: ${item.serials.join(', ')})`;

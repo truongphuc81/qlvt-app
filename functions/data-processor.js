@@ -2230,6 +2230,7 @@ async function getHistoryTransactions({ db, filters = {}, page = 1, limit = 50 }
                     status: data.status,
                     code: item.code,
                     name: item.name,
+                    unit: item.unit,
                     quantity: item.quantity,
                     // Use index for a unique ID within the transaction
                     itemId: `${doc.id}_${index}` 
@@ -2270,83 +2271,36 @@ async function getHistoryTransactions({ db, filters = {}, page = 1, limit = 50 }
     return { transactions: paginatedItems, total };
 }
 
-async function updateHistoryTransaction({ db, txId, itemIndex, newData }) {
-    if (!txId || itemIndex === undefined || !newData) {
-        throw new Error('Thiếu ID giao dịch, chỉ mục vật tư hoặc dữ liệu mới.');
+async function updateEntireTransaction({ db, txId, updatedItems }) {
+    if (!txId || !updatedItems) {
+        throw new Error('Thiếu ID giao dịch hoặc danh sách vật tư cập nhật.');
     }
 
     const txRef = db.collection('history_transactions').doc(txId);
     
-    return db.runTransaction(async (transaction) => {
-        const txDoc = await transaction.get(txRef);
-        if (!txDoc.exists) {
-            throw new Error('Giao dịch không tồn tại.');
-        }
+    const txDoc = await txRef.get();
+    if (!txDoc.exists) {
+        throw new Error('Giao dịch không tồn tại.');
+    }
 
-        const data = txDoc.data();
-        const items = data.items || [];
-
-        if (itemIndex >= items.length) {
-            throw new Error('Chỉ mục vật tư không hợp lệ.');
-        }
-
-        // Update the specific item
-        items[itemIndex].quantity = newData.quantity;
-        // You can add more editable fields here if needed
-        // items[itemIndex].name = newData.name;
-        // items[itemIndex].code = newData.code;
-
-        // Update the top-level document fields
-        data.note = newData.note;
-        data.type = newData.type;
-        const newDate = new Date(newData.date).toLocaleDateString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric'});
-        data.date = newDate;
-
-        transaction.update(txRef, { 
-            items: items,
-            note: data.note,
-            type: data.type,
-            date: data.date
-        });
-        
-        return { ok: true, message: 'Cập nhật thành công.' };
+    await txRef.update({ 
+        items: updatedItems,
+        lastModified: new Date().toISOString()
     });
+    
+    return { ok: true, message: 'Cập nhật giao dịch thành công.' };
 }
 
 
-async function deleteHistoryTransaction({ db, txId, itemIndex }) {
-    if (!txId || itemIndex === undefined) {
-        throw new Error('Thiếu ID giao dịch hoặc chỉ mục vật tư.');
+async function deleteEntireTransaction({ db, txId }) {
+    if (!txId) {
+        throw new Error('Thiếu ID giao dịch.');
     }
     
     const txRef = db.collection('history_transactions').doc(txId);
+    await txRef.delete();
 
-    return db.runTransaction(async (transaction) => {
-        const txDoc = await transaction.get(txRef);
-        if (!txDoc.exists) {
-            return { ok: true, message: 'Giao dịch đã được xóa.' };
-        }
-
-        const data = txDoc.data();
-        let items = data.items || [];
-
-        if (itemIndex >= items.length) {
-            throw new Error('Chỉ mục vật tư không hợp lệ để xóa.');
-        }
-
-        // Remove the item from the array
-        items.splice(itemIndex, 1);
-
-        // If no items are left, delete the entire transaction.
-        // Otherwise, update the items array.
-        if (items.length === 0) {
-            transaction.delete(txRef);
-            return { ok: true, message: 'Vật tư cuối cùng đã được xóa, xóa toàn bộ giao dịch.' };
-        } else {
-            transaction.update(txRef, { items: items });
-            return { ok: true, message: 'Đã xóa vật tư khỏi giao dịch.' };
-        }
-    });
+    return { ok: true, message: 'Đã xóa giao dịch.' };
 }
 
 async function getReconciliationTickets({ db, month }) {
@@ -2519,6 +2473,6 @@ module.exports = {
     deleteReconciliationTicket,
     deleteReconciliationItem,
     getHistoryTransactions,
-    updateHistoryTransaction,
-    deleteHistoryTransaction,
+    updateEntireTransaction,
+    deleteEntireTransaction,
 };
