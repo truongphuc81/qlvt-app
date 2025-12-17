@@ -89,8 +89,15 @@ body {
 /* Print-specific styles */
 @media print {
     /* Hide non-printable elements */
-    .navbar, .card-header, #generateBtn, #exportPdfBtn, .col-md-6, hr {
+    .navbar, .card-header, .col-md-5, #generateBtn, #exportPdfBtn, #printBtn, hr, .text-end.mb-2 {
         display: none !important;
+    }
+
+    /* Make the QR code container take the full width */
+    .col-md-7 {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
     }
 
     /* Remove preview styles */
@@ -104,13 +111,13 @@ body {
 
     .a4-page {
         margin: 0;
-        padding: 10mm; /* Consistent print margins */
+        padding: 5mm; /* Consistent print margins with screen view */
         box-shadow: none;
         border: none;
     }
 
     .qr-item {
-         /* Hide the cutting guides for the final print */
-        border: 1px dotted transparent;
+         /* Show the cutting guides for the final print */
+        border: 1px dotted #ccc;
     }
 }

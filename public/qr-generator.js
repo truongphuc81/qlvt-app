@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const userEmailDisplay = document.getElementById('userEmailDisplay');
     const groupFilter = document.getElementById('groupFilter');
     const generateBtn = document.getElementById('generateBtn');
+    const printBtn = document.getElementById('printBtn');
     const exportPdfBtn = document.getElementById('exportPdfBtn');
     const qrContainer = document.getElementById('qr-container');
     const materialsChecklistContainer = document.getElementById('materials-checklist-container');
@@ -19,6 +20,10 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             window.location.href = 'index.html';
         }
+    });
+
+    printBtn.addEventListener('click', () => {
+        window.print();
     });
 
     async function loadMaterials() {
@@ -192,6 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (materialsToPrint.length === 0) {
             alert("Không có vật tư nào được chọn để in.");
             exportPdfBtn.disabled = true;
+            printBtn.disabled = true;
             return;
         }
 
@@ -229,6 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         exportPdfBtn.disabled = !hasItemsToPrint;
+        printBtn.disabled = !hasItemsToPrint;
     });
 
     // --- Quick Generate V2 (with list) ---
@@ -343,6 +350,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         exportPdfBtn.disabled = false; // Enable PDF export
+        printBtn.disabled = false; // Enable Print button
     });
 
     function removeVietnameseTones(str) {
@@ -408,7 +416,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (qrItems.length === 0) {
             alert("Không có mã QR để xuất.");
-            exportPdfBtn.disabled = false;
+            exportPdfBtn.disabled = true;
+            printBtn.disabled = true;
             exportPdfBtn.textContent = 'Xuất PDF';
             return;
         }

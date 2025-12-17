@@ -222,6 +222,7 @@ tr:nth-child(even) {
   100% { transform: rotate(360deg); }
 }
 .ui-autocomplete {
+  z-index: 1056; /* Ensure it appears above Bootstrap modals (z-index: 1055) */
   max-height: 200px;
   overflow-y: auto;
   background: var(--card-background);

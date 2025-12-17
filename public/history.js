@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const transactionEditorModal = new bootstrap.Modal(document.getElementById('transactionEditorModal'));
     let currentEditingTx = null;
+    let lastFocusedElement = null;
 
     auth.onAuthStateChanged(user => {
         if (user) {
@@ -76,6 +77,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('saveTxChangesBtn').addEventListener('click', handleSaveTransactionChanges);
         document.getElementById('pagination').addEventListener('click', handlePaginationClick);
         document.getElementById('addNewItemBtn').addEventListener('click', handleAddNewItem);
+        
+        document.getElementById('transactionEditorModal').addEventListener('hidden.bs.modal', () => {
+            if (lastFocusedElement) {
+                lastFocusedElement.focus();
+            }
+        });
 
         loadFilterData();
         loadHistory();
@@ -118,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             $("#addNewItemInput").autocomplete({
                 source: itemSource,
+                appendTo: "#transactionEditorModal",
                 select: function(event, ui) {
                     event.preventDefault();
                     $(this).val(ui.item.value);
@@ -287,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 icon.classList.add('fa-chevron-down');
             }
         } else if (target.classList.contains('edit-tx-btn')) {
+            lastFocusedElement = target;
             const transaction = groupedTransactions.find(t => t.txId === txId);
             if (transaction) openEditTransactionModal(transaction);
         } else if (target.classList.contains('delete-tx-btn')) {
