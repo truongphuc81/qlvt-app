@@ -68,11 +68,15 @@
   <div id="mainPage" style="display:none;">
     <div class="form-section">
       <h3>Thông tin chung</h3>
-      <label>Email kỹ thuật viên: <span id="userEmail">Loading...</span></label><br>
-      <label>Tên kỹ thuật viên: <span id="technicianName">Loading...</span></label><br>
-      
-      <div id="infoSuccessMessage" class="success" style="display:none;"></div>
-      <div id="infoErrorMessage" class="error" style="display:none;"></div>
+      <div class="user-profile">
+        <img id="userAvatar" src="default-avatar.png" alt="Avatar" class="avatar-img">
+        <div class="user-details">
+          <h3 id="technicianName">Loading...</h3>
+          <p id="userEmail">Loading...</p>
+        </div>
+      </div>
+      <div id="infoSuccessMessage" class="success" style="display:none; margin-top: 15px;"></div>
+      <div id="infoErrorMessage" class="error" style="display:none; margin-top: 15px;"></div>
     </div>
 
     <div class="form-section toggle-section">
@@ -123,7 +127,7 @@
       <h3 class="toggle-header">Tổng quan mặt hàng đã mượn </h3>
       <div id="overviewContent" class="toggle-content" style="display: none;"> <table id="overviewTable">
           <thead> 
-            <tr><th>Tên vật tư</th><th>Tổng mượn</th><th>Tổng sử dụng</th><th>Đã trả</th> <th>Còn lại</th></tr>
+            <tr><th>Tên vật tư</th><th style="text-align: center;">Tổng mượn</th><th style="text-align: center;">Tổng sử dụng</th><th style="text-align: center;">Đã trả</th> <th style="text-align: center;">Còn lại</th></tr>
           </thead>
         <tbody id="overviewBody"></tbody>
         </table>
@@ -146,6 +150,29 @@
         <div id="returnSpinner" style="display:none;text-align:center;">...</div>
         <div id="returnSuccessMessage" class="success" style="display:none;"></div>
         <div id="returnErrorMessage" class="error" style="display:none;"></div>
+
+        <div id="errorReportForm" class="form-section" style="display:none; margin-top: 20px;">
+            <h3>Báo cáo sai sót</h3>
+            <label for="errorType">Loại sai sót:</label>
+            <select id="errorType">
+                <option value="Số sổ sai">Số sổ sai</option>
+                <option value="Vật tư sai">Vật tư sai</option>
+                <option value="Số lượng sai">Số lượng sai</option>
+                <option value="Khác">Khác</option>
+            </select><br>
+            <label for="relatedTicketOrDate">Số sổ hoặc Ngày liên quan:</label>
+            <input type="text" id="relatedTicketOrDate" placeholder="VD: Sổ 123 hoặc 01/10/2025"><br>
+            <label for="errorDescription">Mô tả sai sót:</label>
+            <textarea id="errorDescription" style="height: 100px;"></textarea><br>
+            <label for="suggestedFix">Đề xuất sửa (Nếu có):</label>
+            <textarea id="suggestedFix" style="height: 60px;"></textarea><br>
+            <button onclick="submitErrorReport()">Gửi Báo cáo</button>
+            <button onclick="hideErrorReportForm()" style="background-color: var(--secondary-color);">Hủy</button>
+            <div id="errorReportSpinner" style="display:none;text-align:center;"><div class="spinner"></div></div>
+            <div id="errorReportSuccessMessage" class="success" style="display:none;"></div>
+            <div id="errorReportErrorMessage" class="error" style="display:none;"></div>
+        </div>
+
         <div id="reconciledTicketsSection" style="margin-top: 30px;">
           <h4 style="color: var(--success-color);">Sổ 3 liên đã đối chiếu</h4>
           <table id="reconciledTicketsTable">
@@ -157,28 +184,6 @@
           <button id="loadMoreReconciled" class="load-more-button" onclick="loadMoreReconciledTickets()">Tải thêm</button>
         </div>
       </div>
-    </div>
-
-    <div id="errorReportForm" class="form-section" style="display:none; margin-top: 20px;">
-        <h3>Báo cáo sai sót</h3>
-        <label for="errorType">Loại sai sót:</label>
-        <select id="errorType">
-            <option value="Số sổ sai">Số sổ sai</option>
-            <option value="Vật tư sai">Vật tư sai</option>
-            <option value="Số lượng sai">Số lượng sai</option>
-            <option value="Khác">Khác</option>
-        </select><br>
-        <label for="relatedTicketOrDate">Số sổ hoặc Ngày liên quan:</label>
-        <input type="text" id="relatedTicketOrDate" placeholder="VD: Sổ 123 hoặc 01/10/2025"><br>
-        <label for="errorDescription">Mô tả sai sót:</label>
-        <textarea id="errorDescription" style="height: 100px;"></textarea><br>
-        <label for="suggestedFix">Đề xuất sửa (Nếu có):</label>
-        <textarea id="suggestedFix" style="height: 60px;"></textarea><br>
-        <button onclick="submitErrorReport()">Gửi Báo cáo</button>
-        <button onclick="hideErrorReportForm()" style="background-color: var(--secondary-color);">Hủy</button>
-        <div id="errorReportSpinner" style="display:none;text-align:center;"><div class="spinner"></div></div>
-        <div id="errorReportSuccessMessage" class="success" style="display:none;"></div>
-        <div id="errorReportErrorMessage" class="error" style="display:none;"></div>
     </div>
 
   </div> 

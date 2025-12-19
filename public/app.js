@@ -92,6 +92,7 @@ async function handleAuthSuccess(user) {
 
     userEmail = user.email;
     technicianName = user.displayName;
+    const avatarUrl = user.photoURL;
 
     try {
         // Vẫn gọi getSelfRoles để biết có phải Manager không
@@ -107,6 +108,9 @@ async function handleAuthSuccess(user) {
         if (mainPage) mainPage.style.display = 'block';
         document.getElementById('userEmail').innerText = userEmail;
         document.getElementById('technicianName').innerText = technicianName;
+        if (avatarUrl) {
+            document.getElementById('userAvatar').src = avatarUrl;
+        }
         loadSelfDashboard();
         listenForKtvHistory(); // Bật listener cho KTV
 
@@ -129,6 +133,9 @@ async function handleAuthSuccess(user) {
         if (mainPage) mainPage.style.display = 'block';
         document.getElementById('userEmail').innerText = userEmail;
         document.getElementById('technicianName').innerText = technicianName;
+        if (avatarUrl) {
+            document.getElementById('userAvatar').src = avatarUrl;
+        }
         loadSelfDashboard();
         listenForKtvHistory();
     }
@@ -187,11 +194,11 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
       if (remaining > 0 || (item.unreconciledUsageDetails && item.unreconciledUsageDetails.length > 0)) {
           itemsShownInOverview++;
           var row=document.createElement('tr');
-          row.innerHTML = '<td data-label="Tên vật tư">'+(item.name||'')+'</td>'+
-                        '<td data-label="Tổng mượn">'+item.quantity+'</td>'+
-                        '<td data-label="Tổng sử dụng">'+item.totalUsed+'</td>'+
-                        '<td data-label="Đã trả">'+item.totalReturned+'</td>'+
-                        '<td data-label="Còn lại">'+remaining+'</td>';
+          row.innerHTML = '<td data-label="Tên vật tư">' + (item.name || '') + '</td>' +
+                        '<td data-label="Tổng mượn" style="text-align: center;">' + item.quantity + '</td>' +
+                        '<td data-label="Tổng sử dụng" style="text-align: center;">' + item.totalUsed + '</td>' +
+                        '<td data-label="Đã trả" style="text-align: center;">' + item.totalReturned + '</td>' +
+                        '<td data-label="Còn lại" style="text-align: center; font-weight: bold; color: green;">' + remaining + '</td>';
           overviewBody.appendChild(row);
       }
 
@@ -226,21 +233,30 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
     }
 
     const sortedTickets = Object.values(tickets).sort((a, b) => a.ticketNumber - b.ticketNumber);
-    sortedTickets.forEach(function(ticket) {
-        var rr = document.createElement('tr');
-        var combinedHtml = ticket.items.map(function(it) {
-            var name = (it.name || 'N/A');
-            var qty = it.quantity;
-            return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
-        }).join('<br>'); 
-        rr.innerHTML =
-            '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
-            '<td data-label="Vật tư & SL">' + combinedHtml + '</td>' + 
-            '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>'; 
-        returnBody.appendChild(rr);
-    });
+
+    const confirmButton = document.getElementById('submitReturnButton');
+    const reportButton = document.querySelector('button[onclick="showErrorReportForm()"]');
+
     if (sortedTickets.length === 0) {
-         returnBody.innerHTML='<tr><td colspan="3">Chưa có sổ cần đối chiếu</td></tr>';
+        returnBody.innerHTML = '<tr><td colspan="3">Chưa có sổ cần đối chiếu</td></tr>';
+        if (confirmButton) confirmButton.style.display = 'none';
+        if (reportButton) reportButton.style.display = 'none';
+    } else {
+        sortedTickets.forEach(function(ticket) {
+            var rr = document.createElement('tr');
+            var combinedHtml = ticket.items.map(function(it) {
+                var name = (it.name || 'N/A');
+                var qty = it.quantity;
+                return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
+            }).join('<br>');
+            rr.innerHTML =
+                '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
+                '<td data-label="Vật tư & SL">' + combinedHtml + '</td>' +
+                '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
+            returnBody.appendChild(rr);
+        });
+        if (confirmButton) confirmButton.style.display = 'inline-block';
+        if (reportButton) reportButton.style.display = 'inline-block';
     }
 
     const sortedReconciled = Object.values(reconciledTickets).sort((a, b) => b.ticketNumber - a.ticketNumber); 
@@ -287,10 +303,14 @@ function submitBorrowForm(){
 }
 
 function submitReturnForm(){
+    const button = document.getElementById('submitReturnButton');
+    button.disabled = true;
+
     selectedTickets=[];
     var checkboxes = document.querySelectorAll('#borrowedItemsTable .ticket-checkbox:checked');
     if (checkboxes.length === 0) {
         showError('returnErrorMessage','Vui lòng chọn ít nhất một số sổ để xác nhận.');
+        button.disabled = false;
         return;
     }
     checkboxes.forEach(function(cb){ selectedTickets.push(cb.value); });
@@ -307,7 +327,10 @@ function submitReturnForm(){
             loadSelfDashboard();
         })
         .catch(err => { showError('returnErrorMessage','Lỗi xác nhận: '+err.message); })
-        .finally(() => { document.getElementById('returnSpinner').style.display='none'; });
+        .finally(() => { 
+            document.getElementById('returnSpinner').style.display='none';
+            button.disabled = false;
+        });
 }
 
 function submitErrorReport(){
@@ -434,7 +457,10 @@ function formatKtvHistoryContent(doc) {
     html += statusHtml;
     if (doc.items && doc.items.length > 0) {
         html += `<strong>Vật tư đã duyệt:</strong><ul>`;
-        doc.items.forEach(item => { html += `<li>${item.name || item.code}: ${item.quantity}</li>`; });
+        doc.items.forEach(item => {
+            const unitText = item.unit ? ` ${item.unit}` : '';
+            html += `<li>${item.name || item.code}: ${item.quantity}${unitText}</li>`;
+        });
         html += `</ul>`;
     }
     if (!html.trim()) html = '...';
@@ -458,10 +484,19 @@ function renderKtvHistoryTable() {
     filteredDocs.forEach(doc => {
         const tr = document.createElement('tr');
         const timestamp = new Date(doc.timestamp).toLocaleString('vi-VN');
-        const typeClass = doc.type === 'Mượn' ? 'unreconciled' : 'success'; 
+        
+        let typeHtml;
+        if (doc.type === 'Mượn') {
+            typeHtml = `<strong class="unreconciled">${doc.type}</strong>`;
+        } else if (doc.type === 'Trả') {
+            typeHtml = `<strong style="color: orange; font-weight: bold;">${doc.type}</strong>`;
+        } else {
+            typeHtml = `<strong>${doc.type}</strong>`; // Fallback for other types
+        }
+
         tr.innerHTML = `
             <td data-label="Thời gian">${timestamp}</td>
-            <td data-label="Loại"><strong class="${typeClass}">${doc.type}</strong></td>
+            <td data-label="Loại">${typeHtml}</td>
             <td data-label="Nội dung">${formatKtvHistoryContent(doc)}</td>`;
         tbody.appendChild(tr);
     });
