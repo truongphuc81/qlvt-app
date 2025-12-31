@@ -48,6 +48,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             loadInventory(),
         ]);
         
+        // Start listening for pending notes for the notification bell
+        setupRealtimePendingNotesListener(db);
+        
         // Setup initial state for quantity input - REMOVED
         // toggleQtyInput();
         

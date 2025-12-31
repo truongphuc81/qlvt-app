@@ -234,6 +234,16 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
 
     const sortedTickets = Object.values(tickets).sort((a, b) => a.ticketNumber - b.ticketNumber);
 
+    const reconciliationNotification = document.getElementById('reconciliation-notification');
+    if (reconciliationNotification) {
+        if (sortedTickets.length > 0) {
+            reconciliationNotification.innerHTML = `Bạn có <strong>${sortedTickets.length}</strong> sổ cần được đối chiếu`;
+            reconciliationNotification.style.display = 'block';
+        } else {
+            reconciliationNotification.style.display = 'none';
+        }
+    }
+
     const confirmButton = document.getElementById('submitReturnButton');
     const reportButton = document.querySelector('button[onclick="showErrorReportForm()"]');
 

@@ -2447,6 +2447,7 @@ module.exports = {
     getReturnHistory,
     rejectBorrowNote,
     getPendingCounts,
+    managerTransferItems,
     getSpeechAudio,
     getGlobalInventoryOverview,
     getPendingBorrowNotesForTech,
