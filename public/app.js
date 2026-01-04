@@ -1,4 +1,4 @@
-// public/app.js (FILE MỚI - CHỈ CÓ LOGIC KTV)
+// public/app.js (KTV Logic)
 
 // === BIẾN TOÀN CỤC (CHO KTV) ===
 let userEmail = '';
@@ -12,6 +12,49 @@ let allReconciledTicketsCache = [];
 let reconciledTicketsCurrentPage = 1;
 const HISTORY_PAGE_SIZE = 15;
 
+// === UI HELPERS (Defined early) ===
+function switchView(viewId, navElement) {
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    
+    // Show selected view
+    const target = document.getElementById(viewId);
+    if(target) target.classList.add('active');
+    
+    // Update Sidebar Active State
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    if(navElement) {
+        navElement.classList.add('active');
+    }
+
+    // Update Header Title
+    const titleMap = {
+        'view-dashboard': 'Tổng quan & Thông báo',
+        'view-transactions': 'Giao dịch Mượn/Trả',
+        'view-reconciliation': 'Đối chiếu sổ 3 liên',
+        'view-history': 'Lịch sử giao dịch'
+    };
+    const titleEl = document.getElementById('pageTitle');
+    if(titleEl) titleEl.innerText = titleMap[viewId] || 'Trang Kỹ thuật viên';
+
+    // Auto-load data for specific views
+    if (viewId === 'view-transactions') {
+        loadKtvReturnItems();
+    }
+    
+    // Mobile: Close sidebar after selection
+    if (window.innerWidth <= 1024) {
+        toggleSidebar();
+    }
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if(sidebar) sidebar.classList.toggle('show');
+    if(overlay) overlay.classList.toggle('show');
+}
+
 // === KHỞI TẠO VÀ AUTH ===
 
 /**
@@ -22,18 +65,6 @@ function initForm() {
     try {
         // KTV không có datepicker
     } catch(e) {}
-
-    // try {
-    //     if (localStorage.getItem('darkMode') === 'true') {
-    //         document.body.classList.add('dark-mode');
-    //     }
-    // } catch(e) {}
-    
-    // try {
-    //      if (localStorage.getItem('tableView') === 'card') {
-    //         document.body.classList.add('card-view-mobile');
-    //      }
-    // } catch(e) {}
 }
 
 /**
@@ -64,8 +95,10 @@ function attachAuthListener(authButton) {
                 authButton.style.display = 'inline-block';
                 authButton.onclick = signInWithGoogle;
             }
-            document.getElementById('userEmail').innerText = 'Chưa đăng nhập';
-            document.getElementById('technicianName').innerText = 'Chưa đăng nhập';
+            // Reset sidebar info
+            const sidebarName = document.getElementById('sidebarUserName');
+            if(sidebarName) sidebarName.innerText = 'Khách';
+            
             if (ktvHistoryListener) {
                 ktvHistoryListener();
                 ktvHistoryListener = null;
@@ -92,8 +125,38 @@ async function handleAuthSuccess(user) {
 
     userEmail = user.email;
     technicianName = user.displayName;
-    const avatarUrl = user.photoURL;
+    let avatarUrl = user.photoURL;
 
+    // Fetch extra technician info from Firestore (Name & Avatar)
+    try {
+        const normEmail = normalizeCode(userEmail);
+        console.log("Checking Firestore for technician:", normEmail);
+        const techDoc = await db.collection('technicians').doc(normEmail).get();
+        if (techDoc.exists) {
+            const techData = techDoc.data();
+            console.log("Found Firestore technician data:", techData);
+            if (techData.name) technicianName = techData.name;
+            if (techData.avatarUrl) avatarUrl = techData.avatarUrl;
+        } else {
+            console.log("No technician document found in Firestore for:", normEmail);
+        }
+    } catch (e) {
+        console.error("Lỗi fetch thông tin technician từ Firestore:", e);
+    }
+
+    // Update Sidebar User Info
+    const sidebarName = document.getElementById('sidebarUserName');
+    if(sidebarName) sidebarName.innerText = technicianName || userEmail;
+
+    // Update Main User Info
+    const mainName = document.getElementById('technicianName');
+    const mainEmail = document.getElementById('userEmail');
+    const mainAvatar = document.getElementById('userAvatar');
+
+    if(mainName) mainName.innerText = technicianName;
+    if(mainEmail) mainEmail.innerText = userEmail;
+    if(mainAvatar && avatarUrl) mainAvatar.src = avatarUrl;
+    
     try {
         // Vẫn gọi getSelfRoles để biết có phải Manager không
         const roles = await callApi('/auth/getSelfRoles', {}); 
@@ -106,23 +169,26 @@ async function handleAuthSuccess(user) {
         // Luôn hiển thị trang KTV
         console.log("Hiển thị trang KTV.");
         if (mainPage) mainPage.style.display = 'block';
-        document.getElementById('userEmail').innerText = userEmail;
-        document.getElementById('technicianName').innerText = technicianName;
-        if (avatarUrl) {
-            document.getElementById('userAvatar').src = avatarUrl;
-        }
+        
+        // Load default dashboard
         loadSelfDashboard();
         listenForKtvHistory(); // Bật listener cho KTV
 
         // Hiển thị nút Quản lý (nếu có quyền)
-        if (isManager) {
-            console.log("User là Manager/Admin. Hiển thị nút 'Trang Quản Lý'.");
-            const managerWrapper = document.getElementById('managerPageButtonWrapper');
-            if (managerWrapper) managerWrapper.style.display = 'block'; // Hiển thị wrapper
-            // Fallback cho code cũ nếu không tìm thấy wrapper
-            const managerBtn = document.getElementById('managerPageButton');
-            if (managerBtn) managerBtn.style.display = 'inline-block';
+        const managerWrapper = document.getElementById('managerPageButtonWrapper');
+        if (managerWrapper) {
+            managerWrapper.style.display = isManager ? 'block' : 'none';
         }
+
+        // Hiển thị nút Xem Lịch sử Kho (Auditor hoặc Manager)
+        const auditorLink = document.getElementById('nav-auditor-link');
+        if (auditorLink) {
+            const canAudit = isManager || userRoles.auditor;
+            auditorLink.style.display = canAudit ? 'flex' : 'none';
+        }
+
+        // Switch to default view
+        switchView('view-transactions', document.getElementById('nav-transactions'));
     
     } catch (err) {
         if (infoSpinner) infoSpinner.style.display = 'none'; 
@@ -131,13 +197,9 @@ async function handleAuthSuccess(user) {
         
         // Vẫn hiển thị trang KTV cơ bản nếu có lỗi
         if (mainPage) mainPage.style.display = 'block';
-        document.getElementById('userEmail').innerText = userEmail;
-        document.getElementById('technicianName').innerText = technicianName;
-        if (avatarUrl) {
-            document.getElementById('userAvatar').src = avatarUrl;
-        }
         loadSelfDashboard();
         listenForKtvHistory();
+        switchView('view-transactions', document.getElementById('nav-transactions'));
     }
 }
 
@@ -168,15 +230,13 @@ function loadSelfDashboard(){
         });
 }
 
-// public/app.js (SỬA LẠI HÀM NÀY)
-
-function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
+function displayBorrowedItems(items) { 
     var overviewBody = document.getElementById('overviewBody');
     var returnBody   = document.getElementById('borrowedItemsBody');
     var reconciledBody = document.getElementById('reconciledTicketsBody');
 
-    overviewBody.innerHTML='';
-    returnBody.innerHTML='';
+    if(overviewBody) overviewBody.innerHTML='';
+    if(returnBody) returnBody.innerHTML='';
     if (reconciledBody) reconciledBody.innerHTML = ''; 
 
     // === 2. DÁN 3 DÒNG SAU VÀO ĐÂY ===
@@ -193,13 +253,15 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
       var remaining = item.remaining || 0; 
       if (remaining > 0 || (item.unreconciledUsageDetails && item.unreconciledUsageDetails.length > 0)) {
           itemsShownInOverview++;
-          var row=document.createElement('tr');
-          row.innerHTML = '<td data-label="Tên vật tư">' + (item.name || '') + '</td>' +
-                        '<td data-label="Tổng mượn" style="text-align: center;">' + item.quantity + '</td>' +
-                        '<td data-label="Tổng sử dụng" style="text-align: center;">' + item.totalUsed + '</td>' +
-                        '<td data-label="Đã trả" style="text-align: center;">' + item.totalReturned + '</td>' +
-                        '<td data-label="Còn lại" style="text-align: center; font-weight: bold; color: green;">' + remaining + '</td>';
-          overviewBody.appendChild(row);
+          if(overviewBody) {
+              var row=document.createElement('tr');
+              row.innerHTML = '<td data-label="Tên vật tư">' + (item.name || '') + '</td>' +
+                            '<td data-label="Tổng mượn" style="text-align: center;">' + item.quantity + '</td>' +
+                            '<td data-label="Tổng sử dụng" style="text-align: center;">' + item.totalUsed + '</td>' +
+                            '<td data-label="Đã trả" style="text-align: center;">' + item.totalReturned + '</td>' +
+                            '<td data-label="Còn lại" style="text-align: center; font-weight: bold; color: green;">' + remaining + '</td>';
+              overviewBody.appendChild(row);
+          }
       }
 
       (item.unreconciledUsageDetails || []).forEach(function(detail) {
@@ -228,7 +290,7 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
       });
     });
 
-    if (itemsShownInOverview === 0) {
+    if (itemsShownInOverview === 0 && overviewBody) {
         overviewBody.innerHTML = `<tr><td colspan="5">Không có vật tư nào đang nợ.</td></tr>`;
     }
 
@@ -247,32 +309,74 @@ function displayBorrowedItems(items) { // <-- 1. ĐÃ XÓA 'isManagerView'
     const confirmButton = document.getElementById('submitReturnButton');
     const reportButton = document.querySelector('button[onclick="showErrorReportForm()"]');
 
-    if (sortedTickets.length === 0) {
-        returnBody.innerHTML = '<tr><td colspan="3">Chưa có sổ cần đối chiếu</td></tr>';
-        if (confirmButton) confirmButton.style.display = 'none';
-        if (reportButton) reportButton.style.display = 'none';
-    } else {
-        sortedTickets.forEach(function(ticket) {
-            var rr = document.createElement('tr');
-            var combinedHtml = ticket.items.map(function(it) {
-                var name = (it.name || 'N/A');
-                var qty = it.quantity;
-                return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
-            }).join('<br>');
-            rr.innerHTML =
-                '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
-                '<td data-label="Vật tư & SL">' + combinedHtml + '</td>' +
-                '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
-            returnBody.appendChild(rr);
-        });
-        if (confirmButton) confirmButton.style.display = 'inline-block';
-        if (reportButton) reportButton.style.display = 'inline-block';
+    if (returnBody) {
+        if (sortedTickets.length === 0) {
+            returnBody.innerHTML = '<tr><td colspan="3">Chưa có sổ cần đối chiếu</td></tr>';
+            if (confirmButton) confirmButton.style.display = 'none';
+            if (reportButton) reportButton.style.display = 'none';
+        } else {
+            sortedTickets.forEach(function(ticket) {
+                var rr = document.createElement('tr');
+                var combinedHtml = ticket.items.map(function(it) {
+                    var name = (it.name || 'N/A');
+                    var qty = it.quantity;
+                    return name + ': <span class="item-quantity-in-card">' + qty + '</span>';
+                }).join('<br>');
+                rr.innerHTML =
+                    '<td data-label="Số sổ">' + ticket.ticket + '</td>' +
+                    '<td data-label="Vật tư & SL">' + combinedHtml + '</td>' +
+                    '<td data-label="Xác nhận"><input type="checkbox" class="ticket-checkbox" value="' + ticket.ticket + '"></td>';
+                returnBody.appendChild(rr);
+            });
+            if (confirmButton) confirmButton.style.display = 'inline-block';
+            if (reportButton) reportButton.style.display = 'inline-block';
+        }
     }
 
     const sortedReconciled = Object.values(reconciledTickets).sort((a, b) => b.ticketNumber - a.ticketNumber); 
     allReconciledTicketsCache = sortedReconciled; 
     reconciledTicketsCurrentPage = 1;
     renderReconciledTicketsTable();
+}
+
+async function suggestItemsWithAI() {
+    const textarea = document.getElementById('borrowItems');
+    const description = textarea.value.trim();
+    const btn = document.getElementById('aiSuggestButton');
+    const spinner = document.getElementById('aiSuggestSpinner');
+
+    if (!description) {
+        showError('borrowErrorMessage', 'Vui lòng nhập mô tả công việc (ví dụ: sửa máy tính không lên nguồn) để AI gợi ý.');
+        return;
+    }
+
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    showError('borrowErrorMessage', '');
+
+    try {
+        const result = await callApi('/ai/suggest-items', { description });
+        if (result && result.suggestion) {
+            // Thêm gợi ý vào textarea (nếu đã có nội dung thì xuống dòng)
+            const currentVal = textarea.value.trim();
+            const suggestion = result.suggestion;
+            
+            if (currentVal && currentVal !== description) {
+                textarea.value = currentVal + "\n\n--- AI Gợi ý ---\n" + suggestion;
+            } else {
+                textarea.value = suggestion;
+            }
+            showSuccess('borrowSuccessMessage', 'AI đã đưa ra gợi ý vật tư!');
+        } else {
+            throw new Error('AI không trả về gợi ý nào.');
+        }
+    } catch (err) {
+        console.error("Lỗi AI Suggest:", err);
+        showError('borrowErrorMessage', 'Lỗi gợi ý AI: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        spinner.style.display = 'none';
+    }
 }
 
 function submitBorrowForm(){
@@ -497,11 +601,11 @@ function renderKtvHistoryTable() {
         
         let typeHtml;
         if (doc.type === 'Mượn') {
-            typeHtml = `<strong class="unreconciled">${doc.type}</strong>`;
+            typeHtml = `<span class="badge-type badge-borrow">${doc.type}</span>`;
         } else if (doc.type === 'Trả') {
-            typeHtml = `<strong style="color: orange; font-weight: bold;">${doc.type}</strong>`;
+            typeHtml = `<span class="badge-type badge-return">${doc.type}</span>`;
         } else {
-            typeHtml = `<strong>${doc.type}</strong>`; // Fallback for other types
+            typeHtml = `<span class="badge-type">${doc.type}</span>`; // Fallback for other types
         }
 
         tr.innerHTML = `

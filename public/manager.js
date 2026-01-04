@@ -132,55 +132,37 @@ async function handleManagerAuthSuccess(user) {
 // === TẤT CẢ CÁC HÀM CỦA QUẢN LÝ (COPY TỪ APP.JS) ===
 
 function showManagerPage() {
-    // Define all manageable sections
-    const sections = {
-        itemInfo: document.getElementById('itemInfoSection'),
-        globalOverview: document.getElementById('globalOverviewSection'),
-        managerBorrow: document.getElementById('managerBorrowForm'),
-        managerOverview: document.getElementById('managerOverviewSection'),
-        ticketRange: document.getElementById('ticketRangeForm'),
-        excelUpload: document.getElementById('excelUploadForm'),
-        inventoryUpload: document.getElementById('inventoryUploadSection'),
-        newItemSection: document.getElementById('newItemSection'),
-        transfer: document.getElementById('transferForm'),
-        roleManager: document.getElementById('roleManagerForm'),
-        managerHistory: document.getElementById('managerHistorySection'),
-        technicianSelector: document.querySelector('.form-section:has(#technicianEmail)') // Parent of dropdown
-    };
+    // 1. Hide all Navs first
+    const navs = ['nav-dashboard', 'nav-transactions', 'nav-inventory', 'nav-reports', 'nav-import', 'nav-system'];
+    navs.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.style.display = 'none';
+    });
 
-    // Default to hiding all sections
-    for (const key in sections) {
-        if (sections[key]) sections[key].style.display = 'none';
-    }
-
-    // Show sections based on role
+    // 2. Show Sidebar Items based on Role and Default View
     if (userRoles.admin) {
-        console.log("Admin view: Hiển thị tất cả.");
-        for (const key in sections) {
-            if (sections[key]) sections[key].style.display = '';
-        }
+        navs.forEach(id => document.getElementById(id).style.display = 'flex');
+        switchView('view-dashboard', document.getElementById('nav-dashboard'));
     } else if (userRoles.inventory_manager) {
-        console.log("Inventory Manager view: Hiển thị các mục hoạt động.");
-        if (sections.itemInfo) sections.itemInfo.style.display = '';
-        if (sections.managerBorrow) sections.managerBorrow.style.display = '';
-        if (sections.managerOverview) sections.managerOverview.style.display = '';
-        if (sections.inventoryUpload) sections.inventoryUpload.style.display = '';
-        if (sections.newItemSection) sections.newItemSection.style.display = '';
-        if (sections.managerHistory) sections.managerHistory.style.display = '';
-        if (sections.technicianSelector) sections.technicianSelector.style.display = '';
-        selectMode('borrow');
+        ['nav-dashboard', 'nav-transactions', 'nav-inventory', 'nav-reports'].forEach(id => document.getElementById(id).style.display = 'flex');
+        switchView('view-transactions', document.getElementById('nav-transactions'));
     } else if (userRoles.sale) {
-        console.log("Sale view: Chỉ hiển thị mục tra cứu.");
-        if (sections.itemInfo) sections.itemInfo.style.display = '';
-        // Hide operational parts for sales
-        if (sections.technicianSelector) sections.technicianSelector.style.display = 'none';
-        if (sections.managerHistory) sections.managerHistory.style.display = 'none';
-        if (sections.managerBorrow) sections.managerBorrow.style.display = 'none';
+        ['nav-inventory'].forEach(id => document.getElementById(id).style.display = 'flex');
+        switchView('view-inventory', document.getElementById('nav-inventory'));
+    } else if (userRoles.auditor) {
+         ['nav-reports'].forEach(id => document.getElementById(id).style.display = 'flex');
+         switchView('view-reports', document.getElementById('nav-reports'));
     }
     
-    // These are independent of the main roles logic above
+    // 3. Load common data
     loadPendingNotifications();
     listenForManagerHistory();
+    
+    // 4. Update Sidebar User Name
+    const userNameEl = document.getElementById('sidebarUserName');
+    if(userNameEl) userNameEl.innerText = technicianName || userEmail;
+    const userProfileEl = document.getElementById('userProfile');
+    if(userProfileEl) userProfileEl.style.display = 'block';
 }
 
 function loadTechnicians(){
@@ -2132,4 +2114,54 @@ async function confirmInventoryUpload() {
     } finally {
         spinner.style.display = 'none';
     }
+}
+
+// === UI HELPERS FOR DESKTOP MANAGER ===
+function switchView(viewId, navElement) {
+    // Hide all views
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    
+    // Show selected view
+    const target = document.getElementById(viewId);
+    if(target) target.classList.add('active');
+    
+    // Update Sidebar Active State
+    document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+    if(navElement) {
+        navElement.classList.add('active');
+    }
+
+    // Update Header Title
+    const titleMap = {
+        'view-dashboard': 'Dashboard Tổng Quan',
+        'view-transactions': 'Quản lý Giao dịch & KTV',
+        'view-inventory': 'Quản lý Kho & Vật tư',
+        'view-reports': 'Báo cáo & Lịch sử',
+        'view-import': 'Nhập Dữ liệu Giao dịch',
+        'view-system': 'Cấu hình Hệ thống'
+    };
+    const titleEl = document.getElementById('pageTitle');
+    if(titleEl) titleEl.innerText = titleMap[viewId] || 'Trang Quản Lý';
+
+    // Auto-load data for specific views
+    if (viewId === 'view-dashboard') {
+        loadGlobalInventoryOverview();
+    }
+    
+    // Mobile: Close sidebar after selection
+    if (window.innerWidth <= 1024) {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        if(sidebar && sidebar.classList.contains('show')) {
+             sidebar.classList.remove('show');
+             overlay.classList.remove('show');
+        }
+    }
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    sidebar.classList.toggle('show');
+    overlay.classList.toggle('show');
 }

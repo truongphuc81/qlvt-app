@@ -1,0 +1,450 @@
+/* ==========================================================================
+   MANAGER DESKTOP UI - MODERN DASHBOARD THEME
+   ========================================================================== */
+
+/* --- 1. LAYOUT STRUCTURE --- */
+:root {
+    --sidebar-width: 260px;
+    --header-height: 70px;
+    --bg-body: #f4f6f9;
+    --bg-sidebar: #ffffff;
+    --bg-header: #ffffff;
+    --text-primary: #333;
+    --text-secondary: #6c757d;
+    --color-primary: #007bff;
+    --color-primary-light: #e3f2fd;
+    --border-color: #e9ecef;
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.02);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.04);
+}
+
+/* DARK MODE VARIABLES Override */
+body.dark-mode {
+    --bg-body: #121212;
+    --bg-sidebar: #1e1e1e;
+    --bg-header: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #b0b0b0;
+    --border-color: #333;
+    --color-primary-light: #2c3e50; /* Darker blue tint for active items */
+    --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+body {
+    background-color: var(--bg-body);
+    overflow-x: hidden; /* Prevent horizontal scroll */
+    max-width: 100% !important; /* Override global max-width */
+    margin: 0 !important; /* Reset margin */
+    padding: 0 !important; /* Reset padding */
+    color: var(--text-primary); /* Ensure text color inheritance */
+}
+
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
+
+/* --- 2. SIDEBAR --- */
+.sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+}
+
+.sidebar-header {
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-logo {
+    height: 32px;
+    width: auto;
+    margin-right: 10px;
+}
+
+.sidebar-brand-text {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-primary);
+    letter-spacing: -0.5px;
+}
+
+/* Sidebar Dark Mode Specifics */
+body.dark-mode .sidebar-brand-text {
+    color: #90caf9; /* Lighter blue for dark mode */
+}
+
+/* New User Section in Sidebar */
+.sidebar-user-section {
+    padding: 20px 24px; /* Matches header padding */
+    border-bottom: 1px solid var(--border-color);
+    background-color: rgba(0,0,0,0.02); /* Slight grey bg */
+}
+
+body.dark-mode .sidebar-user-section {
+    background-color: rgba(255,255,255,0.05); 
+}
+
+.sidebar-menu {
+    flex: 1;
+    padding: 20px 12px;
+    overflow-y: auto;
+}
+
+.menu-category {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #adb5bd;
+    font-weight: 700;
+    margin: 15px 12px 8px;
+    letter-spacing: 0.5px;
+}
+
+body.dark-mode .menu-category {
+    color: #6c757d;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    color: var(--text-secondary) !important; /* Force override */
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.2s;
+    font-weight: 500;
+    margin-bottom: 4px;
+    cursor: pointer;
+    border: none !important;
+    background: none !important; /* Force override global button style */
+    width: 100%;
+    text-align: left;
+    font-size: 15px;
+    box-shadow: none !important; /* Remove global button shadow */
+}
+
+.nav-link i {
+    width: 24px;
+    font-size: 18px;
+    margin-right: 10px;
+    text-align: center;
+    color: #aeb9cc;
+    transition: color 0.2s;
+}
+
+.nav-link:hover {
+    background-color: #f8f9fa !important;
+    color: var(--color-primary) !important;
+    transform: none !important; /* Disable global button transform */
+}
+
+/* Nav Link Dark Mode Overrides */
+body.dark-mode .nav-link:hover {
+    background-color: #333 !important;
+    color: #90caf9 !important;
+}
+
+.nav-link:hover i {
+    color: var(--color-primary);
+}
+
+body.dark-mode .nav-link:hover i {
+    color: #90caf9;
+}
+
+.nav-link.active {
+    background-color: var(--color-primary-light) !important;
+    color: var(--color-primary) !important;
+    font-weight: 600;
+}
+
+/* Nav Link Active Dark Mode Overrides */
+body.dark-mode .nav-link.active {
+    /* bg defined in variable above */
+    color: #90caf9 !important;
+}
+
+.nav-link.active i {
+    color: var(--color-primary);
+}
+
+body.dark-mode .nav-link.active i {
+    color: #90caf9;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* --- 3. MAIN CONTENT --- */
+.main-content {
+    flex: 1;
+    margin-left: var(--sidebar-width);
+    display: flex;
+    flex-direction: column;
+    min-width: 0; /* Fix flex child overflow */
+}
+
+.top-header {
+    height: var(--header-height);
+    background-color: var(--bg-header);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 30px;
+    position: sticky;
+    top: 0;
+    z-index: 900;
+}
+
+.header-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.btn-icon-only {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-color) !important; /* Force override */
+    background: white !important; /* Force override */
+    color: var(--text-secondary) !important;
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 0 !important; /* Reset padding */
+}
+
+/* Dark Mode Button Icon Only */
+body.dark-mode .btn-icon-only {
+    background: #2a2a2a !important;
+    border-color: #444 !important;
+    color: #e0e0e0 !important;
+}
+
+.btn-icon-only:hover {
+    background-color: #f8f9fa !important;
+    color: var(--color-primary) !important;
+}
+
+body.dark-mode .btn-icon-only:hover {
+    background-color: #333 !important;
+    color: #90caf9 !important;
+}
+
+/* Fix Dark Mode Toggle conflict from styles.css */
+#darkModeToggle::before {
+    content: "" !important;
+    display: none !important;
+}
+
+.content-body {
+    padding: 30px;
+}
+
+/* --- 4. VIEW CONTAINERS & CARDS --- */
+.view-section {
+    display: none; /* Hidden by default */
+    animation: fadeIn 0.3s ease-out;
+}
+
+.view-section.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Override .form-section from styles.css to look like Cards */
+.form-section {
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,0.05); /* Very subtle border */
+    box-shadow: var(--shadow-md);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+body.dark-mode .form-section {
+    background: #1e1e1e;
+    border-color: #333;
+}
+
+/* Remove old toggle header styles for desktop view */
+.toggle-header:not(.collapsible) {
+    background: none !important;
+    color: var(--text-primary) !important;
+    padding: 0 !important;
+    margin: 0 0 20px 0 !important;
+    cursor: default !important;
+    pointer-events: none;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px !important;
+    border-radius: 0 !important;
+}
+
+.toggle-header:not(.collapsible)::after {
+    display: none !important;
+}
+
+.toggle-content:not(.collapsible-content) {
+    display: block !important; /* Always show content in card unless collapsible */
+}
+
+/* Collapsible Toggle Styles */
+.toggle-header.collapsible {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--color-primary) !important; /* Blue background */
+    color: white !important;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.toggle-header.collapsible::after {
+    content: '\f078'; /* FA Chevron Down */
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    transition: transform 0.3s;
+}
+
+.toggle-header.collapsible.active::after {
+    transform: rotate(180deg);
+}
+
+.toggle-content.collapsible-content {
+    display: none; /* Initially hidden, controlled by JS slideToggle */
+}
+
+.toggle-section {
+    /* Make section behave like a normal block */
+}
+
+/* --- 5. RESPONSIVE (MOBILE) --- */
+.mobile-menu-toggle {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    :root {
+        --sidebar-width: 0px; /* Hide sidebar initially */
+    }
+
+    .sidebar {
+        transform: translateX(-100%);
+        width: 260px;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+        box-shadow: 0 0 15px rgba(0,0,0,0.1);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .mobile-menu-toggle {
+        display: flex;
+        margin-right: 15px;
+    }
+
+    /* Overlay when sidebar is open */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 999;
+    }
+    
+    .sidebar-overlay.show {
+        display: block;
+    }
+}
+
+/* --- 6. MOBILE SPECIFIC OPTIMIZATIONS --- */
+@media (max-width: 768px) {
+    .content-body {
+        padding: 10px; /* Reduce padding significantly on mobile */
+    }
+
+    .form-section {
+        padding: 15px; /* Reduce card padding */
+        margin-bottom: 15px;
+        border-radius: 8px;
+    }
+
+    .top-header {
+        padding: 0 15px; /* Align header padding with content */
+    }
+}
+
+/* --- 7. TRANSACTION BADGES (NEW) --- */
+.badge-type {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-block;
+}
+
+.badge-borrow {
+    background-color: #e3f2fd; /* Light Blue */
+    color: #0d47a1; /* Dark Blue */
+    border: 1px solid #bbdefb;
+}
+
+.badge-return {
+    background-color: #e8f5e9; /* Light Green */
+    color: #1b5e20; /* Dark Green */
+    border: 1px solid #c8e6c9;
+}
+
+/* Dark Mode support for Badges */
+body.dark-mode .badge-borrow {
+    background-color: #1a237e;
+    color: #bbdefb;
+    border-color: #283593;
+}
+
+body.dark-mode .badge-return {
+    background-color: #1b5e20;
+    color: #c8e6c9;
+    border-color: #2e7d32;
+}

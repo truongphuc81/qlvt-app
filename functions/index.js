@@ -370,6 +370,15 @@ privateRouter.post('/tts/speak', apiWrapper(async ({ body }) => {
     return dataProcessor.getSpeechAudio({ text: text });
 }));
 
+// 4r. AI Suggest Materials
+privateRouter.post('/ai/suggest-items', apiWrapper(async ({ db, body }) => {
+    const description = body.description;
+    if (!description) {
+        throw new Error('Thiếu "description" trong body.');
+    }
+    return dataProcessor.suggestMaterialsWithAI({ db, description });
+}));
+
 // === THÊM ENDPOINT MỚI ĐỂ LẤY QUYỀN ===
 // (Thay thế cho /auth/checkRoles cũ)
 privateRouter.post('/auth/getSelfRoles', apiWrapper(async ({ user }) => {
@@ -603,4 +612,8 @@ app.use('/api/history', historyRouter); // Gắn router lịch sử
 
 
 // 5. EXPORT HÀM GCF
-exports.app = functions.https.onRequest(app);
+// Cần khai báo secrets để Cloud Functions có quyền truy cập vào các mã API Key
+// Với Firebase Functions v2, chúng ta truyền options vào tham số đầu tiên của onRequest
+exports.app = functions.https.onRequest({ 
+    secrets: ["GEMINI_API_KEY", "ZALO_API_KEY"] 
+}, app);

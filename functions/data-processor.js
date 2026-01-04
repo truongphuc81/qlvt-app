@@ -2,6 +2,7 @@
 
 const utils = require('./utils');
 const admin = require('firebase-admin');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Hằng số Collection IDs
 const PENDING_NOTES_COLLECTION = 'pending_notes';
@@ -1385,7 +1386,7 @@ async function fixNegativeInventory({ sheets, spreadsheetId, db, email, itemCode
         mode: 'ADJUSTMENT'
     };
 
-    const historyRef = db.collection(HISTORY_COLLECTION).doc(timestamp);
+    const historyRef = db.collection('history_transactions').doc(timestamp);
     await historyRef.set(adjustmentTx);
 
     writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc: adjustmentTx });
@@ -1422,7 +1423,7 @@ async function fixNegativeInventoryBatch({ sheets, spreadsheetId, db, email, ite
             mode: 'ADJUSTMENT'
         };
 
-        const historyRef = db.collection(HISTORY_COLLECTION).doc(docTimestamp);
+        const historyRef = db.collection('history_transactions').doc(docTimestamp);
         batch.set(historyRef, adjustmentTx);
 
         writeHistoryToSheet_({ sheets, spreadsheetId, transactionDoc: adjustmentTx });
@@ -2431,7 +2432,47 @@ async function deleteReconciliationItem({ db, docId }) {
     return { ok: true };
 }
 
+async function suggestMaterialsWithAI({ db, description }) {
+    // 1. Lấy API Key
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
+    if (!GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY chưa được thiết lập trong environment variables.');
+    }
+
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    // Sử dụng model gemini-2.0-flash (bản mới nhất của Google)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // 2. Xây dựng prompt để AI tự do gợi ý dựa trên kiến thức chuyên gia
+    const prompt = `
+        Bạn là một chuyên gia kỹ thuật máy tính, máy in và thiết bị văn phòng chuyên nghiệp. 
+        Dựa vào mô tả công việc/lỗi dưới đây, hãy gợi ý những vật tư, linh kiện cần thiết nhất để kỹ thuật viên chuẩn bị trước khi đi sửa chữa.
+
+        Mô tả công việc: "${description}"
+
+        YÊU CẦU:
+        1. Gợi ý 2-5 vật tư/linh kiện liên quan trực tiếp đến việc xử lý lỗi trên.
+        2. Chỉ trả về một chuỗi văn bản duy nhất, các mục phân cách bằng dấu phẩy.
+        3. Định dạng mỗi mục: "Số_lượng TÊN_VẬT_TƯ".
+        Ví dụ: "1 Bộ nguồn máy tính, 1 RAM 8GB DDR4, 1 Keo tản nhiệt"
+        4. Không giải thích, không chào hỏi, không có ký tự đặc biệt khác.
+    `;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text().trim();
+        
+        // Làm sạch chuỗi kết quả (bỏ các ký tự lạ nếu có)
+        return { suggestion: text };
+    } catch (error) {
+        console.error("Lỗi gọi Gemini AI:", error);
+        throw new Error("Không thể tạo gợi ý từ AI: " + error.message);
+    }
+}
+
 module.exports = {
+    suggestMaterialsWithAI,
     getTechnicianDashboardData,
     getTechnicians,
     getItemList,

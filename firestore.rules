@@ -7,6 +7,11 @@ service cloud.firestore {
       allow read: if request.auth != null;
       // (Giữ nguyên luật write cũ nếu có)
     }
+
+    // Cho phép TẤT CẢ user đã đăng nhập ĐỌC thông tin KTV
+    match /technicians/{email} {
+      allow read: if request.auth != null;
+    }
     //
     // Hàm helper để kiểm tra các vai trò (roles)
     // Chúng ta đọc quyền từ request.auth.token (đây chính là Custom Claims)
@@ -78,5 +83,22 @@ service cloud.firestore {
       allow list: if request.auth != null;
     }
     
+    // --- QUYỀN CHO KIỂM KÊ KHO (AUDIT) ---
+    
+    // Cho phép mọi user đã đăng nhập xem danh mục vật tư (để quét mã/tìm kiếm)
+    match /inventory/{itemId} {
+      allow read: if request.auth != null;
+    }
+    
+    // Cho phép mọi user đã đăng nhập tham gia xem phiên kiểm kê (Real-time update)
+    match /audit_sessions/{sessionId} {
+      allow read: if request.auth != null;
+      
+      // Cho phép xem chi tiết các vật tư đã quét trong phiên
+      match /items/{itemCode} {
+        allow read: if request.auth != null;
+      }
+    }
+
   }
 }

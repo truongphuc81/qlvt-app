@@ -109,23 +109,51 @@ async function initializeAuditSession() {
     }
     
     console.log(`[initializeAuditSession] ID phiên cuối cùng được sử dụng: ${currentSessionId}`);
+    
+    // Update UI with Session ID
+    const sessionIdDisplay = document.getElementById('sessionIdDisplay');
+    if (sessionIdDisplay) {
+        sessionIdDisplay.innerText = currentSessionId.replace('audit_', '');
+        if (currentSessionId !== dailySessionId) {
+             sessionIdDisplay.classList.add('text-warning');
+             sessionIdDisplay.title = "Bạn đang ở phiên cũ hoặc phiên tùy chỉnh";
+        }
+    }
+
     sessionRef = db.collection('audit_sessions').doc(currentSessionId);
 
     // Tải dữ liệu hệ thống trước để có tổng số vật tư
     const totalItemCount = await loadSystemInventory();
+    
+    // Biến cờ để ngăn chặn vòng lặp tạo phiên liên tục
+    let hasTriedCreating = false;
 
     // Listener 1: Lắng nghe trạng thái của TÀI LIỆU PHIÊN (status, etc.)
     sessionRef.onSnapshot(async (doc) => {
         if (!doc.exists) {
+            if (hasTriedCreating) return; // Nếu đã thử tạo rồi thì không thử lại để tránh loop
+
             console.log(`Creating new audit session for today: ${currentSessionId}`);
+            hasTriedCreating = true; // Đánh dấu là đã thử
+
             try {
                 await sessionRef.set({
                     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                     status: 'in_progress'
                 });
             } catch (error) {
-                console.error("Error creating new session:", error);
-                Swal.fire('Lỗi nghiêm trọng', `Không thể tạo phiên mới: ${error.message}`, 'error');
+                if (error.code === 'permission-denied') {
+                    console.warn("Waiting for admin to create session...");
+                    // Show non-blocking toast
+                    Swal.fire({
+                        icon: 'info', title: 'Đang chờ...',
+                        text: 'Phiên kiểm kê chưa được tạo. Vui lòng chờ Quản lý khởi tạo hoặc Đổi phiên.',
+                        toast: true, position: 'top-end', showConfirmButton: false, timer: 10000
+                    });
+                } else {
+                    console.error("Error creating new session:", error);
+                    Swal.fire('Lỗi nghiêm trọng', `Không thể tạo phiên mới: ${error.message}`, 'error');
+                }
             }
             return;
         }
@@ -377,6 +405,9 @@ function addQuantity(code, qty) {
     
     // 3. Vẽ lại bảng với trạng thái mới để người dùng thấy ngay lập tức
     renderTable(); 
+    
+    // Update Mobile UI Last Scanned
+    updateMobileLastScanned(code, newQty);
 
     // 4. Gọi API ở chế độ nền (không await) để đồng bộ với server
     callApi('/audit/updateItem', {
@@ -548,9 +579,132 @@ function scrollToRow(code) {
     }
 }
 
+function updateMobileLastScanned(code, totalQty) {
+    const item = systemInventory[code];
+    if (!item) return;
+
+    const nameEl = document.getElementById('mobileLastItemName');
+    const codeEl = document.getElementById('mobileLastItemCode');
+    const qtyEl = document.getElementById('mobileLastItemQty');
+    const container = document.getElementById('mobileLastScanned');
+
+    if (nameEl && codeEl && qtyEl && container) {
+        nameEl.innerText = item.name;
+        codeEl.innerText = code;
+        qtyEl.innerText = totalQty;
+        container.style.display = 'block';
+        
+        // Highlight animation
+        container.style.backgroundColor = '#d1e7dd';
+        setTimeout(() => { container.style.backgroundColor = '#e8f5e9'; }, 500);
+    }
+
+    // Popup Toast for Mobile (Confirmation)
+    if (window.innerWidth <= 768 && typeof Swal !== 'undefined') {
+         const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom',
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: false
+        });
+        Toast.fire({
+            icon: 'success',
+            title: item.name,
+            text: `Tổng: ${totalQty} ${item.unit || ''}`
+        });
+    }
+}
+
 // === 4. CÁC TIỆN ÍCH KHÁC ===
 function toggleScanMode() {
     document.getElementById('scanInput').focus();
+}
+
+async function changeSessionId() {
+    showLoading('Đang tải danh sách phiên...');
+    try {
+        // Try to list sessions sorted by date
+        const snapshot = await db.collection('audit_sessions')
+                                 .orderBy('createdAt', 'desc')
+                                 .limit(20)
+                                 .get();
+        hideLoading();
+
+        if (snapshot.empty) {
+            manualEnterSessionId("Chưa tìm thấy phiên nào. Hãy nhập ID thủ công:");
+            return;
+        }
+
+        const sessions = {};
+        // Option to enter manually
+        sessions['MANUAL'] = '✏️ Nhập thủ công...';
+        
+        let hasActiveSession = false;
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            
+            // Chỉ hiện phiên đang mở (in_progress)
+            if (data.status !== 'in_progress') return;
+
+            hasActiveSession = true;
+            let label = doc.id.replace('audit_', 'Ngày ');
+            label += " (Đang mở)";
+            
+            if (doc.id === currentSessionId) label += " ✅";
+            sessions[doc.id] = label;
+        });
+
+        if (!hasActiveSession) {
+             manualEnterSessionId("Không tìm thấy phiên đang mở nào gần đây. Hãy nhập ID thủ công:");
+             return;
+        }
+
+        const { value: selectedId } = await Swal.fire({
+            title: 'Chọn Phiên Kiểm Kê',
+            input: 'select',
+            inputOptions: sessions,
+            inputValue: currentSessionId,
+            showCancelButton: true,
+            confirmButtonText: 'Tham gia',
+            cancelButtonText: 'Hủy'
+        });
+
+        if (selectedId) {
+            if (selectedId === 'MANUAL') {
+                manualEnterSessionId();
+            } else if (selectedId !== currentSessionId) {
+                localStorage.setItem('activeAuditSessionId', selectedId);
+                window.location.reload();
+            }
+        }
+
+    } catch (error) {
+        hideLoading();
+        console.warn("Cannot list sessions (missing index or permission), falling back to manual.", error);
+        manualEnterSessionId();
+    }
+}
+
+async function manualEnterSessionId(title = 'Nhập ID phiên bạn muốn tham gia') {
+    const { value: newId } = await Swal.fire({
+        title: 'Đổi Phiên Thủ Công',
+        text: title,
+        input: 'text',
+        inputValue: currentSessionId,
+        placeholder: 'VD: audit_2026-01-05',
+        showCancelButton: true,
+        confirmButtonText: 'Chuyển',
+        cancelButtonText: 'Hủy',
+        inputValidator: (value) => {
+            if (!value) return 'Vui lòng nhập ID phiên!';
+        }
+    });
+
+    if (newId) {
+        localStorage.setItem('activeAuditSessionId', newId);
+        window.location.reload();
+    }
 }
 
 function signOutAndExit() {
@@ -637,9 +791,9 @@ function hideLoading() {
 
 function updateFinishButtonState() {
     const finishButton = document.getElementById('finishAuditBtn');
-    const exportDiffButton = document.getElementById('exportDiffExcelBtn');
+    const exportReportButton = document.getElementById('exportFullReportBtn');
     const newAuditButton = document.getElementById('newAuditBtn');
-    const resetButton = document.querySelector('button[onclick="resetAudit()"]'); // Assuming reset button is always present
+    const resetButton = document.querySelector('button[onclick="resetAudit()"]'); 
 
     if (finishButton) {
         finishButton.disabled = isAuditSessionFinished;
@@ -649,54 +803,115 @@ function updateFinishButtonState() {
             finishButton.classList.add('btn-secondary');
             
             // Show new buttons
-            if (exportDiffButton) exportDiffButton.style.display = 'block';
+            if (exportReportButton) exportReportButton.style.display = 'block';
             if (newAuditButton) newAuditButton.style.display = 'block';
-            if (resetButton) resetButton.style.display = 'none'; // Hide reset button
+            if (resetButton) resetButton.style.display = 'none'; 
         } else {
             finishButton.textContent = '✅ Hoàn Tất & Lưu Kết Quả';
             finishButton.classList.remove('btn-secondary');
             finishButton.classList.add('btn-success');
 
             // Hide new buttons
-            if (exportDiffButton) exportDiffButton.style.display = 'none';
+            if (exportReportButton) exportReportButton.style.display = 'none';
             if (newAuditButton) newAuditButton.style.display = 'none';
-            if (resetButton) resetButton.style.display = 'block'; // Show reset button
+            if (resetButton) resetButton.style.display = 'block'; 
         }
     }
 }
 
 // === NEW FUNCTIONS FOR POST-AUDIT ACTIONS ===
 
-async function exportDifferencesToExcel() {
-    if (!lastFinishedAuditItems || lastFinishedAuditItems.length === 0) {
-        Swal.fire('Thông báo', 'Không có dữ liệu chênh lệch để xuất Excel.', 'info');
-        return;
-    }
+async function exportFullReport() {
+    if (!lastFinishedAuditItems) return;
+    
+    showLoading('Đang tổng hợp dữ liệu báo cáo...');
+    
+    try {
+        // 1. Fetch detailed scan info to get "User Scanned"
+        const sessionItemsSnap = await db.collection('audit_sessions').doc(currentSessionId).collection('items').get();
+        const scannedByMap = {};
+        
+        sessionItemsSnap.forEach(doc => {
+            const data = doc.data();
+            const users = [];
+            if (data.scannedBy) {
+                Object.values(data.scannedBy).forEach( u => {
+                     // users.push(`${u.email} (${u.quantity})`);
+                     users.push(u.email);
+                });
+            }
+            scannedByMap[data.code] = [...new Set(users)].join(', '); // Unique emails
+        });
 
-    const diffItems = lastFinishedAuditItems.filter(item => item.difference !== 0);
+        // 2. Build Data Rows (Combine System Inventory and Audited Items)
+        const auditedMap = new Map();
+        lastFinishedAuditItems.forEach(item => auditedMap.set(item.code, item));
 
-    if (diffItems.length === 0) {
-        Swal.fire('Thông báo', 'Không có vật tư nào bị chênh lệch.', 'info');
-        return;
-    }
+        // Union of all codes
+        const allCodes = new Set([...Object.keys(systemInventory), ...auditedMap.keys()]);
+        let rows = [];
 
-    let csvContent = "Mã Vật Tư,Tên Vật Tư,Số Lượng Tồn Hệ Thống,Số Lượng Thực Tế Kiểm Kê,Chênh Lệch\n";
-    diffItems.forEach(item => {
-        csvContent += `${item.code},"${item.name}",${item.currentSystemQuantity},${item.auditedQuantity},${item.difference}\n`;
-    });
+        allCodes.forEach(code => {
+            const sysItem = systemInventory[code] || {};
+            const auditItem = auditedMap.get(code);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.download !== undefined) { // Feature detection
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `vat_tu_chenh_lech_kiem_kho_${currentSessionId}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    } else {
-        Swal.fire('Lỗi', 'Trình duyệt của bạn không hỗ trợ tải file CSV trực tiếp.', 'error');
+            // Base info
+            const name = sysItem.name || (auditItem ? auditItem.name : code);
+            const group = sysItem.group || 'Chưa phân nhóm';
+            const unit = sysItem.unit || '';
+            const price = sysItem.unitPrice || 0;
+
+            // Quantities
+            // If audited, use recorded system qty. If not, use current system qty.
+            const sysQty = auditItem ? auditItem.currentSystemQuantity : (sysItem.systemQty || 0);
+            const realQty = auditItem ? auditItem.auditedQuantity : 0;
+            
+            // Calculate Difference
+            // If audited, use recorded diff. If not, diff is (0 - sysQty)
+            const diffQty = auditItem ? auditItem.difference : (realQty - sysQty);
+
+            // Values
+            const sysVal = sysQty * price;
+            const realVal = realQty * price;
+            const diffVal = diffQty * price;
+
+            const scanner = scannedByMap[code] || (auditItem ? '' : 'Chưa kiểm');
+
+            rows.push({
+                "Nhóm vật tư": group,
+                "Mã vật tư": code,
+                "Tên vật tư": name,
+                "Đơn vị": unit,
+                "SL Phần mềm": sysQty,
+                "Giá trị PM": sysVal,
+                "SL Thực tế": realQty,
+                "Giá trị TT": realVal,
+                "SL Chênh lệch": diffQty,
+                "Giá trị CL": diffVal,
+                "Người quét": scanner
+            });
+        });
+
+        // Sort by Group then Name
+        rows.sort((a, b) => {
+            if (a["Nhóm vật tư"] !== b["Nhóm vật tư"]) {
+                return a["Nhóm vật tư"].localeCompare(b["Nhóm vật tư"]);
+            }
+            return a["Tên vật tư"].localeCompare(b["Tên vật tư"]);
+        });
+
+        // 3. Export using XLSX
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "KiemKe");
+        XLSX.writeFile(wb, `BaoCao_KiemKe_${currentSessionId}.xlsx`);
+        
+        hideLoading();
+
+    } catch (e) {
+        hideLoading();
+        console.error(e);
+        Swal.fire("Lỗi", "Không thể xuất báo cáo: " + e.message, "error");
     }
 }
 
@@ -800,40 +1015,40 @@ async function toggleCamera() {
     const section = document.getElementById('cameraSection');
     const isMobile = window.innerWidth <= 767.98;
 
-    // --- Logic bật camera ---
     if (section.style.display === 'none') {
-        if (!bipAudio) {
-            bipAudio = new Audio('BIP.mp3');
-        }
+        // === BẬT CAMERA ===
+        if (!bipAudio) bipAudio = new Audio('BIP.mp3');
 
         section.style.display = 'block';
-        if (isMobile) {
-            document.body.classList.add('camera-on-mobile');
-        }
+        if (isMobile) document.body.classList.add('camera-on-mobile');
         
-        // Thêm một độ trễ nhỏ để đảm bảo trình duyệt đã áp dụng các thay đổi CSS
-        // và các phần tử đã sẵn sàng trước khi thư viện camera cố gắng sử dụng chúng.
-        setTimeout(async () => {
-            try {
-                await startScannerProcess();
-            } catch (err) {
-                console.error("Camera start failed:", err);
-                // Nếu có lỗi, đảm bảo UI được reset hoàn toàn
-                section.style.display = 'none';
-                if (isMobile) {
-                    document.body.classList.remove('camera-on-mobile');
-                }
-            }
-        }, 100); // Trễ 100ms
+        // Chờ UI render xong mới khởi động camera
+        await new Promise(r => setTimeout(r, 100));
+
+        try {
+            await startScannerProcess();
+        } catch (err) {
+            console.error("Camera start failed:", err);
+            section.style.display = 'none';
+            if (isMobile) document.body.classList.remove('camera-on-mobile');
+            Swal.fire("Lỗi Camera", "Không thể khởi động camera: " + err, "error");
+        }
 
     } else {
-        // --- Logic tắt camera ---
-        section.style.display = 'none';
-        if (isMobile) {
-            document.body.classList.remove('camera-on-mobile');
-        }
-        if (html5QrCode && html5QrCode.isScanning) {
-            await html5QrCode.stop().catch(err => console.error("Camera stop failed:", err));
+        // === TẮT CAMERA ===
+        try {
+            if (html5QrCode) {
+                // Thử dừng camera. Nếu đang không chạy, nó có thể throw lỗi, ta sẽ catch
+                await html5QrCode.stop();
+            }
+        } catch (err) {
+            console.warn("Camera stop warning:", err);
+        } finally {
+            // Luôn ẩn UI dù stop thành công hay thất bại
+            section.style.display = 'none';
+            if (isMobile) document.body.classList.remove('camera-on-mobile');
+            // Reset instance để đảm bảo lần sau khởi tạo sạch sẽ
+            html5QrCode = null; 
         }
     }
 }
